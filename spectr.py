@@ -166,8 +166,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     BASE_URL = 'https://api.alpaca.markets' if args.real_trades else 'https://paper-api.alpaca.markets/v2'
-    API_KEY = 'PKFKJ56I8W8GYS6N5MNF'
-    SECRET_KEY = 'x9bmTsqRCHHpXlMJkWVFWVR7DfgjNXtD2QScqDbj'
+    API_KEY = ''
+    SECRET_KEY = ''
     API = REST(API_KEY, SECRET_KEY, base_url=URL(BASE_URL))
 
     SYMBOL = args.symbol.upper()
