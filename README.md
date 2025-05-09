@@ -52,7 +52,7 @@ Change ticker symbols by pressing T:
 | Shortcut | Action                    |
 |----------| ------------------------- |
 | `Esc`    | Quit the app              |
-| `T`      | Enter a new ticker symbol |
+| `` / ~`      | Enter a new ticker symbol |
 | `Ctrl+A` | Toggle live trading mode  |
 
 
