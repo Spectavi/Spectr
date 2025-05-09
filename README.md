@@ -18,7 +18,7 @@ Zoom in / out using Ctrl + / - :
 
 ![Example 2](res/example2.png)
 
-Change ticker symbols by pressing T:
+Change ticker symbols by pressing ` / ~:
 
 ![Example 3](res/example3.png)
 
@@ -33,7 +33,7 @@ Change ticker symbols by pressing T:
 - 🔁 Backtest mode with visual result playback
 - 💵 Live trading based on your custom strategy.
 - 👁️ Multiple broker support (Alpaca, Robinhood, FMP)
-- 🔄 Hot-switching symbols with `T`
+- 🔄 Hot-switching symbols with `` / ~`
 - 🤖 Arm / dis-arm auto-trading with `Ctrl+A`
 
 ---
