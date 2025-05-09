@@ -27,11 +27,10 @@ Change ticker symbols by pressing T:
 - 📈 Real-time price monitoring with interactive charts
 - 🧠 Signal detection using MACD & Bollinger Bands
 - 🔁 Backtest mode with visual result playback
-- 💵 Live trading toggle with order submission
+- 💵 Live trading based on your custom strategy.
 - 👁️ Multiple broker support (Alpaca, Robinhood, FMP)
-- ⌨️ TUI built with [Textual](https://github.com/Textualize/textual)
-- 🧪 Paper mode vs live execution toggle (`Ctrl+T`)
-- 🔄 Hot-switching symbols with `~`
+- 🔄 Hot-switching symbols with `T`
+- 🤖 Arm / dis-arm auto-trading with `Ctrl+A`
 
 ---
 
