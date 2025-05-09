@@ -1,10 +1,61 @@
-# Spectr
-Algo-trading bot that supports Backtrader strategies and the Alpaca API
+# 📈 spectr — Terminal Algo-Trading Assistant
+
+---
+
+## EARLY DEVELOPMENT! Use at your own risk!
+
+---
+
+![Example 1](res/example1.png)
+![Example 2](res/example2.png)
+![Example 3](res/example3.png)
+
+**Spectr** is a real-time, terminal-based algorithmic trading assistant built with [Textual](https://textual.textualize.io/). It supports live-monitoring, backtesting, and auto-trading with dynamic visualization, MACD/Bollinger Band indicators, and integration with multiple brokers.
+
+---
+
+## ✨ Features
+
+- 📈 Real-time price monitoring with interactive charts
+- 🧠 Signal detection using MACD & Bollinger Bands
+- 🔁 Backtest mode with visual result playback
+- 💵 Live trading toggle with order submission
+- 👁️ Multiple broker support (Alpaca, Robinhood, FMP)
+- ⌨️ TUI built with [Textual](https://github.com/Textualize/textual)
+- 🧪 Paper mode vs live execution toggle (`Ctrl+T`)
+- 🔄 Hot-switching symbols with `~`
+
+---
+
+## 📦 Installation
 
 ```bash
-python spectr.py --mode backtest --symbol AAPL --from_date 2025-04-17 --to_date 2025-04-21
+git clone https://github.com/Spectavi/spectr.git
+cd spectr
+
+# Recommended: use a virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+pip install -r requirements.txt
+```
+# Usage
+```bash
+python spectr.py --mode live --symbol AAPL --broker alpaca
 ```
 
-```bash
-python spectr.py --mode live --symbol AAPL 
-```
+
+| Flag               | Description                                 |
+|--------------------|---------------------------------------------|
+| `--mode`           | `live` or `backtest`                        |
+| `--symbol`         | Stock ticker to track (e.g., AAPL)          |
+| `--broker`         | `alpaca`, `robinhood`, or `fmp`             |
+| `--real_trades`    | If set, will place real trades.             |
+| `--macd_thresh`    | Threshold for MACD crossover (default: 0.1) |
+| `--bb_period`      | Bollinger Band period (default: 200)        |
+| `--bb_dev`         | Bollinger Band std deviation (default: 2.0) |
+| `--from_date`      | Start data for backtest mode: YYYY-MM-DD    |
+| `--to_date`        | End date for backtest mode: YYYY-MM-DD      |
+| `--stop_loss-pct`  | Stop loss percent.                          |
+| `--take_profit_pct` | Take profit percent.                        |
+

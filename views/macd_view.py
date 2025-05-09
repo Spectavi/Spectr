@@ -1,0 +1,66 @@
+import logging
+
+import pandas as pd
+import plotext as plt
+from rich.text import Text
+from textual.widgets import Static
+
+log = logging.getLogger(__name__)
+
+class MACDView(Static):
+
+    def __init__(self, df=None, args=None, **kwargs):
+        super().__init__(**kwargs)
+        self.df = df
+        self.args = args
+
+    def on_mount(self):
+        self.set_interval(0.5, self.refresh)  # Force refresh loop, optional
+
+    def on_resize(self, event):
+        self.refresh()  # Force redraw when size changes
+
+    def update_df(self, df: pd.DataFrame):
+        """Set a new DataFrame and trigger redraw"""
+        if 'macd' in df.columns and 'macd_signal' in df.columns:
+            self.df = df.copy()
+
+    def watch_df(self, old, new):
+        self.refresh()
+
+    def render(self):
+        log.debug("Rendering macd")
+        return self.build_graph()
+
+    def build_graph(self) -> str:
+        if self.df is None or self.df.empty:
+            return "Waiting for MACD data..."
+
+        max_points = max(int(self.size.width * self.args.scale), 10)
+        df = self.df.tail(max_points)
+        times = df.index.strftime('%Y-%m-%d %H:%M:%S')
+
+        macd_line = df["macd"]
+        signal_line = df["macd_signal"]
+
+        plt.clf()
+        plt.canvas_color("default")
+        plt.axes_color("default")
+        plt.ticks_color("grey")
+        plt.xticks([], [])  # No xticks for indicators, cleans up UI.
+        plt.grid(False)
+        plt.date_form("Y-m-d H:M:S")
+
+        plt.horizontal_line(0.0, color="gray", yside="right")
+        plt.plot(times, df["macd"], color="white", label="MACD", marker="hd", yside="right")
+        plt.plot(times, df["macd_signal"], color="orange", label="Signal", marker="hd", yside="right")
+
+        # Y range adjustment
+        macd_range = max(df["macd"]) - min(df["macd_signal"])
+        center = df["macd"][-1]
+        margin = macd_range * 1.2 if macd_range else 1
+        plt.ylim(center - margin, center + margin)
+
+        plt.plotsize(self.size.width, self.size.height)
+
+        return Text.from_ansi(plt.build())

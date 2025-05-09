@@ -1,0 +1,47 @@
+/* Layout & Positioning */
+Screen {
+    layout: vertical;
+    padding: 0 0;
+    background: black;
+}
+
+/* Container holding the graph */
+#graph {
+    padding: 0;
+    height: 70%;
+    overflow: auto;
+    scrollbar-color: $primary;
+}
+
+#macd-view {
+    height: 30%;
+    background: black;
+    color: white;
+}
+
+ScreenModal {
+    background: $panel;
+    border: round yellow;
+}
+
+#ticker-input {
+    height: 3;
+    border: heavy green;
+    padding: 0 1;
+    background: transparent;
+}
+
+#overlay-text {
+    height: 1;
+    dock: top;
+    background: black;
+    text-style: bold;
+    content-align-horizontal: center;
+    padding: 0 1;
+}
+
+/* Text style */
+Static {
+    color: $text;
+    text-style: none;
+}
