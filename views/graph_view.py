@@ -62,9 +62,11 @@ class GraphView(Static):
         plt.plot(dates, df['bb_mid'], color="blue", label="BB Mid", yside="right", marker='-')
         plt.plot(dates, df['bb_lower'], color="lime", label="BB Lower", yside="right", marker='dot')
 
-        # Add candlesticks
-        # plt.candlestick(dates, df[['Open', 'Close', 'High', 'Low']], yside='right')
-        plt.plot(dates, df['Close'], yside='right', marker='hd', color='green')
+        if self.args.candles:
+            # Add candlesticks
+            plt.candlestick(dates, df[['Open', 'Close', 'High', 'Low']], yside='right')
+        else:
+            plt.plot(dates, df['Close'], yside='right', marker='hd', color='green')
 
         last_x = dates[-2]
         last_y = df['Close'].iloc[-1]

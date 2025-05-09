@@ -6,6 +6,10 @@
 
 ---
 
+**Spectr** is a real-time, terminal-based algorithmic trading assistant. It supports live-monitoring, backtesting, and auto-trading with dynamic visualization, MACD/Bollinger Band indicators, and integration with multiple brokers.
+
+![Example GIF](res/example_candles.gif)
+
 While monitoring a stock, Ctrl+A arms / dis-arms auto-trading:
 
 ![Example 1](res/example1.png)
@@ -18,7 +22,7 @@ Change ticker symbols by pressing T:
 
 ![Example 3](res/example3.png)
 
-**Spectr** is a real-time, terminal-based algorithmic trading assistant built with [Textual](https://textual.textualize.io/). It supports live-monitoring, backtesting, and auto-trading with dynamic visualization, MACD/Bollinger Band indicators, and integration with multiple brokers.
+
 
 ---
 

@@ -11,9 +11,11 @@ from textual.reactive import reactive
 from custom_strategy import SignalStrategy
 from fetch.broker_interface import BrokerInterface
 from metrics import analyze_indicators
+from multi_symbol_screen import MultiSymbolScreen
 from utils import load_cache, save_cache
 from views.graph_view import GraphView
 from views.macd_view import MACDView
+from views.multi_ticker_input_dialog import MultiTickerInputDialog
 from views.ticker_input_dialog import TickerInputDialog
 from views.top_overlay import TopOverlay
 
@@ -43,8 +45,10 @@ class SpectrApp(App):
     CSS_PATH = "default.tcss"
     BINDINGS = [
         ("escape", "quit", "Quit"),
-        ("t", "prompt_symbol", "Change Ticker"), # TAB key
+        ("t", "prompt_symbol", "Change Ticker"), # T key
+        ("`", "prompt_symbol", "Change Ticker"),  # ~ key
         ("ctrl+a", "arm_auto_trading", "Arms Auto-Trading - REAL trades will occur!"),
+        #("s", "prompt_multi_symbols", "Load Multiple Symbols"),  # ⬅️ New!
     ]
 
     auto_trading_enabled: reactive[bool] = reactive(False)
@@ -55,6 +59,7 @@ class SpectrApp(App):
         super().__init__()
         self.args = args  # Store CLI arguments
         self.symbol = self.args.symbol
+        self.symbols = self.args.symbols
         self.macd_thresh = self.args.macd_thresh
         self.bb_period = self.args.bb_period
         self.bb_dev = self.args.bb_dev
@@ -110,6 +115,15 @@ class SpectrApp(App):
         #     f"Auto Trading {'AUTO-TRADES ON ✅' if self.auto_trading_enabled else 'AUTO-TRADES OFF 🚫'}",
         #     style="bold yellow"
         # )
+
+    def action_prompt_multi_symbols(self):
+        self.auto_trading_enabled = False
+        self.query_one("#overlay-text", TopOverlay).set_auto_trading_mode(self.auto_trading_enabled)
+        self.push_screen(MultiTickerInputDialog(callback=self.on_multi_ticker_submit))
+
+    def on_multi_ticker_submit(self, symbols: list[str]):
+        self.symbols = symbols
+        self.push_screen(MultiSymbolScreen(symbols, self.args))
 
     def action_prompt_symbol(self):
         self.auto_trading_enabled = False
@@ -245,7 +259,9 @@ class SpectrApp(App):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--symbol", type=str, required=True, help="Ticker symbol (e.g. AAPL)")
+    parser.add_argument("--symbol", type=str, default='NVDA', help="Ticker symbol (e.g. AAPL)")
+    parser.add_argument("--symbols", type=str, default='NVDA,TSLA,GOOG', help="List of ticker symbols (e.g. NVDA,TSLA,GOOG)")
+    parser.add_argument("--candles", type=bool, default=True, help="Show candles data")
     parser.add_argument("--macd_thresh", type=float, default=0.002, help="MACD threshold")
     parser.add_argument("--bb_period", type=int, default=200, help="Bollinger Band period")
     parser.add_argument("--bb_dev", type=float, default=2.0, help="Bollinger Band std dev")

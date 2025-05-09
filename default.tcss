@@ -40,6 +40,22 @@ ScreenModal {
     padding: 0 1;
 }
 
+#multi-input {
+    color: white;
+    background: black;
+    border: round green;
+    padding: 0 1;
+    height: 3;
+}
+
+#multi-ticker-dialog {
+    background: black;
+    color: white;
+    border: heavy yellow;
+    padding: 1 2;
+}
+
+
 /* Text style */
 Static {
     color: $text;

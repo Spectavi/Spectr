@@ -1,13 +1,6 @@
 from textual.widgets import Input, Label, Button
 from textual.containers import Vertical
 from textual.screen import ModalScreen
-from textual.message import Message
-
-class TickerSubmitted(Message):
-    def __init__(self, sender, symbol: str):
-        super().__init__()
-        self.sender = sender
-        self.symbol = symbol
 
 class TickerInputDialog(ModalScreen):
     def __init__(self, callback):
@@ -23,8 +16,14 @@ class TickerInputDialog(ModalScreen):
 
     def on_button_pressed(self, event: Button.Pressed):
         if event.button.id == "submit-button":
-            input_widget = self.query_one("#ticker-input", Input)
-            symbol = input_widget.value.strip().upper()
-            if symbol:
-                self.dismiss()
-                self.callback(symbol)
+            self._submit()
+
+    def on_input_submitted(self, event: Input.Submitted):
+        self._submit()
+
+    def _submit(self):
+        input_widget = self.query_one("#ticker-input", Input)
+        symbol = input_widget.value.strip().upper()
+        if symbol:
+            self.dismiss()
+            self.callback(symbol)
