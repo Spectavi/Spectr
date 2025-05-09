@@ -44,11 +44,13 @@ class SignalStrategy(bt.Strategy):
         if not position:
             ### ------- Insert buy logic here ------- ###
             signal = 'buy'
-            raise NotImplementedError
+            # Delete this line after implementing!
+            raise NotImplementedError("CustomStrategy is NOT implemented! You must implement it.")
         else:
             ### ------- Insert sell logic here ------- ###
             signal = 'sell'
-            raise NotImplementedError
+            # Delete this line after implementing!
+            raise NotImplementedError("CustomStrategy is NOT implemented! You must implement it.")
 
         return {
             'signal': signal,
