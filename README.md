@@ -1,4 +1,4 @@
-# 📈 spectr — Terminal Algo-Trading Assistant
+# 📈 spectr — Terminal Algo-Trading Terminal
 
 ---
 
@@ -6,7 +6,7 @@
 
 ---
 
-**Spectr** is a real-time, terminal-based algorithmic trading assistant. It supports live-monitoring, backtesting, and auto-trading with dynamic visualization, MACD/Bollinger Band indicators, and integration with multiple brokers.
+**Spectr** is a terminal-based algorithmic trading terminal. It supports live-monitoring w/ algo-based auto-trading and historical backtesting via Backtrader. Supports Robinhood, Alpaca, and FMP. Multi-stock scanning and OpenAI integration are coming soon. 
 
 ![Example GIF](res/example_candles.gif)
 
