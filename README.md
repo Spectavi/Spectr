@@ -34,6 +34,24 @@ Change ticker symbols by pressing T:
 
 ---
 
+## 🤝 Broker Support
+
+| Broker    | Real Trading | Historical Data | Notes                        |
+| --------- | ------------ | --------------- | ---------------------------- |
+| Alpaca    | ✅            | ✅               | Requires API key             |
+| Robinhood | ✅            | ❌ (limited)     | Username/password login only |
+| FMP       | ❌            | ✅               | Read-only via API key        |
+
+
+##⌨️ Keyboard Shortcuts
+
+| Shortcut | Action                    |
+|----------| ------------------------- |
+| `Esc`    | Quit the app              |
+| `T`      | Enter a new ticker symbol |
+| `Ctrl+A` | Toggle live trading mode  |
+
+
 ## 📦 Installation
 
 ```bash
