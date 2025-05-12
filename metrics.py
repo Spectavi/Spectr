@@ -26,8 +26,9 @@ def analyze_indicators(df, bb_period, bb_dev, macd_thresh):
     df['bb_lower'] = bb.bollinger_lband()
     df['bb_angle'] = bollinger_band_angle(df['close'], period=5)
     df['bb_mid'] = (df['bb_upper'] + df['bb_lower']) / 2
-    print(df)
+    print(f"Analyzed indicators: {df}")
     return df
+
 
 def bollinger_band_angle(close_series, period=20):
     """

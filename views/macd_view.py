@@ -38,10 +38,15 @@ class MACDView(Static):
 
         max_points = max(int(self.size.width * self.args.scale), 10)
         df = self.df.tail(max_points)
-        times = df.index.strftime('%Y-%m-%d %H:%M:%S')
 
-        macd_line = df["macd"]
-        signal_line = df["macd_signal"]
+        # ✅ Force datetime index safely
+        if not isinstance(df.index, pd.DatetimeIndex):
+            try:
+                df.index = pd.to_datetime(df.index, errors="coerce")
+            except Exception as e:
+                return f"Invalid index: {e}"
+
+        times = df.index.strftime('%Y-%m-%d %H:%M:%S')
 
         plt.clf()
         plt.canvas_color("default")

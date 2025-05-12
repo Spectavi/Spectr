@@ -9,8 +9,8 @@ class TickerInputDialog(ModalScreen):
 
     def compose(self):
         yield Vertical(
-            Label("Enter new ticker symbol:"),
-            Input(placeholder="e.g. AAPL", id="ticker-input"),
+            Label("Enter new ticker symbol list (up to 10):"),
+            Input(placeholder="e.g. AAPL,AMZN,META,MSFT,NVDA,TSLA,GOOG,VTI,GLD", id="ticker-input"),
             Button("Submit", id="submit-button")
         )
 

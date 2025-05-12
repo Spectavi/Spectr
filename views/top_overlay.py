@@ -12,9 +12,8 @@ class TopOverlay(Static):
         self.symbol = symbol
         self.set_auto_trading_mode(False)
 
-    def update_status(self, value: str, style: str = "red"):
-        info_text = f"{self.symbol} | [{style}]{value}[/{style}]"
-        self.status_text = info_text
+    def update_status(self, value: str):
+        self.status_text = value
 
     def set_auto_trading_mode(self, enabled: bool):
         self.live_icon = "🤖" if enabled else "🚫"

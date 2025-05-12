@@ -18,7 +18,7 @@ Zoom in / out using Ctrl + / - :
 
 ![Example 2](res/example2.png)
 
-Change ticker symbols by pressing ` / ~:
+Change ticker symbols list by pressing ` / ~:
 
 ![Example 3](res/example3.png)
 
@@ -28,23 +28,28 @@ Change ticker symbols by pressing ` / ~:
 
 ## ✨ Features
 
-- 📈 Real-time price monitoring with interactive charts
-- 🧠 Signal detection using MACD & Bollinger Bands
-- 🔁 Backtest mode with visual result playback
-- 💵 Live trading based on your custom strategy.
-- 👁️ Multiple broker support (Alpaca, Robinhood, FMP)
-- 🔄 Hot-switching symbols with `` / ~`
+- 📈 Real-time price monitoring with interactive charts.
+- ⌨ Cycle up to 10 stocks with 0-9 keys.
 - 🤖 Arm / dis-arm auto-trading with `Ctrl+A`
+- 🔄 Change symbols list with `` / ~`
+- 🧠 Supports strategies w/ MACD & Bollinger Bands (all major indicators coming soon!)
+- 💵 Live trading based on your custom strategy.
+- 💵 Paper trading based on your custom strategy. (Alpaca-only)
+- 📈 Real-time data API support (FMP)
+- 👁️ Broker API support (Alpaca, Robinhood (currently broken))
+- 🔁 Backtest mode with visual result playback (Under construction!)
 
 ---
 
 ## 🤝 Broker Support
 
-| Broker    | Real Trading | Historical Data | Notes                        |
-| --------- | ------------ | --------------- | ---------------------------- |
-| Alpaca    | ✅            | ✅               | Requires API key             |
-| Robinhood | ✅            | ❌ (limited)     | Username/password login only |
-| FMP       | ❌            | ✅               | Read-only via API key        |
+Recommended to use Alpaca for broker and FMP for data.
+
+| Broker    | Real Trading | Historical Data | Notes                                                                       |
+| --------- | ------------ | --------------- |-----------------------------------------------------------------------------|
+| Alpaca    | ✅            | ⚠️               | Real-time data requires \$99 / month sub. See FMP for \$20-30/month option. |
+| Robinhood | ⚠️            | ⚠️ (limited)     | Currently has login issues, see robin-stocks repo for info.                 |
+| FMP       | ❌            | ✅               | Read-only via API key                                                       |
 
 
 ##⌨️ Keyboard Shortcuts
@@ -74,17 +79,18 @@ python spectr.py --mode live --symbol AAPL --broker alpaca
 ```
 
 
-| Flag               | Description                                 |
-|--------------------|---------------------------------------------|
-| `--mode`           | `live` or `backtest`                        |
-| `--symbol`         | Stock ticker to track (e.g., AAPL)          |
-| `--broker`         | `alpaca`, `robinhood`, or `fmp`             |
-| `--real_trades`    | If set, will place real trades.             |
-| `--macd_thresh`    | Threshold for MACD crossover (default: 0.1) |
-| `--bb_period`      | Bollinger Band period (default: 200)        |
-| `--bb_dev`         | Bollinger Band std deviation (default: 2.0) |
-| `--from_date`      | Start data for backtest mode: YYYY-MM-DD    |
-| `--to_date`        | End date for backtest mode: YYYY-MM-DD      |
-| `--stop_loss-pct`  | Stop loss percent.                          |
+| Flag                | Description                                 |
+|---------------------|---------------------------------------------|
+| `--mode`            | `live` or `backtest`                        |
+| `--symbol`          | Stock ticker to track (e.g., AAPL)          |
+| `--broker`          | `alpaca` or `robinhood`                     |
+| `--data_api`        | `alpaca`, `fmp`, or `robinhood`             |
+| `--real_trades`     | If set, will place real trades.             |
+| `--macd_thresh`     | Threshold for MACD crossover (default: 0.1) |
+| `--bb_period`       | Bollinger Band period (default: 200)        |
+| `--bb_dev`          | Bollinger Band std deviation (default: 2.0) |
+| `--from_date`       | Start data for backtest mode: YYYY-MM-DD    |
+| `--to_date`         | End date for backtest mode: YYYY-MM-DD      |
+| `--stop_loss-pct`   | Stop loss percent.                          |
 | `--take_profit_pct` | Take profit percent.                        |
 

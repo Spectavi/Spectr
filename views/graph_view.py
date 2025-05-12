@@ -9,6 +9,7 @@ log = logging.getLogger(__name__)
 
 class GraphView(Static):
     symbol: reactive[str] = reactive("")
+    quote: reactive[dict] = reactive(None)
 
     def update_symbol(self, value: str):
         self.symbol = value
@@ -30,13 +31,16 @@ class GraphView(Static):
     def watch_symbol(self, old, new):
         self.refresh()
 
+    def watch_quote(self, old, new):
+        self.refresh()
+
     def render(self):
         log.debug("Rendering graph")
         return self.build_graph()
 
     def build_graph(self):
         if self.df is None or self.df.empty:
-            return "Waiting for data..."
+            return "Waiting for chart data..."
 
         # Limit the number of bars to fit in terminal width
         max_points = max(int(self.size.width * self.args.scale), 10)
@@ -70,15 +74,27 @@ class GraphView(Static):
 
         last_x = dates[-2]
         last_y = df['Close'].iloc[-1]
-        price = f"${last_y:.2f}"
+        price_label = f"${last_y:.2f}"
 
-        plt.text(price, last_x, last_y + 0.5, color="green", style='#price_label', yside='right')
-        plt.title(f"{self.symbol} - {price}")
+        plt.text(price_label, last_x, last_y + 0.5, color="green", style='#price_label', yside='right')
+        plt.title(f"{self.symbol} - {price_label}")
 
-        # Align the latest price in a center vertically
+        # Align the latest price_label in a center vertically
+        current_price = df['Close'].iloc[-1]
+        current_bb_upper = df['bb_upper'].iloc[-1]
+        current_bb_lower = df['bb_lower'].iloc[-1]
         highs = self.df['bb_upper']
         lows = self.df['bb_lower']
-        current_price = df['Close'].iloc[-1]
+        if current_price > current_bb_upper:
+            # If we're above bb_upper, then bottom only needs to show mid.
+            lows = self.df['bb_mid'].tail(int(max_points / 2))
+        elif current_price < current_bb_lower:
+            # If we're below bb_lower, then top only needs to show mid.
+            highs = self.df['bb_mid'].tail(int(max_points / 2))
+        else:
+            highs = self.df['close'].tail(int(max_points/2))
+            lows = self.df['close'].tail(int(max_points/2))
+
         price_range = highs.max() * 1.05 - lows.min() * 1.05
         margin = price_range * 4 if price_range else 1
         plt.ylim(current_price - margin, current_price + margin)

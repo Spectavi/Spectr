@@ -26,10 +26,10 @@ class AlpacaInterface(BrokerInterface, DataInterface):
         return api
 
 
-    def fetch_data(self, symbol, lookback=5000, real_trades=False):
+    def fetch_chart_data(self, symbol, lookback=5000):
         end = pd.Timestamp.utcnow()
         start = end - pd.Timedelta(minutes=lookback)
-        bars = self.get_api(real_trades).get_bars(
+        bars = self.get_api(True).get_bars(
             symbol,
             TimeFrame.Minute,
             start=start.isoformat(),
@@ -38,6 +38,17 @@ class AlpacaInterface(BrokerInterface, DataInterface):
         log.debug("Fetched data for live trading")
         return bars
 
+    def fetch_quote(self, symbol: str) -> dict:
+        """Fetch the latest quote (bid/ask/last trade) for a symbol."""
+        try:
+            quote = self.get_api(True).get_latest_quote(symbol)
+            return {
+                "symbol": symbol,
+                "price": quote.ask_price,  # or use quote.bid_price or last trade
+                "timestamp": quote.timestamp.isoformat()
+            }
+        except Exception as e:
+            raise RuntimeError(f"Failed to fetch quote for {symbol}: {e}")
 
     def fetch_data_for_backtest(self, symbol, from_date, to_date, interval=TimeFrame.Minute):
         start = datetime.strptime(from_date, "%Y-%m-%d").replace(tzinfo=pytz.UTC)

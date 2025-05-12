@@ -2,7 +2,6 @@ import pandas as pd
 import backtrader as bt
 
 from metrics import analyze_indicators
-from utils import log, log_signal
 
 
 class SignalStrategy(bt.Strategy):
@@ -59,6 +58,8 @@ class SignalStrategy(bt.Strategy):
 
     # Only used for backtesting.
     def next(self):
+        if self.data.close[0] == 0.0:
+            return  # Skip dummy bar
 
         # Build a DataFrame from the most recent N bars
         N = 200  # Enough for MACD and BB

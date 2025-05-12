@@ -15,6 +15,9 @@ load_dotenv()
 ROBIN_USER = os.getenv("ROBINHOOD_USERNAME")
 ROBIN_PASS = os.getenv("ROBINHOOD_PASSWORD")
 
+## WARNING: Doesn't really work unless you already have phone / email MFA enabled. It now uses the app and robin-stocks
+## doesn't properly authenticate. Robinhood has sent users stating that API usage is not allowed, so user at your own risk.
+## I recommend using FMP for data and Alpaca for broker. It's the most affordable way to get decent intraday 1min data.
 
 class RobinhoodInterface(BrokerInterface, DataInterface):
     def __init__(self):
@@ -30,7 +33,7 @@ class RobinhoodInterface(BrokerInterface, DataInterface):
             except Exception as e:
                 log.error(f"Robinhood login failed: {e}")
 
-    def fetch_data(self, symbol, lookback=5000, real_trades=False):
+    def fetch_chart_data(self, symbol, lookback=5000):
         end = datetime.now()
         start = end - timedelta(minutes=lookback)
         interval = '5minute'  # Robinhood does not support 1min reliably
