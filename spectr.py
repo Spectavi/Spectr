@@ -9,10 +9,11 @@ import playsound
 from dotenv import load_dotenv
 from textual.app import App, ComposeResult
 from textual.reactive import reactive
+import threading, queue, time
 
 import metrics
 import utils
-from custom_strategy import SignalStrategy
+from cutsom_strategy import SignalStrategy
 from fetch.broker_interface import BrokerInterface
 from utils import load_cache, save_cache
 from views.graph_view import GraphView
@@ -77,6 +78,9 @@ class SpectrApp(App):
         self.bb_dev = self.args.bb_dev
         self.df_cache = {symbol: pd.DataFrame() for symbol in self.ticker_symbols}
 
+        self._update_queue: queue.Queue[str] = queue.Queue()
+        self._stop_event = threading.Event()
+
     def compose(self) -> ComposeResult:
         yield TopOverlay(id="overlay-text")
         yield GraphView(id="graph")
@@ -100,6 +104,11 @@ class SpectrApp(App):
         self.macd.args = self.args
 
         log.debug(f"App mounted in mode: {self.args.mode}")
+        # Kick off producer & consumer
+        threading.Thread(target=self._polling_loop,
+                         name="data-poller",
+                         daemon=True).start()
+        asyncio.create_task(self._process_updates())  # async consumer
 
         # Step 1: Fetch data for all symbols and store in df_cache
         for symbol in self.ticker_symbols:
@@ -121,10 +130,99 @@ class SpectrApp(App):
 
         self.update_status_bar()
         asyncio.create_task(self.update_data_loop())
-        #await self.init_backtrader()
 
+    def _polling_loop(self) -> None:
+        """Runs in *native* thread; never touches the UI directly."""
+        while not self._stop_event.is_set():
+            signal_detected = []
+            for symbol in self.ticker_symbols:
+                try:
+                    df, quote = self.get_live_data(symbol)
+                    if df.empty or quote is None:
+                        continue
+
+                    df = utils.inject_quote_into_df(df, quote)
+                    df = metrics.analyze_indicators(df,
+                                                    self.bb_period,
+                                                    self.bb_dev,
+                                                    self.macd_thresh)
+
+                    df["signal"] = None
+                    log.debug("Detecting live signals...")
+                    signal_dict = SignalStrategy.detect_signals(df, symbol,
+                                                                BROKER_API.get_position(self.args.symbol,
+                                                                                        self.args.real_trades))
+                    log.debug("Detect signals finished.")
+
+                    # Check for signal
+                    signal = signal_dict['signal']
+                    curr_price = quote.get("price")
+                    if signal:
+                        log.debug(f"Signal detected for {symbol}.")
+                        self.update_view(symbol)
+                        if signal == "buy":
+                            log.debug("Buy signal detected!")
+                            signal_detected.append((symbol, curr_price, signal))
+                            playsound.playsound(BUY_SOUND_PATH)
+                        elif signal == "sell":
+                            log.debug("Sell signal detected!")
+                            signal_detected.append((symbol, curr_price, signal))
+                            playsound.playsound(SELL_SOUND_PATH)
+
+                    # Update current df
+                    self.df_cache[symbol] = df  # thread-safe – dict ops are atomic
+                    self._update_queue.put(symbol)  # notify main loop
+                except Exception as exc:
+                    log.error(f"[poll] {symbol}: {exc}")
+
+            symbol = self.ticker_symbols[self.active_symbol_index]
+            # If a buy signal was triggered, switch to that symbol
+            if len(signal_detected) > 0:
+                for signal in signal_detected:
+                    sym, price, sig = signal
+                    index = self.ticker_symbols.index(sym)
+                    self.active_symbol_index = index
+                    self.update_view(sym)
+                    msg = f"{sym} @ {price} 🚀"
+                    if sig == 'buy':
+                        msg = f"BUY {msg}"
+                    if sig == 'sell':
+                        msg = f"SELL {msg}"
+
+                    if not self.auto_trading_enabled:
+                        msg = f"AUTO DISABLED! {msg}"
+                    else:
+                        msg = f"ORDER SUBMITTED! {msg}"
+                        if not self.args.real_trades:
+                            msg = f"PAPER {msg}"
+                        else:
+                            msg = f"REAL {msg}"
+                        BROKER_API.submit_order(symbol, signal, 1, self.args.real_trades)
+
+                    overlay = self.query_one("#overlay-text", TopOverlay)
+                    overlay.flash_message(msg, style="bold green")
+                    playsound.playsound(BUY_SOUND_PATH if sig == "buy" else SELL_SOUND_PATH)
+            time.sleep(REFRESH_INTERVAL)
+
+    async def _process_updates(self) -> None:
+        """Runs in Textual’s event loop; applies any fresh data to the UI."""
+        while True:
+            symbol: str = await asyncio.to_thread(self._update_queue.get)
+
+            # If the update is for the symbol the user is currently looking at,
+            # push it straight into the Graph/MACD views.
+            if symbol == self.ticker_symbols[self.active_symbol_index]:
+                df = self.df_cache.get(symbol)
+                if df is not None:
+                    self.graph.df = df
+                    self.macd.df = df
+                    self.graph.refresh()
+                    self.macd.refresh()
+                    self.refresh()
 
     async def on_shutdown(self):
+        self._stop_event.set()  # stop the producer
+        await asyncio.to_thread(self._update_queue.put, None)  # unblock consumer
         log.debug("Shutting down...")
         if hasattr(self, "graph") and hasattr(self.graph, "df"):
             save_cache(self.graph.df, self.args.mode)
