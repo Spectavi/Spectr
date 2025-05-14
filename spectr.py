@@ -12,7 +12,7 @@ from textual.reactive import reactive
 
 import metrics
 import utils
-from CustomStrategy import SignalStrategy
+from custom_strategy import SignalStrategy
 from fetch.broker_interface import BrokerInterface
 from utils import load_cache, save_cache
 from views.graph_view import GraphView
