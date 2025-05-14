@@ -185,7 +185,7 @@ class SpectrApp(App):
         overlay = self.query_one("#overlay-text", TopOverlay)
         overlay.symbol = self.ticker_symbols[self.active_symbol_index]
         overlay.update_status(
-            f"Mode: {self.args.mode} | {self.active_symbol_index + 1} / {len(self.ticker_symbols)} | {auto_trade_state}"
+            f"Mode: {self.args.mode} | {self.active_symbol_index + 1} / {len(self.ticker_symbols) + 1} | {auto_trade_state}"
         )
 
     def run_backtest(df, symbol, bb_period, bb_dev, macd_thresh):
