@@ -8,19 +8,19 @@ import pytz
 
 
 LOG_FILE = 'signal_log.csv'
-CACHE_PATH_FORMAT_STR = ".{}.spectr_cache.parquet"
+CACHE_PATH_STR = ".spectr_cache.parquet"
 
 log = logging.getLogger(__name__)
 
-def save_cache(df, mode):
+def save_cache(df):
     if df is not None and not df.empty:
-        cache_path = CACHE_PATH_FORMAT_STR.format(mode)
+        cache_path = CACHE_PATH_STR
         df.to_parquet(cache_path)
         print(f"[Cache] DataFrame cached to {cache_path}")
 
 
 def load_cache(mode):
-    cache_path = Path(CACHE_PATH_FORMAT_STR.format(mode))
+    cache_path = Path(CACHE_PATH_STR.format(mode))
     if cache_path.exists():
         print(f"[Cache] Loading cached DataFrame from {cache_path}")
         return pd.read_parquet(cache_path)

@@ -54,10 +54,31 @@ class FMPInterface(DataInterface):
         except Exception as e:
             raise RuntimeError(f"Failed to fetch quote for {symbol}: {e}")
 
-    def fetch_data_for_backtest(self, symbol: str, from_date: str, to_date: str, interval=None) -> pd.DataFrame:
-        df = self.afetch_data(symbol)
-        df = df[(df.index >= pd.to_datetime(from_date)) & (df.index <= pd.to_datetime(to_date))]
-        return df
+    def fetch_chart_data_for_backtest(self, symbol: str, from_date: str, to_date: str, interval="1min") -> pd.DataFrame:
+        # Fetch intraday data (limited history on free tier)
+        url = f"https://financialmodelingprep.com/api/v3/historical-chart/{interval}/{symbol}?from={from_date}&to={to_date}&apikey={FMP_API_KEY}"
+        resp = requests.get(url)
+        data = resp.json()
+
+        if not isinstance(data, list) or not data:
+            raise ValueError(f"No data returned from FMP for {symbol}")
+
+        df = pd.DataFrame(data)
+        df['datetime'] = pd.to_datetime(df['date'])
+        df.set_index('datetime', inplace=True)
+        # Set timezone to US/Eastern
+        df.index = df.index.tz_localize("US/Eastern")
+        df = df.sort_index()
+
+        df.rename(columns={
+            'open': 'open',
+            'high': 'high',
+            'low': 'low',
+            'close': 'close',
+            'volume': 'volume'
+        }, inplace=True)
+
+        return df[['open', 'high', 'low', 'close', 'volume']]
 
 
 import backtrader as bt

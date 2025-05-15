@@ -18,11 +18,11 @@ class TopOverlay(Static):
     def set_auto_trading_mode(self, enabled: bool):
         self.live_icon = "🤖" if enabled else "🚫"
         if enabled:
-            self.update_status(f"Auto-Trades: ENABLED {self.live_icon}", style="BOLD GREEN")
+            self.update_status(f"Auto-Trades: ENABLED {self.live_icon}")
         else:
-            self.update_status(f"Auto-Trades: DISABLED {self.live_icon}", style="BOLD RED")
+            self.update_status(f"Auto-Trades: DISABLED {self.live_icon}")
 
-    def flash_message(self, msg: str, duration: float = 3.0, style: str = "bold red"):
+    def flash_message(self, msg: str, duration: float = 10.0, style: str = "bold red"):
         self.alert_text = f"[{style}]{msg}[/{style}]"
         if self._timer:
             self._timer.stop()

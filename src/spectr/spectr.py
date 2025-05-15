@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import logging
+import sys
 import traceback
 
 import backtrader as bt
@@ -13,8 +14,9 @@ import threading, queue, time
 
 import metrics
 import utils
-from custom_strategy import SignalStrategy
+from CustomStrategy import CustomStrategy
 from fetch.broker_interface import BrokerInterface
+from views.backtest_input_dialog import BacktestInputDialog
 from utils import load_cache, save_cache
 from views.graph_view import GraphView
 from views.macd_view import MACDView
@@ -60,12 +62,14 @@ class SpectrApp(App):
         ("8", "select_symbol('8')", "Symbol 8"),
         ("9", "select_symbol('9')", "Symbol 9"),
         ("0", "select_symbol('0')", "Symbol 10"),
+        ("b", "prompt_backtest", "Back-test"),
     ]
 
     ticker_symbols = reactive([])
     active_symbol_index = reactive(0)
     auto_trading_enabled: reactive[bool] = reactive(False)
     strategies = reactive({})
+    is_backtest: reactive[bool] = reactive(False)  # ‹NEW› flag
 
     graph: reactive[GraphView] = reactive(None)
     macd: reactive[MACDView] = reactive(None)
@@ -103,7 +107,7 @@ class SpectrApp(App):
         self.graph.args = self.args
         self.macd.args = self.args
 
-        log.debug(f"App mounted in mode: {self.args.mode}")
+        log.debug("App mounted.")
         # Kick off producer & consumer
         threading.Thread(target=self._polling_loop,
                          name="data-poller",
@@ -121,18 +125,20 @@ class SpectrApp(App):
                 df = utils.inject_quote_into_df(df, quote)
                 df = metrics.analyze_indicators(df, self.bb_period, self.bb_dev, self.macd_thresh)
                 self.df_cache[symbol] = df
-                strat = SignalStrategy()
+                strat = CustomStrategy()
                 strat.symbol = symbol
-                self.strategies[symbol] = SignalStrategy
+                self.strategies[symbol] = CustomStrategy
 
             except Exception as e:
                 log.error(f"[on_mount] Failed to fetch data for {symbol}: {e}")
 
         self.update_status_bar()
-        asyncio.create_task(self.update_data_loop())
+        asyncio.create_task(self._process_updates())
 
     def _polling_loop(self) -> None:
         """Runs in *native* thread; never touches the UI directly."""
+        if self.is_backtest:  # ← back-tests freeze live updates
+            return  # simply skip this tick and try again next time
         while not self._stop_event.is_set():
             signal_detected = []
             for symbol in self.ticker_symbols:
@@ -146,10 +152,10 @@ class SpectrApp(App):
                                                     self.bb_period,
                                                     self.bb_dev,
                                                     self.macd_thresh)
-
+                    df['trade'] = None
                     df["signal"] = None
                     log.debug("Detecting live signals...")
-                    signal_dict = SignalStrategy.detect_signals(df, symbol,
+                    signal_dict = CustomStrategy.detect_signals(df, symbol,
                                                                 BROKER_API.get_position(self.args.symbol,
                                                                                         self.args.real_trades))
                     log.debug("Detect signals finished.")
@@ -159,6 +165,7 @@ class SpectrApp(App):
                     curr_price = quote.get("price")
                     if signal:
                         log.debug(f"Signal detected for {symbol}.")
+                        df.at[df.index[-1], 'trade'] = signal  # mark bar for plotting
                         self.update_view(symbol)
                         if signal == "buy":
                             log.debug("Buy signal detected!")
@@ -212,34 +219,37 @@ class SpectrApp(App):
             # If the update is for the symbol the user is currently looking at,
             # push it straight into the Graph/MACD views.
             if symbol == self.ticker_symbols[self.active_symbol_index]:
-                df = self.df_cache.get(symbol)
-                if df is not None:
-                    self.graph.df = df
-                    self.macd.df = df
-                    self.graph.refresh()
-                    self.macd.refresh()
-                    self.refresh()
+                if not self.is_backtest:
+                    df = self.df_cache.get(symbol)
+                    if df is not None:
+                        self.graph.df = df
+                        self.macd.df = df
+                        self.graph.refresh()
+                        self.macd.refresh()
+                        self.refresh()
 
     async def on_shutdown(self):
         self._stop_event.set()  # stop the producer
         await asyncio.to_thread(self._update_queue.put, None)  # unblock consumer
         log.debug("Shutting down...")
         if hasattr(self, "graph") and hasattr(self.graph, "df"):
-            save_cache(self.graph.df, self.args.mode)
+            save_cache(self.graph.df)
             log.debug("Cache saved.")
         else:
             log.debug("Cache not saved.")
-
+        sys.exit(0)
 
     ### Action Functions ###
 
     def action_select_symbol(self, key: str):
+        self._exit_backtest()
         index = (int(key) - 1) if key != "0" else 9
 
-        if index < len(self.ticker_symbols):
+        if index <= len(self.ticker_symbols)-1:
             self.active_symbol_index = index
             symbol = self.ticker_symbols[index]
             log.debug(f"action selected symbol: {symbol}")
+            self._exit_backtest()
             self.update_view(symbol)
 
     def action_arm_auto_trading(self):
@@ -256,22 +266,18 @@ class SpectrApp(App):
         symbol = self.ticker_symbols[self.active_symbol_index]
         self.update_view(symbol)
 
-
     ### ------------------------------------------------- ###
 
     def update_view(self, symbol: str):
         self.query_one("#graph", GraphView).symbol = symbol  # Update graph title
         self.query_one("#overlay-text", TopOverlay).symbol = symbol
 
-        if self.df_cache.get(symbol) is not None:
+        if self.df_cache.get(symbol) is not None and not self.is_backtest:
             self.query_one("#graph", GraphView).df = self.df_cache.get(symbol)
             self.query_one('#macd-view', MACDView).df = self.df_cache.get(symbol)
-        else:
-            self.query_one("#graph", GraphView).df = None
-            self.query_one('#macd-view', MACDView).df = None
 
         self.update_status_bar()
-        asyncio.create_task(self.update_data_loop())  # Restart fetch/update loop
+        #asyncio.create_task(self.update_data_loop())  # Restart fetch/update loop
 
     def update_status_bar(self):
         live_icon = "🤖" if self.auto_trading_enabled else "🚫"
@@ -283,17 +289,109 @@ class SpectrApp(App):
         overlay = self.query_one("#overlay-text", TopOverlay)
         overlay.symbol = self.ticker_symbols[self.active_symbol_index]
         overlay.update_status(
-            f"Mode: {self.args.mode} | {self.active_symbol_index + 1} / {len(self.ticker_symbols) + 1} | {auto_trade_state}"
+            f"{self.active_symbol_index + 1} / {len(self.ticker_symbols)} | {auto_trade_state}"
         )
 
-    def run_backtest(df, symbol, bb_period, bb_dev, macd_thresh):
+    # ---------- Back-test workflow ----------
+
+    def action_prompt_backtest(self) -> None:
+        """Open the back-test input dialog (bound to the ‘b’ key)."""
+        current_symbol = self.ticker_symbols[self.active_symbol_index]
+        self.push_screen(
+            BacktestInputDialog(
+                callback=self.on_backtest_submit,
+                default_symbol=current_symbol,  # ← new arg
+            )
+        )
+
+    async def on_backtest_submit(self, form: dict) -> None:
+        """
+        form = {"symbol": str, "from": str, "to": str, "cash": str}
+        Runs in a thread to keep the UI responsive.
+        """
+        try:
+            log.debug("Backtest starting...")
+            overlay = self.query_one("#overlay-text", TopOverlay)
+            overlay.update_status("Running backtest...")
+            symbol = form["symbol"]
+            starting_cash = float(form["cash"])
+
+            # Fetch historical bars
+            df = await asyncio.to_thread(
+                DATA_API.fetch_chart_data_for_backtest,
+                symbol=symbol,
+                from_date=form["from"],
+                to_date=form["to"],
+                interval=self.args.interval,
+            )
+            if df.empty:
+                raise ValueError("No data returned for that period.")
+            else:
+                log.debug(f"Found {len(df)} data points for {symbol}.")
+
+            df = metrics.analyze_indicators(
+                df, self.bb_period, self.bb_dev, self.macd_thresh
+            )
+
+            # Run the back-test
+            log.debug(f"Running backtest for {symbol}.")
+            result = await asyncio.to_thread(
+                self.run_backtest, df, symbol, self.args, starting_cash
+            )
+            log.debug("Backtest completed successfully.")
+            self.is_backtest = True
+
+            num_buys = len(result.get("buy_signals", []))
+            num_sells = len(result.get("sell_signals", []))
+
+            overlay.update_status(f"Backtest completed. Final portfolio value: ${result['final_value']:,.2f} | Buy count: {num_buys}")
+            price_df = result["price_data"].copy()
+
+            buy_times = {sig["time"] for sig in result["buy_signals"]}
+            sell_times = {sig["time"] for sig in result["sell_signals"]}
+
+            price_df["buy_signals"] = price_df.index.isin(buy_times)
+            price_df["sell_signals"] = price_df.index.isin(sell_times)
+            # left-join adds open/high/low/volume from the original df
+            df = df.join(price_df[["buy_signals", "sell_signals"]])
+            # Switch the UI into back-test mode
+            self.graph.is_backtest = True
+            self.graph.df = df
+            self.macd.is_backtest = True
+            self.macd.df = df
+            self.graph.symbol = symbol
+            self.graph.refresh()
+            self.macd.refresh()
+            #self.update_view(symbol)
+
+        except Exception as exc:
+            self.query_one("#overlay-text", TopOverlay).flash_message(
+                f"Back-test error: {exc}", style="bold red"
+            )
+            log.error("Back-test error: %s", traceback.format_exc())
+            self.is_backtest = False
+            # Turn is_backtest off for every graph shown.
+            self.graph.is_backtest = False
+            self.macd.is_backtest = False
+
+    def _exit_backtest(self) -> None:
+        """Return to live data when the user presses 0-9."""
+        self.is_backtest = False
+        # Turn is_backtest off for every graph shown.
+        self.graph.is_backtest = False
+        self.macd.is_backtest = False
+
+        current = self.ticker_symbols[self.active_symbol_index]
+        self.update_view(current)
+
+    def run_backtest(self, df, symbol, args, starting_cash=1000):
         cerebro = bt.Cerebro()
-        cerebro.addstrategy(SignalStrategy, symbol=symbol, bb_period=bb_period, bb_dev=bb_dev, macd_thresh=macd_thresh)
+        cerebro.addstrategy(CustomStrategy, symbol=symbol, bb_period=args.bb_period, bb_dev=args.bb_dev, macd_thresh=args.macd_thresh, is_backtest=True)
 
         data = bt.feeds.PandasData(dataname=df)
         cerebro.adddata(data)
 
-        cerebro.broker.setcash(10000.0)
+        cerebro.broker.setcash(starting_cash)
         cerebro.broker.addcommissioninfo(CommInfoFractional())
         cerebro.broker.setcommission(commission=0.00)
         cerebro.addsizer(bt.sizers.AllInSizer, percents=100)
@@ -303,13 +401,7 @@ class SpectrApp(App):
         log.debug(f"Final Portfolio Value: {cerebro.broker.getvalue():.2f}")
         # cerebro.plot() # Hawk TUI!
 
-        # Extract trades
-        trades = []
         strat = results[0]
-        log.debug(f"strat: {strat}")
-        for i in range(len(strat)):
-            if hasattr(strat, 'buy_signals') and strat.buy_signals:
-                trades.extend(strat.buy_signals)
 
         # Generate equity curve
         portfolio_values = [strat.broker.get_value()]  # or track each day manually
@@ -318,12 +410,11 @@ class SpectrApp(App):
 
         return {
             'final_value': cerebro.broker.getvalue(),
-            'trades': trades,
             'equity_curve': equity_curve,
             'price_data': df[['close']].copy(),
             'timestamps': timestamps,
-            'buys': strat.buy_signals,
-            'sells': strat.sell_signals,
+            'buy_signals': strat.buy_signals,
+            'sell_signals': strat.sell_signals,
         }
 
     def get_live_data(self, symbol):
@@ -332,118 +423,17 @@ class SpectrApp(App):
         quote = DATA_API.fetch_quote(symbol)
         return df, quote
 
-    async def update_data_loop(self):
-        while True:
-            try:
-                signal_detected = []
-                overlay = self.query_one("#overlay-text", TopOverlay)
-
-                # Batch update all symbols
-                for symbol in self.ticker_symbols:
-                    try:
-                        df, quote = await asyncio.to_thread(self.get_live_data, symbol)
-                        log.debug(f"Fetched live data.")
-                        log.debug(f"Quote: {quote}")
-                        curr_price = quote.get("price")
-
-                        # Create live row
-                        log.debug("Injecting latest quote data...")
-                        df = utils.inject_quote_into_df(df, quote)
-                        log.debug("Injected latest quote data.")
-
-                        latest_row = df.iloc[-1]
-
-                        log.debug("Analyzing indicators...")
-                        df = metrics.analyze_indicators(df, self.args.bb_period, self.args.bb_dev, self.args.macd_thresh)
-
-                        df["signal"] = None
-                        log.debug("Detecting live signals...")
-                        signal_dict = SignalStrategy.detect_signals(df, symbol,
-                                                                    BROKER_API.get_position(self.args.symbol,
-                                                                                            self.args.real_trades))
-                        log.debug("Detect signals finished.")
-                        signal = signal_dict['signal']
-                        price = signal_dict['price']
-
-                        # Check for signal
-                        if signal:
-                            log.debug(f"Signal detected for {symbol}.")
-                            self.update_view(symbol)
-                            if signal == "buy":
-                                log.debug("Buy signal detected!")
-                                signal_detected.append((symbol, curr_price, signal))
-                                playsound.playsound(BUY_SOUND_PATH)
-                            elif signal == "sell":
-                                log.debug("Buy signal detected!")
-                                signal_detected.append((symbol, curr_price, signal))
-                                playsound.playsound(SELL_SOUND_PATH)
-
-                        # Update current df
-                        self.df_cache[symbol] = df
-
-                    except Exception as e:
-                        log.debug(f"[ERROR] Symbol {symbol}: {e}")
-
-                symbol = self.ticker_symbols[self.active_symbol_index]
-                # If a buy signal was triggered, switch to that symbol
-                if len(signal_detected) > 0:
-                    for signal in signal_detected:
-                        sym, price, sig = signal
-                        index = self.ticker_symbols.index(sym)
-                        self.active_symbol_index = index
-                        self.update_view(sym)
-                        msg = f"{sym} @ {price} 🚀"
-                        if sig == 'buy':
-                            msg = f"BUY {msg}"
-                        if sig == 'sell':
-                            msg = f"SELL {msg}"
-
-                        if not self.auto_trading_enabled:
-                            msg = f"AUTO DISABLED! {msg}"
-                        else:
-                            msg = f"ORDER SUBMITTED! {msg}"
-                            if not self.args.real_trades:
-                                msg = f"PAPER {msg}"
-                            else:
-                                msg = f"REAL {msg}"
-                            BROKER_API.submit_order(symbol, signal, 1, self.args.real_trades)
-                        overlay.flash_message(msg, style="bold green")
-                        playsound.playsound(BUY_SOUND_PATH if sig == "buy" else SELL_SOUND_PATH)
-                        await asyncio.sleep(5)
-
-                # Update current symbol's UI
-                df = self.df_cache.get(symbol)
-                print(f"Loading df_cache for views: {symbol}")
-                if df is not None:
-                    self.graph.df = df
-                    self.graph.symbol = symbol
-                    self.macd.df = df
-                    self.graph.refresh()
-                    self.macd.refresh()
-
-                self.refresh()
-
-            except Exception as e:
-                log.debug(f"[ERROR] update_data_loop: {traceback.format_exc()}")
-                self.query_one("#overlay-text", TopOverlay).flash_message("Live error", style="bold red")
-                self.graph.update(f"Error: {e}")
-                if self.args.mode == "backtest":
-                    exit(1)
-
-
-            await asyncio.sleep(10)
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--symbols", type=str, default='AAPL,AMZN,META,MSFT,NVDA,TSLA,GOOG,VTI,GLD', help="List of ticker symbols (e.g. NVDA,TSLA,AAPL)")
     parser.add_argument("--candles", action="store_true", help="Show candlestick chart.")
     parser.add_argument("--macd_thresh", type=float, default=0.002, help="MACD threshold")
-    parser.add_argument("--bb_period", type=int, default=200, help="Bollinger Band period")
+    parser.add_argument("--bb_period", type=int, default=170, help="Bollinger Band period")
     parser.add_argument("--bb_dev", type=float, default=2.0, help="Bollinger Band std dev")
     parser.add_argument("--real_trades", action='store_true', help="Enable live trading (vs paper)")
-    parser.add_argument('--interval', default='1m')
-    parser.add_argument('--mode', choices=['live', 'backtest'], required=True)
+    parser.add_argument('--interval', default='1min')
+    #parser.add_argument('--mode', choices=['live', 'backtest'], required=True)
     parser.add_argument('--from_date', default='2025-04-17')
     parser.add_argument('--to_date', default='2025-04-21')
     parser.add_argument('--stop_loss_pct', type=float, default=0.01, help="Stop loss pct")
@@ -499,4 +489,3 @@ if __name__ == "__main__":
 
     app = SpectrApp(args)
     app.run()
-

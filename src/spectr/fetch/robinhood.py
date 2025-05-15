@@ -68,7 +68,7 @@ class RobinhoodInterface(BrokerInterface, DataInterface):
 
         return df[['open', 'high', 'low', 'close', 'volume']]
 
-    def fetch_data_for_backtest(self, symbol, from_date, to_date, interval=None):
+    def fetch_chart_data_for_backtest(self, symbol, from_date, to_date, interval=None):
         df = self.afetch_data(symbol, lookback=10000)  # Robinhood doesn’t support historical by date
         mask = (df.index >= pd.to_datetime(from_date)) & (df.index <= pd.to_datetime(to_date))
         return df.loc[mask]

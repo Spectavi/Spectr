@@ -3,11 +3,13 @@ import logging
 import pandas as pd
 import plotext as plt
 from rich.text import Text
+from textual.reactive import reactive
 from textual.widgets import Static
 
 log = logging.getLogger(__name__)
 
 class MACDView(Static):
+    is_backtest: reactive[bool] = reactive(False)
 
     def __init__(self, df=None, args=None, **kwargs):
         super().__init__(**kwargs)
@@ -28,6 +30,9 @@ class MACDView(Static):
     def watch_df(self, old, new):
         self.refresh()
 
+    def watch_is_backtest(self, old, new):
+        self.refresh()
+
     def render(self):
         log.debug("Rendering macd")
         return self.build_graph()
@@ -37,9 +42,14 @@ class MACDView(Static):
             return "Waiting for MACD data..."
 
         max_points = max(int(self.size.width * self.args.scale), 10)
-        df = self.df.tail(max_points)
+        if not self.is_backtest and len(self.df) > max_points:
+            # Live view: only show the tail that fits the terminal width
+            df = self.df.tail(max_points)
+        else:
+            # Back-test or small frame: show everything
+            df = self.df.copy()
 
-        # ✅ Force datetime index safely
+        # Force datetime index safely
         if not isinstance(df.index, pd.DatetimeIndex):
             try:
                 df.index = pd.to_datetime(df.index, errors="coerce")
@@ -56,7 +66,7 @@ class MACDView(Static):
         plt.grid(False)
         plt.date_form("Y-m-d H:M:S")
 
-        plt.horizontal_line(0.0, color="gray", yside="right")
+        #plt.horizontal_line(0.0, color="gray", yside="right")
         plt.plot(times, df["macd"], color="white", label="MACD", marker="hd", yside="right")
         plt.plot(times, df["macd_signal"], color="orange", label="Signal", marker="hd", yside="right")
 

@@ -14,6 +14,6 @@ class DataInterface(ABC):
         pass
 
     @abstractmethod
-    def fetch_data_for_backtest(self, symbol: str, from_date: str, to_date: str, interval=None) -> pd.DataFrame:
+    def fetch_chart_data_for_backtest(self, symbol: str, from_date: str, to_date: str, interval=None) -> pd.DataFrame:
         """Fetch historical data for backtesting."""
         pass

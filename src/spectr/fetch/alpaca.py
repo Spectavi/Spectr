@@ -50,7 +50,7 @@ class AlpacaInterface(BrokerInterface, DataInterface):
         except Exception as e:
             raise RuntimeError(f"Failed to fetch quote for {symbol}: {e}")
 
-    def fetch_data_for_backtest(self, symbol, from_date, to_date, interval=TimeFrame.Minute):
+    def fetch_chart_data_for_backtest(self, symbol, from_date, to_date, interval=TimeFrame.Minute):
         start = datetime.strptime(from_date, "%Y-%m-%d").replace(tzinfo=pytz.UTC)
         end = datetime.strptime(to_date, "%Y-%m-%d").replace(tzinfo=pytz.UTC)
         bars = self.get_api(False).get_bars(

@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=70", "wheel"]  # build deps
+build-backend = "setuptools.build_meta"
+
+[project]
+name            = "spectr"                     # pip install spectr
+version         = "0.1.0"                      # bump with each release
+description     = "Live Backtrader + Textual dashboard for multi-symbol monitoring"
+readme          = "README.md"
+license         = {file = "LICENSE"}
+requires-python = ">=3.10"
+authors = [
+  {name = "Aaron McClintock"}
+]
+
+dependencies = [
+  "backtrader>=1.9.78.123",
+  "textual>=0.59",
+  "pandas>=2.2",
+  "requests>=2.32",
+  # add anything else used: numpy, plotext, etc.
+]
+
+[project.urls]
+Source   = "https://github.com/your-handle/spectr"
+Issues   = "https://github.com/your-handle/spectr/issues"
+Docs     = "https://spectr.readthedocs.io"
+
+[project.scripts]
+spectr = "spectr.app:cli_entry"   # $ spectr ↵ launches the UI

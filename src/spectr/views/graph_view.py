@@ -1,15 +1,19 @@
 import logging
 
+import numpy as np
+import pandas as pd
 import plotext as plt
 from rich.text import Text
 from textual.reactive import reactive
 from textual.widgets import Static
+import numpy
 
 log = logging.getLogger(__name__)
 
 class GraphView(Static):
     symbol: reactive[str] = reactive("")
     quote: reactive[dict] = reactive(None)
+    is_backtest: reactive[bool] = reactive(False)
 
     def update_symbol(self, value: str):
         self.symbol = value
@@ -34,6 +38,9 @@ class GraphView(Static):
     def watch_quote(self, old, new):
         self.refresh()
 
+    def watch_is_backtest(self, old, new):
+        self.refresh()
+
     def render(self):
         log.debug("Rendering graph")
         return self.build_graph()
@@ -42,9 +49,14 @@ class GraphView(Static):
         if self.df is None or self.df.empty:
             return "Waiting for chart data..."
 
-        # Limit the number of bars to fit in terminal width
         max_points = max(int(self.size.width * self.args.scale), 10)
-        df = self.df.tail(max_points)
+
+        if not self.is_backtest and len(self.df) > max_points:
+            # Live view: only show the tail that fits the terminal width
+            df = self.df.tail(max_points)
+        elif self.is_backtest:
+            # Back-test or small frame: show everything
+            df = self.df.copy()
 
         # Extract time labels and prices
         dates = df.index.strftime('%Y-%m-%d %H:%M:%S')
@@ -71,6 +83,39 @@ class GraphView(Static):
             plt.candlestick(dates, df[['Open', 'Close', 'High', 'Low']], yside='right')
         else:
             plt.plot(dates, df['Close'], yside='right', marker='hd', color='green')
+
+        # -------- BUY / SELL MARKERS ---------
+        if 'buy_signals' in df.columns:
+            log.debug(f"buy_signals column detected: {df.columns}")
+            buy_mask = df['buy_signals'].astype(bool)
+            log.debug(f"buy_mask: {buy_mask}")
+
+            # Plot green ▲ for buys
+            if buy_mask.any():
+                plt.scatter(
+                    np.array(dates)[buy_mask],
+                    df.loc[buy_mask, 'Close'],
+                    marker='^',
+                    color='green',
+                    label='Buy',
+                    yside='right',
+                )
+
+        if 'sell_signals' in df.columns:
+            log.debug(f"sell_signals column detected: {df.columns}")
+            sell_mask = df['sell_signals'].astype(bool)
+            log.debug(f"sell_mask: {sell_mask}")
+
+            # Plot red ▼ for sells
+            if sell_mask.any():
+                plt.scatter(
+                    np.array(dates)[sell_mask],
+                    df.loc[sell_mask, 'Close'],
+                    marker='v',
+                    color='red',
+                    label='Sell',
+                    yside='right',
+                )
 
         last_x = dates[-2]
         last_y = df['Close'].iloc[-1]
