@@ -8,19 +8,19 @@
 
 **Spectr** is a terminal-based algorithmic trading terminal. It supports live-monitoring w/ algo-based auto-trading and historical backtesting via Backtrader. Supports Robinhood, Alpaca, and FMP. Multi-stock scanning and OpenAI integration are coming soon. 
 
-![Example GIF](res/example_candles.gif)
+![Example GIF](src/spectr/res/example_candles.gif)
 
 While monitoring a stock, Ctrl+A arms / dis-arms auto-trading:
 
-![Example 1](res/example1.png)
+![Example 1](src/spectr/res/example1.png)
 
 Zoom in / out using Ctrl + / - :
 
-![Example 2](res/example2.png)
+![Example 2](src/spectr/res/example2.png)
 
 Change ticker symbols list by pressing ` / ~:
 
-![Example 3](res/example3.png)
+![Example 3](src/spectr/res/example3.png)
 
 
 
