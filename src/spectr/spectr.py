@@ -1,13 +1,18 @@
 import argparse
 import asyncio
 import logging
+import os
 import sys
 import traceback
+from datetime import datetime, timedelta
+from pathlib import Path
 
 import backtrader as bt
 import pandas as pd
 import playsound
+from dateutil.relativedelta import relativedelta
 from dotenv import load_dotenv
+from textual import events
 from textual.app import App, ComposeResult
 from textual.reactive import reactive
 import threading, queue, time
@@ -16,6 +21,7 @@ import metrics
 import utils
 from CustomStrategy import CustomStrategy
 from fetch.broker_interface import BrokerInterface
+from views.trades_screen import TradesScreen
 from views.backtest_input_dialog import BacktestInputDialog
 from utils import load_cache, save_cache
 from views.graph_view import GraphView
@@ -27,7 +33,7 @@ from views.top_overlay import TopOverlay
 BUY_SOUND_PATH = 'res/buy.mp3'
 SELL_SOUND_PATH = 'res/sell.mp3'
 
-REFRESH_INTERVAL = 5  # seconds
+REFRESH_INTERVAL = 30  # seconds
 
 # Setup logging to file
 log_path = "debug.log"
@@ -63,12 +69,13 @@ class SpectrApp(App):
         ("9", "select_symbol('9')", "Symbol 9"),
         ("0", "select_symbol('0')", "Symbol 10"),
         ("b", "prompt_backtest", "Back-test"),
+        ("tab", "toggle_trades", "Trades Table"),
     ]
 
     ticker_symbols = reactive([])
     active_symbol_index = reactive(0)
     auto_trading_enabled: reactive[bool] = reactive(False)
-    strategies = reactive({})
+    # strategies = reactive({})
     is_backtest: reactive[bool] = reactive(False)  # ‹NEW› flag
 
     graph: reactive[GraphView] = reactive(None)
@@ -81,6 +88,8 @@ class SpectrApp(App):
         self.bb_period = self.args.bb_period
         self.bb_dev = self.args.bb_dev
         self.df_cache = {symbol: pd.DataFrame() for symbol in self.ticker_symbols}
+        if not os.path.exists(utils.CACHE_DIR):
+            os.mkdir(utils.CACHE_DIR)
 
         self._update_queue: queue.Queue[str] = queue.Queue()
         self._stop_event = threading.Event()
@@ -108,32 +117,67 @@ class SpectrApp(App):
         self.macd.args = self.args
 
         log.debug("App mounted.")
+        today = datetime.now().date()
+        # Step 1: Fetch data for all symbols and store in df_cache
+        for symbol in self.ticker_symbols:
+            cache = load_cache(symbol)
+            if cache.empty:
+                log.debug(f"Loaded cache: {symbol}")
+
+                last_bar_date = cache.index.max().date()
+                if last_bar_date <= today:
+                    # Pull only the missing slice [last_bar_date .. today]
+                    df_new, quote_new = await asyncio.to_thread(
+                        self.get_historical_data,
+                        symbol,
+                        from_date=last_bar_date.strftime("%Y-%m-%d"),
+                        to_date=today.strftime("%Y-%m-%d"),
+                    )
+            else:
+                df_new, quote_new = await asyncio.to_thread(
+                        self.get_historical_data,
+                        symbol,
+                        from_date=today - timedelta(days=365),
+                        to_date=today.strftime("%Y-%m-%d"),
+                    )
+                if df_new.empty:
+                    log.error(f"No data for {symbol}")
+                    continue
+
+
+            if not df_new.empty and quote_new is not None:
+                df_new = utils.inject_quote_into_df(df_new, quote_new)
+                df_new = metrics.analyze_indicators(
+                    df_new, self.bb_period, self.bb_dev, self.macd_thresh
+                )
+
+                # Merge & dedupe
+                combined = pd.concat([cache, df_new])
+                df_new = combined[~combined.index.duplicated(keep="last")].sort_index()
+                log.info(f"Cache for {symbol} extended to {df_new.index.max().date()}")
+
+
+            self.df_cache[symbol] = df_new
+            save_cache(symbol, df_new)
+
         # Kick off producer & consumer
         threading.Thread(target=self._polling_loop,
                          name="data-poller",
                          daemon=True).start()
+        self.update_status_bar()
         asyncio.create_task(self._process_updates())  # async consumer
 
-        # Step 1: Fetch data for all symbols and store in df_cache
-        for symbol in self.ticker_symbols:
-            try:
-                df, quote = await asyncio.to_thread(self.get_live_data, symbol)
-                if df.empty or quote is None:
-                    log.error(f"No data for {symbol}")
-                    continue
+    def get_live_data(self, symbol):
+        log.debug(f"Fetching live data for {symbol}...")
+        df = DATA_API.fetch_chart_data(symbol, from_date=datetime.now().date(), to_date=datetime.now().date())
+        quote = DATA_API.fetch_quote(symbol)
+        return df, quote
 
-                df = utils.inject_quote_into_df(df, quote)
-                df = metrics.analyze_indicators(df, self.bb_period, self.bb_dev, self.macd_thresh)
-                self.df_cache[symbol] = df
-                strat = CustomStrategy()
-                strat.symbol = symbol
-                self.strategies[symbol] = CustomStrategy
-
-            except Exception as e:
-                log.error(f"[on_mount] Failed to fetch data for {symbol}: {e}")
-
-        self.update_status_bar()
-        asyncio.create_task(self._process_updates())
+    def get_historical_data(self, symbol, from_date, to_date):
+        log.debug(f"Fetching historical data for {symbol}...")
+        df = DATA_API.fetch_chart_data(symbol, from_date=from_date, to_date=to_date)
+        quote = DATA_API.fetch_quote(symbol)
+        return df, quote
 
     def _polling_loop(self) -> None:
         """Runs in *native* thread; never touches the UI directly."""
@@ -228,16 +272,13 @@ class SpectrApp(App):
                         self.macd.refresh()
                         self.refresh()
 
-    async def on_shutdown(self):
-        self._stop_event.set()  # stop the producer
-        await asyncio.to_thread(self._update_queue.put, None)  # unblock consumer
-        log.debug("Shutting down...")
-        if hasattr(self, "graph") and hasattr(self.graph, "df"):
-            save_cache(self.graph.df)
-            log.debug("Cache saved.")
-        else:
-            log.debug("Cache not saved.")
-        sys.exit(0)
+    # async def on_shutdown(self, event) -> None:
+    #     self._stop_event.set()  # stop the producer
+    #     await asyncio.to_thread(self._update_queue.put, None)  # unblock consumer
+    #     log.debug("Shutting down...")
+    #     save_cache(self.df_cache)
+    #     log.debug("Cache saved.")
+    #     sys.exit(0)
 
     ### Action Functions ###
 
@@ -264,9 +305,17 @@ class SpectrApp(App):
         self.ticker_symbols = [x.strip().upper() for x in symbols.split(',')] # Update the symbol used by the app
         self.active_symbol_index = 0
         symbol = self.ticker_symbols[self.active_symbol_index]
+        self.graph.df = None
+        self.macd.df = None
         self.update_view(symbol)
 
-    ### ------------------------------------------------- ###
+    def action_toggle_trades(self) -> None:
+        # Only meaningful after a back-test has just finished
+        if getattr(self, "_last_backtest_trades", None):
+            if self.screen_stack and isinstance(self.screen_stack[-1], TradesScreen):
+                self.pop_screen()  # already open → close
+            else:
+                self.push_screen(TradesScreen(self._last_backtest_trades))
 
     def update_view(self, symbol: str):
         self.query_one("#graph", GraphView).symbol = symbol  # Update graph title
@@ -344,6 +393,23 @@ class SpectrApp(App):
             num_buys = len(result.get("buy_signals", []))
             num_sells = len(result.get("sell_signals", []))
 
+            equity_curve = result["equity_curve"]
+            if isinstance(equity_curve, (pd.Series, pd.DataFrame)):
+                equity_lookup = equity_curve.to_dict()
+            else:
+                equity_lookup = dict(zip(result.get("timestamps", []), equity_curve))
+
+            trades = []
+            for rec in result.get("buy_signals", []) + result.get("sell_signals", []):
+                t = rec["time"]
+                trades.append({
+                    **rec,
+                    "value": equity_lookup.get(t),
+                })
+            trades.sort(key=lambda r: r["time"])
+            self._last_backtest_trades = trades
+            log.debug(f"trades: {trades}")
+
             overlay.update_status(f"Backtest completed. Final portfolio value: ${result['final_value']:,.2f} | Buy count: {num_buys}")
             price_df = result["price_data"].copy()
 
@@ -373,6 +439,7 @@ class SpectrApp(App):
             # Turn is_backtest off for every graph shown.
             self.graph.is_backtest = False
             self.macd.is_backtest = False
+            self.update_status_bar()
 
     def _exit_backtest(self) -> None:
         """Return to live data when the user presses 0-9."""
@@ -416,12 +483,6 @@ class SpectrApp(App):
             'buy_signals': strat.buy_signals,
             'sell_signals': strat.sell_signals,
         }
-
-    def get_live_data(self, symbol):
-        log.debug(f"Fetching live data for {symbol}...")
-        df = DATA_API.fetch_chart_data(symbol, lookback=self.args.lookback_period)
-        quote = DATA_API.fetch_quote(symbol)
-        return df, quote
 
 
 if __name__ == "__main__":

@@ -66,7 +66,7 @@ class MACDView(Static):
         plt.grid(False)
         plt.date_form("Y-m-d H:M:S")
 
-        #plt.horizontal_line(0.0, color="gray", yside="right")
+        plt.horizontal_line(0.0, color="gray")
         plt.plot(times, df["macd"], color="white", label="MACD", marker="hd", yside="right")
         plt.plot(times, df["macd_signal"], color="orange", label="Signal", marker="hd", yside="right")
 

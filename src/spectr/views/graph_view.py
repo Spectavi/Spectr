@@ -78,7 +78,7 @@ class GraphView(Static):
         plt.plot(dates, df['bb_mid'], color="blue", label="BB Mid", yside="right", marker='-')
         plt.plot(dates, df['bb_lower'], color="lime", label="BB Lower", yside="right", marker='dot')
 
-        if self.args.candles:
+        if self.args.candles and self.symbol is not 'BTCUSD':
             # Add candlesticks
             plt.candlestick(dates, df[['Open', 'Close', 'High', 'Low']], yside='right')
         else:

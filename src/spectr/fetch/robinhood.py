@@ -5,8 +5,8 @@ from datetime import datetime, timedelta
 from robin_stocks import robinhood as r
 from dotenv import load_dotenv
 
-from fetch.broker_interface import BrokerInterface
-from fetch.data_interface import DataInterface
+from .broker_interface import BrokerInterface
+from .data_interface import DataInterface
 
 log = logging.getLogger(__name__)
 load_dotenv()
@@ -33,7 +33,7 @@ class RobinhoodInterface(BrokerInterface, DataInterface):
             except Exception as e:
                 log.error(f"Robinhood login failed: {e}")
 
-    def fetch_chart_data(self, symbol, lookback=5000):
+    def fetch_chart_data(self, symbol, from_date: str, to_date: str):
         end = datetime.now()
         start = end - timedelta(minutes=lookback)
         interval = '5minute'  # Robinhood does not support 1min reliably
@@ -69,7 +69,7 @@ class RobinhoodInterface(BrokerInterface, DataInterface):
         return df[['open', 'high', 'low', 'close', 'volume']]
 
     def fetch_chart_data_for_backtest(self, symbol, from_date, to_date, interval=None):
-        df = self.afetch_data(symbol, lookback=10000)  # Robinhood doesn’t support historical by date
+        df = self.fetch_data(symbol, lookback=10000)  # Robinhood doesn’t support historical by date
         mask = (df.index >= pd.to_datetime(from_date)) & (df.index <= pd.to_datetime(to_date))
         return df.loc[mask]
 

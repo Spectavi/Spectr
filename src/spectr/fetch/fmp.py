@@ -4,7 +4,7 @@ import requests
 from dotenv import load_dotenv
 import pytz
 
-from fetch.data_interface import DataInterface
+from .data_interface import DataInterface
 
 load_dotenv()
 FMP_API_KEY = os.getenv("FMP_API_KEY")
@@ -15,9 +15,9 @@ class FMPInterface(DataInterface):
         if not FMP_API_KEY:
             raise ValueError("FMP_API_KEY not found in environment")
 
-    def fetch_chart_data(self, symbol: str, lookback: int = 5000) -> pd.DataFrame:
+    def fetch_chart_data(self, symbol: str, from_date: str, to_date: str) -> pd.DataFrame:
         # Fetch intraday data (limited history on free tier)
-        url = f"https://financialmodelingprep.com/api/v3/historical-chart/1min/{symbol}?apikey={FMP_API_KEY}"
+        url = f"https://financialmodelingprep.com/api/v3/historical-chart/1min/{symbol}?from_date={from_date}&to_date={to_date}&apikey={FMP_API_KEY}"
         resp = requests.get(url)
         data = resp.json()
 

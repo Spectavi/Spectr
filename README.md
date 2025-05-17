@@ -75,7 +75,7 @@ pip install -r requirements.txt
 ```
 # Usage
 ```bash
-python spectr.py --mode live --symbol AAPL --broker alpaca
+python src/spectr/spectr.py --broker alpaca --data_api fmp --scale 0.5 --symbols BTCUSD,NVDA --candles
 ```
 
 

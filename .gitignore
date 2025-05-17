@@ -5,3 +5,4 @@ debug.log
 signal_log.csv
 CustomStrategy.py
 .idea
+.cache

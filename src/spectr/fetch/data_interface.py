@@ -4,12 +4,12 @@ import pandas as pd
 
 class DataInterface(ABC):
     @abstractmethod
-    def fetch_chart_data(self, symbol: str, lookback: int = 5000) -> pd.DataFrame:
+    def fetch_chart_data(self, symbol: str, from_date: str, to_date: str) -> pd.DataFrame:
         """Asynchronously fetch recent market data."""
         pass
 
     @abstractmethod
-    def fetch_quote(self, symbol: str, lookback: int = 5000) -> pd.DataFrame:
+    def fetch_quote(self, symbol: str) -> pd.DataFrame:
         """Asynchronously fetch recent quote"""
         pass
 
