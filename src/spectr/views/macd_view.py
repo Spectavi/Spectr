@@ -40,6 +40,7 @@ class MACDView(Static):
     def build_graph(self) -> str:
         if self.df is None or self.df.empty:
             return "Waiting for MACD data..."
+        self.df = self.df.dropna(subset=["macd", "macd_signal"])
 
         max_points = max(int(self.size.width * self.args.scale), 10)
         if not self.is_backtest and len(self.df) > max_points:

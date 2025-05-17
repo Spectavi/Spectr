@@ -420,6 +420,7 @@ class SpectrApp(App):
             price_df["sell_signals"] = price_df.index.isin(sell_times)
             # left-join adds open/high/low/volume from the original df
             df = df.join(price_df[["buy_signals", "sell_signals"]])
+
             # Switch the UI into back-test mode
             self.graph.is_backtest = True
             self.graph.df = df
@@ -436,6 +437,7 @@ class SpectrApp(App):
             )
             log.error("Back-test error: %s", traceback.format_exc())
             self.is_backtest = False
+
             # Turn is_backtest off for every graph shown.
             self.graph.is_backtest = False
             self.macd.is_backtest = False
@@ -457,7 +459,6 @@ class SpectrApp(App):
 
         data = bt.feeds.PandasData(dataname=df)
         cerebro.adddata(data)
-
         cerebro.broker.setcash(starting_cash)
         cerebro.broker.addcommissioninfo(CommInfoFractional())
         cerebro.broker.setcommission(commission=0.00)
