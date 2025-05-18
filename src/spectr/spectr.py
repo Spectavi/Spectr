@@ -166,7 +166,7 @@ class SpectrApp(App):
 
     def get_live_data(self, symbol):
         log.debug(f"Fetching live data for {symbol}...")
-        df = DATA_API.fetch_chart_data(symbol, from_date=datetime.now().date(), to_date=datetime.now().date())
+        df = DATA_API.fetch_chart_data(symbol, from_date=datetime.now().date().strftime("%Y-%m-%d"), to_date=datetime.now().date().strftime("%Y-%m-%d"))
         quote = DATA_API.fetch_quote(symbol)
         return df, quote
 
