@@ -194,6 +194,8 @@ class SpectrApp(App):
 
         # ➋ Pull the data and quote
         df = DATA_API.fetch_chart_data_for_backtest(symbol, from_date=extended_from, to_date=to_date)
+
+        # Fallback to 5min data if 1min isn't present.
         if df.empty:
             df = DATA_API.fetch_chart_data_for_backtest(symbol, from_date=extended_from, to_date=to_date, interval="5min")
         # ➌ Compute indicators on the *full* frame (needs the extra bar)
