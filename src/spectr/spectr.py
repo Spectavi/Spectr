@@ -5,14 +5,12 @@ import os
 import sys
 import traceback
 from datetime import datetime, timedelta
-from pathlib import Path
 
 import backtrader as bt
+import pandas
 import pandas as pd
 import playsound
-from dateutil.relativedelta import relativedelta
 from dotenv import load_dotenv
-from textual import events
 from textual.app import App, ComposeResult
 from textual.reactive import reactive
 import threading, queue, time
@@ -21,6 +19,7 @@ import metrics
 import utils
 from CustomStrategy import CustomStrategy
 from fetch.broker_interface import BrokerInterface
+from views.order_dialog import OrderDialog
 from views.trades_screen import TradesScreen
 from views.backtest_input_dialog import BacktestInputDialog
 from utils import load_cache, save_cache
@@ -30,8 +29,8 @@ from views.ticker_input_dialog import TickerInputDialog
 from views.top_overlay import TopOverlay
 
 # --- SOUND PATHS ---
-BUY_SOUND_PATH = 'res/buy.mp3'
-SELL_SOUND_PATH = 'res/sell.mp3'
+BUY_SOUND_PATH = 'src/spectr/res/buy.mp3'
+SELL_SOUND_PATH = 'src/spectr/res/sell.mp3'
 
 REFRESH_INTERVAL = 30  # seconds
 
@@ -58,6 +57,8 @@ class SpectrApp(App):
         ("t", "prompt_symbol", "Change Ticker"), # T key
         ("`", "prompt_symbol", "Change Ticker"),  # ~ key
         ("ctrl+a", "arm_auto_trading", "Arms Auto-Trading - REAL trades will occur!"),
+        ("ctrl+q", "sell_current_symbol", "Opens sell dialog for current symbol."),
+        ("ctrl+z", "buy_current_symbol", "Opens buy dialog for current symbol."),
         ("1", "select_symbol('1')", "Symbol 1"),
         ("2", "select_symbol('2')", "Symbol 2"),
         ("3", "select_symbol('3')", "Symbol 3"),
@@ -68,6 +69,8 @@ class SpectrApp(App):
         ("8", "select_symbol('8')", "Symbol 8"),
         ("9", "select_symbol('9')", "Symbol 9"),
         ("0", "select_symbol('0')", "Symbol 10"),
+        ("[", "prev_symbol", "Previous Symbol"),
+        ("]", "next_symbol", "Next Symbol"),
         ("b", "prompt_backtest", "Back-test"),
         ("tab", "toggle_trades", "Trades Table"),
     ]
@@ -93,6 +96,7 @@ class SpectrApp(App):
 
         self._update_queue: queue.Queue[str] = queue.Queue()
         self._stop_event = threading.Event()
+        self.signal_detected = []
 
     def compose(self) -> ComposeResult:
         yield TopOverlay(id="overlay-text")
@@ -121,6 +125,8 @@ class SpectrApp(App):
         # Step 1: Fetch data for all symbols and store in df_cache
         for symbol in self.ticker_symbols:
             cache = load_cache(symbol)
+            df_new = pd.DataFrame()
+            quote_new = None
             if not cache.empty:
                 log.debug(f"Loaded cache: {symbol}")
 
@@ -137,7 +143,7 @@ class SpectrApp(App):
                 df_new, quote_new = await asyncio.to_thread(
                         self.get_historical_data,
                         symbol,
-                        from_date=today - timedelta(days=365),
+                        from_date=(today - timedelta(days=365)).strftime("%Y-%m-%d"),
                         to_date=today.strftime("%Y-%m-%d"),
                     )
                 if df_new.empty:
@@ -145,8 +151,9 @@ class SpectrApp(App):
                     continue
 
 
-            if not df_new.empty and quote_new is not None:
-                df_new = utils.inject_quote_into_df(df_new, quote_new)
+            if not df_new.empty:
+                if quote_new is not None:
+                    df_new = utils.inject_quote_into_df(df_new, quote_new)
 
                 # Merge & dedupe
                 combined = pd.concat([cache, df_new])
@@ -169,13 +176,6 @@ class SpectrApp(App):
         df = DATA_API.fetch_chart_data(symbol, from_date=datetime.now().date().strftime("%Y-%m-%d"), to_date=datetime.now().date().strftime("%Y-%m-%d"))
         quote = DATA_API.fetch_quote(symbol)
         return df, quote
-
-    # def get_historical_data(self, symbol, from_date, to_date):
-    #     log.debug(f"Fetching historical data for {symbol}...")
-    #     df = DATA_API.fetch_chart_data(symbol, from_date=from_date, to_date=to_date)
-    #     df = metrics.analyze_indicators(df, self.bb_period, self.bb_dev, self.macd_thresh)
-    #     quote = DATA_API.fetch_quote(symbol)
-    #     return df, quote
 
     # Grabs 1-day more than requested, calculates indicators, then trims to requested range.
     def get_historical_data(self, symbol: str, from_date: str, to_date: str):
@@ -215,7 +215,6 @@ class SpectrApp(App):
         if self.is_backtest:  # ← back-tests freeze live updates
             return  # simply skip this tick and try again next time
         while not self._stop_event.is_set():
-            signal_detected = []
             for symbol in self.ticker_symbols:
                 try:
                     df, quote = self.get_live_data(symbol)
@@ -241,15 +240,15 @@ class SpectrApp(App):
                     if signal:
                         log.debug(f"Signal detected for {symbol}.")
                         df.at[df.index[-1], 'trade'] = signal  # mark bar for plotting
-                        self.update_view(symbol)
+                        #self.update_view(symbol)
                         if signal == "buy":
                             log.debug("Buy signal detected!")
-                            signal_detected.append((symbol, curr_price, signal))
-                            playsound.playsound(BUY_SOUND_PATH)
+                            self.signal_detected.append((symbol, curr_price, signal))
+                            #playsound.playsound(BUY_SOUND_PATH)
                         elif signal == "sell":
                             log.debug("Sell signal detected!")
-                            signal_detected.append((symbol, curr_price, signal))
-                            playsound.playsound(SELL_SOUND_PATH)
+                            self.signal_detected.append((symbol, curr_price, signal))
+                            #playsound.playsound(SELL_SOUND_PATH)
 
                     # Update current df
                     self.df_cache[symbol] = df  # thread-safe – dict ops are atomic
@@ -257,33 +256,6 @@ class SpectrApp(App):
                 except Exception as exc:
                     log.error(f"[poll] {symbol}: {exc}")
 
-            symbol = self.ticker_symbols[self.active_symbol_index]
-            # If a buy signal was triggered, switch to that symbol
-            if len(signal_detected) > 0:
-                for signal in signal_detected:
-                    sym, price, sig = signal
-                    index = self.ticker_symbols.index(sym)
-                    self.active_symbol_index = index
-                    self.update_view(sym)
-                    msg = f"{sym} @ {price} 🚀"
-                    if sig == 'buy':
-                        msg = f"BUY {msg}"
-                    if sig == 'sell':
-                        msg = f"SELL {msg}"
-
-                    if not self.auto_trading_enabled:
-                        msg = f"AUTO DISABLED! {msg}"
-                    else:
-                        msg = f"ORDER SUBMITTED! {msg}"
-                        if not self.args.real_trades:
-                            msg = f"PAPER {msg}"
-                        else:
-                            msg = f"REAL {msg}"
-                        BROKER_API.submit_order(symbol, signal, 1, self.args.real_trades)
-
-                    overlay = self.query_one("#overlay-text", TopOverlay)
-                    overlay.flash_message(msg, style="bold green")
-                    playsound.playsound(BUY_SOUND_PATH if sig == "buy" else SELL_SOUND_PATH)
             time.sleep(REFRESH_INTERVAL)
 
     async def _process_updates(self) -> None:
@@ -293,7 +265,33 @@ class SpectrApp(App):
 
             # If the update is for the symbol the user is currently looking at,
             # push it straight into the Graph/MACD views.
-            if symbol == self.ticker_symbols[self.active_symbol_index]:
+            # If a buy signal was triggered, switch to that symbol
+            if len(self.signal_detected) > 0:
+                for signal in self.signal_detected:
+                    sym, price, sig = signal
+                    index = self.ticker_symbols.index(sym)
+                    self.active_symbol_index = index
+                    msg = f"{sym} @ {price} 🚀"
+                    if sig == 'buy':
+                        msg = f"BUY {msg}"
+                    if sig == 'sell':
+                        msg = f"SELL {msg}"
+
+                    if not self.auto_trading_enabled:
+                        self.signal_detected.remove(signal)
+                        pos = await BROKER_API.get_position(symbol)  # ← your own call
+                        await self.push_screen(OrderDialog(sym, sig, price, pos, get_price_cb=DATA_API.fetch_quote))
+                        continue
+                    else:
+                        msg = f"ORDER SUBMITTED! {msg}"
+                        if not self.args.real_trades:
+                            msg = f"PAPER {msg}"
+                        else:
+                            msg = f"REAL {msg}"
+                        self.signal_detected.remove(signal)
+                        BROKER_API.submit_order(symbol, signal, 1, self.args.real_trades)
+                        playsound.playsound(BUY_SOUND_PATH if sig == "buy" else SELL_SOUND_PATH)
+            elif symbol == self.ticker_symbols[self.active_symbol_index]:
                 if not self.is_backtest:
                     df = self.df_cache.get(symbol)
                     if df is not None:
@@ -303,13 +301,7 @@ class SpectrApp(App):
                         self.macd.refresh()
                         self.refresh()
 
-    # async def on_shutdown(self, event) -> None:
-    #     self._stop_event.set()  # stop the producer
-    #     await asyncio.to_thread(self._update_queue.put, None)  # unblock consumer
-    #     log.debug("Shutting down...")
-    #     save_cache(self.df_cache)
-    #     log.debug("Cache saved.")
-    #     sys.exit(0)
+
 
     ### Action Functions ###
 
@@ -321,8 +313,39 @@ class SpectrApp(App):
             self.active_symbol_index = index
             symbol = self.ticker_symbols[index]
             log.debug(f"action selected symbol: {symbol}")
-            self._exit_backtest()
             self.update_view(symbol)
+
+    def action_prev_symbol(self):
+        self._exit_backtest()
+        new_index = self.active_symbol_index - 1
+        if new_index < 0:
+            new_index = len(self.ticker_symbols) - 1
+        self.active_symbol_index = new_index
+        self.update_view(self.ticker_symbols[new_index])
+
+    def action_next_symbol(self):
+        self._exit_backtest()
+        new_index = self.active_symbol_index + 1
+        if new_index > len(self.ticker_symbols) - 1:
+            new_index = 0
+        self.active_symbol_index = new_index
+        self.update_view(self.ticker_symbols[new_index])
+
+    def action_buy_current_symbol(self):
+        self._exit_backtest()
+        symbol = self.ticker_symbols[self.active_symbol_index]
+        result = DATA_API.fetch_quote(symbol)
+        self.open_order_dialog("buy", symbol, result.get("price"))
+
+    def action_sell_current_symbol(self):
+        self._exit_backtest()
+        symbol = self.ticker_symbols[self.active_symbol_index]
+        result = DATA_API.fetch_quote(symbol)
+        self.open_order_dialog("sell", symbol, result.get("price"))
+
+    def open_order_dialog(self, signal: str, symbol: str, price: float):
+        pos = BROKER_API.get_position(symbol)
+        self.push_screen(OrderDialog(symbol, signal, price, pos))
 
     def action_arm_auto_trading(self):
         self.auto_trading_enabled = not self.auto_trading_enabled
@@ -348,6 +371,19 @@ class SpectrApp(App):
             else:
                 self.push_screen(TradesScreen(self._last_backtest_trades))
 
+    async def on_order_dialog_submit(self, msg: OrderDialog.Submit) -> None:
+        """Receive the order details and route them to your broker layer."""
+        log.info(
+            f"Placing {msg.side} {msg.qty} {msg.symbol} @ ${msg.price:.2f} "
+            f"(total ${msg.total:,.2f})"
+        )
+        await BROKER_API.submit_order(
+            symbol=msg.symbol,
+            side=msg.side,
+            quantity=msg.qty,
+            real_trades=self.args.real_trades,
+        )
+
     def update_view(self, symbol: str):
         self.query_one("#graph", GraphView).symbol = symbol  # Update graph title
         self.query_one("#overlay-text", TopOverlay).symbol = symbol
@@ -371,6 +407,10 @@ class SpectrApp(App):
         overlay.update_status(
             f"{self.active_symbol_index + 1} / {len(self.ticker_symbols)} | {auto_trade_state}"
         )
+
+    def _on_exit_app(self) -> None:
+        self._exit_backtest()
+        sys.exit(0)
 
     # ---------- Back-test workflow ----------
 
@@ -537,7 +577,7 @@ if __name__ == "__main__":
     parser.add_argument('--debug', action='store_true')
     args = parser.parse_args()
 
-    args.symbols = [s.strip().upper() for s in args.symbols.split(",")][:10]
+    args.symbols = [s.strip().upper() for s in args.symbols.split(",")]
     args.symbol = args.symbols[0]  # set initial active symbol
     log.debug(f"Loading symbols: {args.symbols}")
 

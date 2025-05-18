@@ -52,7 +52,8 @@ class FMPInterface(DataInterface):
                 raise ValueError(f"No quote data returned for {symbol}")
             return data[0]  # return the first (and only) quote object
         except Exception as e:
-            raise RuntimeError(f"Failed to fetch quote for {symbol}: {e}")
+            log.warning(f"Failed to fetch quote for {symbol}: {e}")
+            return None
 
     def fetch_chart_data_for_backtest(self, symbol: str, from_date: str, to_date: str, interval="1min") -> pd.DataFrame:
         # Fetch intraday data (limited history on free tier)

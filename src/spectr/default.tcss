@@ -46,3 +46,18 @@ Static {
     color: $text;
     text-style: none;
 }
+
+OrderDialog {
+    align: center middle;   /* centre all *direct* children */
+}
+
+#dlg_body {
+    width: 50%;
+    height: 50%;
+    border: solid green;
+    padding: 1 2;
+    content-align-horizontal: center;
+    background: $panel;
+}
+#dlg_title { text-align: center; }
+#dlg_price, #dlg_total { margin-left: 4; }

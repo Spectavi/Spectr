@@ -19,7 +19,7 @@ class BacktestInputDialog(ModalScreen):
         self._callback = callback
         self._default_symbol = default_symbol
 
-        # --- work out last week’s Monday-Friday ---
+        # --- Figure out last week’s Monday-Friday ---
         today = date.today()  # uses local timezone
         weekday = today.weekday()  # Monday=0 … Sunday=6
         start_this_week = today - timedelta(days=weekday)
@@ -27,7 +27,6 @@ class BacktestInputDialog(ModalScreen):
         last_friday = last_monday + timedelta(days=4)
         self._default_from = last_monday.isoformat()
         self._default_to = last_friday.isoformat()
-        # ------------------------------------------
 
         super().__init__()
 

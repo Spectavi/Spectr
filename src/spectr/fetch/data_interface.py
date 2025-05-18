@@ -9,7 +9,7 @@ class DataInterface(ABC):
         pass
 
     @abstractmethod
-    def fetch_quote(self, symbol: str) -> pd.DataFrame:
+    def fetch_quote(self, symbol: str) -> dict:
         """Asynchronously fetch recent quote"""
         pass
 
