@@ -23,12 +23,12 @@ def save_cache(symbol, df):
 
 def load_cache(symbol):
     cache_path = os.path.join(CACHE_DIR, CACHE_PATH_STR.format(symbol))
-    if os.path.exists(CACHE_DIR):
+    if os.path.exists(cache_path):
         print(f"[Cache] Loading cached DataFrame from {cache_path}")
         return pd.read_parquet(cache_path)
     else:
         log.debug("Cache not found.")
-    return None
+    return pd.DataFrame() # Return empty dataframe.
 
 def inject_quote_into_df(df: pd.DataFrame, quote: dict, tz='US/Eastern') -> pd.DataFrame:
     """

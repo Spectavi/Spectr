@@ -121,7 +121,7 @@ class SpectrApp(App):
         # Step 1: Fetch data for all symbols and store in df_cache
         for symbol in self.ticker_symbols:
             cache = load_cache(symbol)
-            if cache.empty:
+            if not cache.empty:
                 log.debug(f"Loaded cache: {symbol}")
 
                 last_bar_date = cache.index.max().date()
@@ -147,9 +147,6 @@ class SpectrApp(App):
 
             if not df_new.empty and quote_new is not None:
                 df_new = utils.inject_quote_into_df(df_new, quote_new)
-                df_new = metrics.analyze_indicators(
-                    df_new, self.bb_period, self.bb_dev, self.macd_thresh
-                )
 
                 # Merge & dedupe
                 combined = pd.concat([cache, df_new])
@@ -173,11 +170,43 @@ class SpectrApp(App):
         quote = DATA_API.fetch_quote(symbol)
         return df, quote
 
-    def get_historical_data(self, symbol, from_date, to_date):
-        log.debug(f"Fetching historical data for {symbol}...")
-        df = DATA_API.fetch_chart_data(symbol, from_date=from_date, to_date=to_date)
-        quote = DATA_API.fetch_quote(symbol)
-        return df, quote
+    # def get_historical_data(self, symbol, from_date, to_date):
+    #     log.debug(f"Fetching historical data for {symbol}...")
+    #     df = DATA_API.fetch_chart_data(symbol, from_date=from_date, to_date=to_date)
+    #     df = metrics.analyze_indicators(df, self.bb_period, self.bb_dev, self.macd_thresh)
+    #     quote = DATA_API.fetch_quote(symbol)
+    #     return df, quote
+
+    # Grabs 1-day more than requested, calculates indicators, then trims to requested range.
+    def get_historical_data(self, symbol: str, from_date: str, to_date: str):
+        """
+        Fetch OHLCV + quote for *symbol* in [from_date .. to_date] **inclusive**,
+        but ensure that indicators that need a look-back window are fully
+        initialised by pulling an extra day of data before `from_date`.
+        """
+        log.debug(f"Fetching historical data for {symbol}…")
+
+        # ➊ Extend the request one calendar day back
+        dt_from = datetime.strptime(from_date, "%Y-%m-%d").date()
+        extended_from = (dt_from - timedelta(days=1)).strftime("%Y-%m-%d")
+        log.debug(f"dt_from: {dt_from}")
+        log.debug(f"extended_from: {extended_from}")
+
+        # ➋ Pull the data and quote
+        df = DATA_API.fetch_chart_data_for_backtest(symbol, from_date=extended_from, to_date=to_date)
+        if df.empty:
+            df = DATA_API.fetch_chart_data_for_backtest(symbol, from_date=extended_from, to_date=to_date, interval="5min")
+        # ➌ Compute indicators on the *full* frame (needs the extra bar)
+        df = metrics.analyze_indicators(df, self.bb_period, self.bb_dev, self.macd_thresh)
+        try:
+            quote = DATA_API.fetch_quote(symbol)
+        except Exception:
+            log.warning(f"Failed to fetch quote for {symbol}")
+
+        # ➍ Trim back to the exact range the caller requested
+        df = df.loc[from_date:to_date]  # string slice → inclusive
+
+        return df, quote if quote else None
 
     def _polling_loop(self) -> None:
         """Runs in *native* thread; never touches the UI directly."""
@@ -366,21 +395,16 @@ class SpectrApp(App):
             starting_cash = float(form["cash"])
 
             # Fetch historical bars
-            df = await asyncio.to_thread(
-                DATA_API.fetch_chart_data_for_backtest,
-                symbol=symbol,
-                from_date=form["from"],
-                to_date=form["to"],
-                interval=self.args.interval,
-            )
+            df, _ = await asyncio.to_thread(
+                        self.get_historical_data,
+                        symbol,
+                        from_date=form["from"],
+                        to_date=form["to"],
+                    )
             if df.empty:
                 raise ValueError("No data returned for that period.")
             else:
                 log.debug(f"Found {len(df)} data points for {symbol}.")
-
-            df = metrics.analyze_indicators(
-                df, self.bb_period, self.bb_dev, self.macd_thresh
-            )
 
             # Run the back-test
             log.debug(f"Running backtest for {symbol}.")
