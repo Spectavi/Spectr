@@ -1,11 +1,9 @@
-/* Layout & Positioning */
 Screen {
     layout: vertical;
     padding: 0 0;
     background: black;
 }
 
-/* Container holding the graph */
 #graph {
     padding: 0;
     height: 70%;
@@ -40,15 +38,13 @@ ScreenModal {
     padding: 0 1;
 }
 
-
-/* Text style */
 Static {
     color: $text;
     text-style: none;
 }
 
 OrderDialog {
-    align: center middle;   /* centre all *direct* children */
+    align: center middle;
 }
 
 #dlg_body {
@@ -61,3 +57,13 @@ OrderDialog {
 }
 #dlg_title { text-align: center; }
 #dlg_price, #dlg_total { margin-left: 4; }
+
+PortfolioScreen > #portfolio_title {
+    width: 100%;
+    text-align: center;
+    content-align-horizontal: center;
+}
+#portfolio_title {
+    padding: 0 1;
+    text-align: center;
+}

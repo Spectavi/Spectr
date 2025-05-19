@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 import contextlib
+import logging
+
 from textual.screen import ModalScreen
 from textual.widgets import Static, Input, Button, Label
 from textual.containers import Horizontal, Vertical
@@ -11,6 +12,7 @@ from textual.message import Message
 from textual.reactive import reactive
 from textual import events
 
+log = logging.getLogger(__name__)
 
 class OrderDialog(ModalScreen):
     """Pop-up order ticket that displays live price and current position."""
@@ -20,7 +22,7 @@ class OrderDialog(ModalScreen):
         ("escape", "app.pop_screen",  "Cancel"),
     ]
 
-    # REFRESH_SECS = 10          # how often to poll the quote
+    REFRESH_SECS = 10          # how often to poll the quote
 
     class Submit(Message):
         def __init__(self, sender, *, symbol: str, side: str,
@@ -43,7 +45,7 @@ class OrderDialog(ModalScreen):
         side:   str,
         initial_price: float,
         pos: dict,
-        # get_price_cb,                     # async () -> float
+        get_price_cb,                     # async () -> float
     ) -> None:
         """
         `get_price_cb` must be an **async** callable that returns the latest
@@ -56,13 +58,14 @@ class OrderDialog(ModalScreen):
         self.price        = initial_price
         self.pos_qty      = pos.quantity if pos else 0.0
         self.pos_value    = pos.value if pos else 0.00
-        # self._get_price   = get_price_cb
-        # self._refresh_job = None                  # handle for cancel
+        self._get_price   = get_price_cb
+        self._refresh_job = None                  # handle for cancel
 
 
     def compose(self):
         yield Vertical(
             Static(f"[b]{self.side} {self.symbol}[/b]", id="dlg_title"),
+            Static(),
             Static(self._price_fmt(),               id="dlg_price"),
             Static(self._pos_fmt(),                 id="dlg_pos"),
             Horizontal(Label("", id="empty_line_lbl"), id="empty_line"),
@@ -92,29 +95,29 @@ class OrderDialog(ModalScreen):
         self.query_one("#dlg_qty_in", Input).focus()
 
         # schedule auto-refresh of the quote
-        # self._refresh_job = self.set_interval(
-        #     self.REFRESH_SECS, self._refresh_price, pause=False
-        # )
+        self._refresh_job = self.set_interval(
+            self.REFRESH_SECS, self._refresh_price, pause=False
+        )
 
-    # async def on_unmount(self, event: events.Unmount) -> None:
+    async def on_unmount(self, event: events.Unmount) -> None:
         # cancel the refresher when the dialog closes
-        # self._refresh_job.stop()
-        # self._refresh_job = None
+        self._refresh_job.stop()
+        self._refresh_job = None
 
 
-    # async def _refresh_price(self):
-    #     if not self.is_mounted:
-    #         return
-    #
-    #     with contextlib.suppress(Exception):   # network hiccups → ignore
-    #         new_price = await self._get_price(self.symbol).get("price")
-    #
-    #         if new_price:
-    #             self.price = new_price
-    #             self.query_one("#dlg_price", Static).update(self._price_fmt())
-    #             # keep total in sync if user already typed a qty
-    #             self.total = self.qty * self.price
-    #             self.query_one("#dlg_total", Static).update(self._total_fmt())
+    async def _refresh_price(self):
+        if not self.is_mounted:
+            return
+
+        #with contextlib.suppress(Exception):   # network hiccups → ignore
+        new_price = self._get_price(self.symbol).get("price")
+        log.debug(f"New quote price: {new_price}")
+        if new_price:
+            self.price = new_price
+            self.query_one("#dlg_price", Static).update(self._price_fmt())
+            # keep total in sync if user already typed a qty
+            self.total = self.qty * self.price
+            self.query_one("#dlg_total", Static).update(self._total_fmt())
 
     async def on_input_changed(self, event: Input.Changed) -> None:
         if event.input.id == "dlg_qty_in":

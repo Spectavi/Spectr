@@ -1,3 +1,4 @@
+import logging
 import os
 import pandas as pd
 import requests
@@ -9,6 +10,8 @@ from .data_interface import DataInterface
 load_dotenv()
 FMP_API_KEY = os.getenv("FMP_API_KEY")
 
+log = logging.getLogger(__name__)
+
 # FMP only provides data, no broker services.
 class FMPInterface(DataInterface):
     def __init__(self):
@@ -16,8 +19,8 @@ class FMPInterface(DataInterface):
             raise ValueError("FMP_API_KEY not found in environment")
 
     def fetch_chart_data(self, symbol: str, from_date: str, to_date: str, interval: str = "1min") -> pd.DataFrame:
-        # Fetch intraday data (limited history on free tier)
-        url = f"https://financialmodelingprep.com/api/v3/historical-chart/{interval}/{symbol}?from_date={from_date}&to_date={to_date}&apikey={FMP_API_KEY}"
+        # Fetch intraday data
+        url = f"https://financialmodelingprep.com/api/v3/historical-chart/{interval}/{symbol}?from_date={from_date}&to_date={to_date}&timeseries=390&apikey={FMP_API_KEY}"
         resp = requests.get(url)
         data = resp.json()
 
@@ -81,45 +84,19 @@ class FMPInterface(DataInterface):
 
         return df[['open', 'high', 'low', 'close', 'volume']]
 
-
-import backtrader as bt
-import requests
-import pandas as pd
-
-class FMPDataFeed(bt.feeds.DataBase):
-    lines = ('open', 'high', 'low', 'close', 'volume')
-    params = (('symbol', None), ('interval', '1min'), ('apikey', FMP_API_KEY), ('maxlen', 1000))
-
-    def start(self):
-        super().start()
-        self.bars = self._fetch_data()
-        self.idx = 0
-
-    def _fetch_data(self):
-        url = f"https://financialmodelingprep.com/api/v3/historical-chart/{self.p.interval}/{self.p.symbol}?apikey={self.p.apikey}"
-        r = requests.get(url)
-        r.raise_for_status()
-        data = r.json()
-
-        if not isinstance(data, list) or not data:
-            raise ValueError(f"No data returned from FMP for {self.p.symbol}")
-
-        df = pd.DataFrame(data)
-        df["datetime"] = pd.to_datetime(df["date"])
-        df = df.set_index("datetime").sort_index()
-        return df
-
-    def _load(self):
-        if self.idx >= len(self.bars):
-            return False
-
-        row = self.bars.iloc[self.idx]
-        self.datetime[0] = bt.date2num(self.bars.index[self.idx])
-        self.open[0] = row['open']
-        self.high[0] = row['high']
-        self.low[0] = row['low']
-        self.close[0] = row['close']
-        self.volume[0] = row['volume']
-        self.idx += 1
-        return True
-
+    def fetch_top_movers(self, limit: int = 10) -> list[dict]:
+        """
+        Return a list of the day’s *up* movers sorted by %-gain
+        Each result dict has at least: symbol, price, changesPercentage.
+        """
+        url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={FMP_API_KEY}"
+        try:
+            data = requests.get(url, timeout=10).json()
+            log.debug(f"Fetched {len(data)} gainers: {data}")
+            # sort numerically just in case
+            data = sorted(data, key=lambda d: float(d["changesPercentage"]), reverse=True)
+            log.debug(f"fetched {len(data)} gainers: {data}")
+            return data[:limit]
+        except Exception as exc:
+            log.warning(f"Failed to fetch top movers: {exc}")
+            return []

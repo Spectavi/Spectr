@@ -19,6 +19,7 @@ import metrics
 import utils
 from CustomStrategy import CustomStrategy
 from fetch.broker_interface import BrokerInterface
+from views.portfolio_screen import PortfolioScreen
 from views.order_dialog import OrderDialog
 from views.trades_screen import TradesScreen
 from views.backtest_input_dialog import BacktestInputDialog
@@ -73,6 +74,7 @@ class SpectrApp(App):
         ("]", "next_symbol", "Next Symbol"),
         ("b", "prompt_backtest", "Back-test"),
         ("tab", "toggle_trades", "Trades Table"),
+        ("p", "toggle_portfolio", "Portfolio"),
     ]
 
     ticker_symbols = reactive([])
@@ -121,6 +123,16 @@ class SpectrApp(App):
         self.macd.args = self.args
 
         log.debug("App mounted.")
+        await self.update_cache()
+
+        # Kick off producer & consumer
+        threading.Thread(target=self._polling_loop,
+                         name="data-poller",
+                         daemon=True).start()
+        self.update_status_bar()
+        asyncio.create_task(self._process_updates())  # async consumer
+
+    async def update_cache(self):
         today = datetime.now().date()
         # Step 1: Fetch data for all symbols and store in df_cache
         for symbol in self.ticker_symbols:
@@ -129,7 +141,6 @@ class SpectrApp(App):
             quote_new = None
             if not cache.empty:
                 log.debug(f"Loaded cache: {symbol}")
-
                 last_bar_date = cache.index.max().date()
                 if last_bar_date <= today:
                     # Pull only the missing slice [last_bar_date .. today]
@@ -141,35 +152,27 @@ class SpectrApp(App):
                     )
             else:
                 df_new, quote_new = await asyncio.to_thread(
-                        self.get_historical_data,
-                        symbol,
-                        from_date=(today - timedelta(days=365)).strftime("%Y-%m-%d"),
-                        to_date=today.strftime("%Y-%m-%d"),
-                    )
+                    self.get_historical_data,
+                    symbol,
+                    from_date=(today - timedelta(days=365)).strftime("%Y-%m-%d"),
+                    to_date=today.strftime("%Y-%m-%d"),
+                )
                 if df_new.empty:
                     log.error(f"No data for {symbol}")
                     continue
-
 
             if not df_new.empty:
                 if quote_new is not None:
                     df_new = utils.inject_quote_into_df(df_new, quote_new)
 
                 # Merge & dedupe
-                combined = pd.concat([cache, df_new])
-                df_new = combined[~combined.index.duplicated(keep="last")].sort_index()
+                if not cache.empty:
+                    combined = pd.concat([cache, df_new])
+                    df_new = combined[~combined.index.duplicated(keep="last")].sort_index()
                 log.info(f"Cache for {symbol} extended to {df_new.index.max().date()}")
-
 
             self.df_cache[symbol] = df_new
             save_cache(symbol, df_new)
-
-        # Kick off producer & consumer
-        threading.Thread(target=self._polling_loop,
-                         name="data-poller",
-                         daemon=True).start()
-        self.update_status_bar()
-        asyncio.create_task(self._process_updates())  # async consumer
 
     def get_live_data(self, symbol):
         log.debug(f"Fetching live data for {symbol}...")
@@ -217,11 +220,13 @@ class SpectrApp(App):
         while not self._stop_event.is_set():
             for symbol in self.ticker_symbols:
                 try:
+                    log.debug(f"Fetching live data for {symbol}...")
                     df, quote = self.get_live_data(symbol)
                     if df.empty or quote is None:
                         continue
-
+                    log.debug(f"Injecting quote for {symbol}")
                     df = utils.inject_quote_into_df(df, quote)
+                    log.debug(f"Analyzing {symbol}...")
                     df = metrics.analyze_indicators(df,
                                                     self.bb_period,
                                                     self.bb_dev,
@@ -235,9 +240,9 @@ class SpectrApp(App):
                     log.debug("Detect signals finished.")
 
                     # Check for signal
-                    signal = signal_dict['signal']
-                    curr_price = quote.get("price")
-                    if signal:
+                    if signal_dict:
+                        signal = signal_dict.get("signal")
+                        curr_price = quote.get("price")
                         log.debug(f"Signal detected for {symbol}.")
                         df.at[df.index[-1], 'trade'] = signal  # mark bar for plotting
                         #self.update_view(symbol)
@@ -251,7 +256,7 @@ class SpectrApp(App):
                             #playsound.playsound(SELL_SOUND_PATH)
 
                     # Update current df
-                    self.df_cache[symbol] = df  # thread-safe – dict ops are atomic
+                    #self.df_cache[symbol] = df  # thread-safe – dict ops are atomic
                     self._update_queue.put(symbol)  # notify main loop
                 except Exception as exc:
                     log.error(f"[poll] {symbol}: {exc}")
@@ -312,6 +317,8 @@ class SpectrApp(App):
         if index <= len(self.ticker_symbols)-1:
             self.active_symbol_index = index
             symbol = self.ticker_symbols[index]
+            self.graph.df = None
+            self.macd.df = None
             log.debug(f"action selected symbol: {symbol}")
             self.update_view(symbol)
 
@@ -331,6 +338,8 @@ class SpectrApp(App):
         self.active_symbol_index = new_index
         self.update_view(self.ticker_symbols[new_index])
 
+    # ------------- Order Dialog
+
     def action_buy_current_symbol(self):
         self._exit_backtest()
         symbol = self.ticker_symbols[self.active_symbol_index]
@@ -345,23 +354,31 @@ class SpectrApp(App):
 
     def open_order_dialog(self, signal: str, symbol: str, price: float):
         pos = BROKER_API.get_position(symbol)
-        self.push_screen(OrderDialog(symbol, signal, price, pos))
+        self.push_screen(OrderDialog(symbol, signal, price, pos, get_price_cb=DATA_API.fetch_quote))
+
+    # ------------ Arm / Dis-arm
 
     def action_arm_auto_trading(self):
         self.auto_trading_enabled = not self.auto_trading_enabled
         self.update_status_bar()
 
+    # ------------ Select Ticker
+
     def action_prompt_symbol(self):
         self.auto_trading_enabled = False
-        self.push_screen(TickerInputDialog(callback=self.on_ticker_submit))
+        self.push_screen(TickerInputDialog(callback=self.on_ticker_submit, top_movers_cb=DATA_API.fetch_top_movers))
 
     def on_ticker_submit(self, symbols: str):
-        self.ticker_symbols = [x.strip().upper() for x in symbols.split(',')] # Update the symbol used by the app
-        self.active_symbol_index = 0
-        symbol = self.ticker_symbols[self.active_symbol_index]
-        self.graph.df = None
-        self.macd.df = None
-        self.update_view(symbol)
+        if (symbols):
+            log.debug(f"on_ticker_submit: {symbols}")
+            self.ticker_symbols = [x.strip().upper() for x in symbols.split(',')] # Update the symbol used by the app
+            log.debug(f"on_ticker_submit: {self.ticker_symbols}")
+            self.active_symbol_index = 0
+            self.graph.df = None
+            self.macd.df = None
+            symbol = self.ticker_symbols[self.active_symbol_index]
+            self.update_cache()
+            self.update_view(symbol)
 
     def action_toggle_trades(self) -> None:
         # Only meaningful after a back-test has just finished
@@ -370,6 +387,8 @@ class SpectrApp(App):
                 self.pop_screen()  # already open → close
             else:
                 self.push_screen(TradesScreen(self._last_backtest_trades))
+
+    # ------------ Order Dialog Submit Logic
 
     async def on_order_dialog_submit(self, msg: OrderDialog.Submit) -> None:
         """Receive the order details and route them to your broker layer."""
@@ -384,6 +403,23 @@ class SpectrApp(App):
             real_trades=self.args.real_trades,
         )
 
+    # --------------
+
+    def action_toggle_portfolio(self) -> None:
+        if self.screen_stack and isinstance(self.screen_stack[-1], PortfolioScreen):
+            self.pop_screen()
+        else:
+            # pass your broker instance; adjust if you keep it elsewhere
+            balance_info = BROKER_API.get_balance()
+            cash = balance_info.get("cash") if balance_info else 0.00
+            buying_power = balance_info.get("buying_power") if balance_info else 0.00
+            portfolio_value = balance_info.get("portfolio_value") if balance_info else 0.00
+            positions = BROKER_API.get_positions()
+            log.debug(f"Portfolio balance: {balance_info}")
+            self.push_screen(PortfolioScreen(cash, buying_power, portfolio_value, positions, args.real_trades))
+
+    # --------------
+
     def update_view(self, symbol: str):
         self.query_one("#graph", GraphView).symbol = symbol  # Update graph title
         self.query_one("#overlay-text", TopOverlay).symbol = symbol
@@ -393,7 +429,7 @@ class SpectrApp(App):
             self.query_one('#macd-view', MACDView).df = self.df_cache.get(symbol)
 
         self.update_status_bar()
-        #asyncio.create_task(self.update_data_loop())  # Restart fetch/update loop
+
 
     def update_status_bar(self):
         live_icon = "🤖" if self.auto_trading_enabled else "🚫"
@@ -557,7 +593,7 @@ if __name__ == "__main__":
     parser.add_argument("--symbols", type=str, default='AAPL,AMZN,META,MSFT,NVDA,TSLA,GOOG,VTI,GLD', help="List of ticker symbols (e.g. NVDA,TSLA,AAPL)")
     parser.add_argument("--candles", action="store_true", help="Show candlestick chart.")
     parser.add_argument("--macd_thresh", type=float, default=0.002, help="MACD threshold")
-    parser.add_argument("--bb_period", type=int, default=170, help="Bollinger Band period")
+    parser.add_argument("--bb_period", type=int, default=140, help="Bollinger Band period")
     parser.add_argument("--bb_dev", type=float, default=2.0, help="Bollinger Band std dev")
     parser.add_argument("--real_trades", action='store_true', help="Enable live trading (vs paper)")
     parser.add_argument('--interval', default='1min')
@@ -611,7 +647,7 @@ if __name__ == "__main__":
         else:
             DATA_API = RobinhoodInterface()
     elif args.data_api == "fmp":
-        from fetch.fmp import FMPInterface, FMPDataFeed
+        from fetch.fmp import FMPInterface
         # FMP can only be a data_api, not valid for broker.
         DATA_API = FMPInterface()
 

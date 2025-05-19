@@ -38,7 +38,7 @@ class MACDView(Static):
         return self.build_graph()
 
     def build_graph(self) -> str:
-        if self.df is None or self.df.empty:
+        if self.df is None or self.df.empty or "macd" not in self.df.columns:
             return "Waiting for MACD data..."
         self.df = self.df.dropna(subset=["macd", "macd_signal"])
 
@@ -49,6 +49,9 @@ class MACDView(Static):
         else:
             # Back-test or small frame: show everything
             df = self.df.copy()
+
+        if len(df) < 2:
+            return "Not enough data."
 
         # Force datetime index safely
         if not isinstance(df.index, pd.DatetimeIndex):
@@ -67,7 +70,8 @@ class MACDView(Static):
         plt.grid(False)
         plt.date_form("Y-m-d H:M:S")
 
-        plt.horizontal_line(0, color="gray", yside=None)
+        baseline_x = [times[0], times[-1]]
+        plt.plot(baseline_x, [0, 0], marker="-", color="gray", yside="right", label="")
         plt.plot(times, df["macd"], color="white", label="MACD", marker="hd", yside="right")
         plt.plot(times, df["macd_signal"], color="orange", label="Signal", marker="hd", yside="right")
 

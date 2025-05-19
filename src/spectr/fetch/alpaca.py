@@ -20,16 +20,27 @@ log = logging.getLogger(__name__)
 class AlpacaInterface(BrokerInterface):
 
     def get_api(self, real_trades=False):
-        url = 'https://api.alpaca.markets' if real_trades else 'https://paper-api.alpaca.markets/v2'
+        url = 'https://api.alpaca.markets' if real_trades else 'https://paper-api.alpaca.markets'
         api = REST(API_KEY, SECRET_KEY, base_url=URL(url))
         return api
 
+    def get_balance(self, real_trades: bool = False):
+        try:
+            acct = self.get_api(real_trades).get_account()
+            return {
+                "cash": float(acct.cash) if acct.cash else 0.00,
+                "buying_power": float(acct.buying_power) if acct.buying_power else 0.00,
+                "portfolio_value": float(acct.portfolio_value) if acct.portfolio_value else 0.00,
+            }
+        except Exception as exc:
+            log.debug(f"Failed to fetch account balance: {exc}")
+            return {}
 
     def has_pending_order(self, symbol, real_trades=False):
         open_orders = self.get_api(real_trades).list_orders(status='open', symbols=[symbol.upper()])
         return len(open_orders) > 0
 
-
+    # Return position for symbol, if present.
     def has_position(self, symbol, real_trades=False):
         try:
             pos = self.get_position(symbol.upper(), real_trades)
@@ -37,6 +48,13 @@ class AlpacaInterface(BrokerInterface):
         except:
             return False
 
+    # Return all open positions.
+    def get_positions(self, real_trades: bool = False):
+        try:
+            return self.get_api(real_trades).list_positions()
+        except Exception as exc:
+            log.debug(f"Failed to fetch positions: {exc}")
+            return []
 
     def get_position(self, symbol, real_trades=False):
         try:

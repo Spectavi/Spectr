@@ -8,23 +8,25 @@ from ta.volatility import BollingerBands
 def analyze_indicators(df, bb_period, bb_dev, macd_thresh):
     df = df.copy()
 
-    macd = MACD(close=df['close'])
-    df['macd'] = macd.macd()
-    df['macd_signal'] = macd.macd_signal()
-    df['macd_close'] = abs(df['macd'] - df['macd_signal']) < macd_thresh
-    df['macd_angle'] = macd_angle(df['close'], 12, 26, 9)
+    if len(df.index) > 26:
+        macd = MACD(close=df['close'])
+        df['macd'] = macd.macd()
+        df['macd_signal'] = macd.macd_signal()
+        df['macd_close'] = abs(df['macd'] - df['macd_signal']) < macd_thresh
+        df['macd_angle'] = macd_angle(df['close'], 12, 26, 9)
 
-    df['macd_crossover'] = None
-    crossover = (df['macd'] > df['macd_signal']) & (df['macd'].shift(1) <= df['macd_signal'].shift(1))
-    crossunder = (df['macd'] < df['macd_signal']) & (df['macd'].shift(1) >= df['macd_signal'].shift(1))
-    df.loc[crossover, 'macd_crossover'] = 'buy'
-    df.loc[crossunder, 'macd_crossover'] = 'sell'
+        df['macd_crossover'] = None
+        crossover = (df['macd'] > df['macd_signal']) & (df['macd'].shift(1) <= df['macd_signal'].shift(1))
+        crossunder = (df['macd'] < df['macd_signal']) & (df['macd'].shift(1) >= df['macd_signal'].shift(1))
+        df.loc[crossover, 'macd_crossover'] = 'buy'
+        df.loc[crossunder, 'macd_crossover'] = 'sell'
 
-    bb = BollingerBands(close=df['close'], window=bb_period, window_dev=bb_dev, fillna=False)
-    df['bb_upper'] = bb.bollinger_hband()
-    df['bb_lower'] = bb.bollinger_lband()
-    df['bb_angle'] = bollinger_band_angle(df['close'], period=5)
-    df['bb_mid'] = (df['bb_upper'] + df['bb_lower']) / 2
+    if len(df.index) > bb_period:
+        bb = BollingerBands(close=df['close'], window=bb_period, window_dev=bb_dev, fillna=False)
+        df['bb_upper'] = bb.bollinger_hband()
+        df['bb_lower'] = bb.bollinger_lband()
+        df['bb_angle'] = bollinger_band_angle(df['close'], period=5)
+        df['bb_mid'] = (df['bb_upper'] + df['bb_lower']) / 2
     print(f"Analyzed indicators: {df}")
     return df
 

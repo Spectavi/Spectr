@@ -57,6 +57,8 @@ class GraphView(Static):
         elif self.is_backtest:
             # Back-test or small frame: show everything
             df = self.df.copy()
+        else:
+            df = self.df.copy()
 
         # Extract time labels and prices
         dates = df.index.strftime('%Y-%m-%d %H:%M:%S')
@@ -74,9 +76,16 @@ class GraphView(Static):
         plt.date_form(input_form="Y-m-d H:M:S", output_form="H:M:S")  # for times like 13:45:12
 
         # Plot Bollinger Bands
-        plt.plot(dates, df['bb_upper'], color="red", label="BB Upper", yside="right", marker='dot')
-        plt.plot(dates, df['bb_mid'], color="blue", label="BB Mid", yside="right", marker='-')
-        plt.plot(dates, df['bb_lower'], color="lime", label="BB Lower", yside="right", marker='dot')
+        has_bb_upper = False
+        has_bb_lower = False
+        if "bb_upper" in df.columns and not df["bb_upper"].isna().all():
+            has_bb_upper = True
+            plt.plot(dates, df['bb_upper'], color="red", label="BB Upper", yside="right", marker='dot')
+        if "bb_mid" in df.columns and not df["bb_mid"].isna().all():
+            plt.plot(dates, df['bb_mid'], color="blue", label="BB Mid", yside="right", marker='-')
+        if "bb_lower" in df.columns and not df["bb_lower"].isna().all():
+            has_bb_lower = True
+            plt.plot(dates, df['bb_lower'], color="lime", label="BB Lower", yside="right", marker='dot')
 
         if self.args.candles and self.symbol is not 'BTCUSD':
             # Add candlesticks
@@ -126,23 +135,23 @@ class GraphView(Static):
 
         # Align the latest price_label in a center vertically
         current_price = df['Close'].iloc[-1]
-        current_bb_upper = df['bb_upper'].iloc[-1]
-        current_bb_lower = df['bb_lower'].iloc[-1]
-        highs = self.df['bb_upper']
-        lows = self.df['bb_lower']
-        if current_price > current_bb_upper:
-            # If we're above bb_upper, then bottom only needs to show mid.
-            lows = self.df['bb_mid'].tail(int(max_points / 2))
-        elif current_price < current_bb_lower:
-            # If we're below bb_lower, then top only needs to show mid.
-            highs = self.df['bb_mid'].tail(int(max_points / 2))
-        else:
-            highs = self.df['close'].tail(int(max_points/2))
-            lows = self.df['close'].tail(int(max_points/2))
+        # current_bb_upper = df['bb_upper'].iloc[-1] if has_bb_upper else current_price * 1.05
+        # current_bb_lower = df['bb_lower'].iloc[-1] if has_bb_lower else current_price * 0.95
+        # highs = self.df['bb_upper']
+        # lows = self.df['bb_lower']
+        # if current_price > current_bb_upper:
+        #     # If we're above bb_upper, then bottom only needs to show mid.
+        #     lows = self.df['bb_mid'].tail(int(max_points / 2))
+        # elif current_price < current_bb_lower:
+        #     # If we're below bb_lower, then top only needs to show mid.
+        #     highs = self.df['bb_mid'].tail(int(max_points / 2))
+        # else:
+        #     highs = self.df['close'].tail(int(max_points/2))
+        #     lows = self.df['close'].tail(int(max_points/2))
 
-        price_range = highs.max() * 1.05 - lows.min() * 1.05
-        margin = price_range * 4 if price_range else 1
-        plt.ylim(current_price - margin, current_price + margin)
+        # price_range = current_price * 1.05 - lows.min() * 1.05
+        # margin = price_range * 4 if price_range else 1
+        plt.ylim(current_price * 0.90, current_price * 1.1)
 
         width = max(self.size.width, 20)  # leave some margin
         height = max(self.size.height, 10)  # reasonable min height
