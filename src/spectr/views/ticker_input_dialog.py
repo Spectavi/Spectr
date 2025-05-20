@@ -2,7 +2,7 @@ import logging
 
 from textual import events
 from textual.widgets import Input, Label, Button, DataTable
-from textual.containers import Vertical, Horizontal
+from textual.containers import Vertical, Horizontal, Container
 from textual.screen import ModalScreen
 
 log = logging.getLogger(__name__)
@@ -16,34 +16,78 @@ class TickerInputDialog(ModalScreen):
     def __init__(self, callback, top_movers_cb):
         super().__init__()
         self.callback = callback
-        self.top_movers_cb = top_movers_cb  # one quick client
-        self.movers: list[dict] = []
+        self.top_gainers_cb = top_movers_cb  # one quick client
+        self.gainers: list[dict] = []
 
     def compose(self):
         yield Vertical(
-            Label("Enter new ticker symbol list (up to 10):"),
+            Label("Enter new ticker symbol list (up to 20):"),
             Input(
                 placeholder="e.g. AAPL,AMZN,META,MSFT,NVDA,TSLA,GOOG,VTI,GLD",
                 id="ticker-input",
             ),
             Button("Submit", id="submit-button", variant="success"),
-            Label("Top 10 gainers today:", id="movers-title"),
-            Horizontal(Button("Select", id="select-button", variant="primary"),Button("Refresh", id="refresh-button")),
-            DataTable(id="movers-table"),
+            Horizontal(
+                Label("Top 20 gainers today:", id="gainers-title"),
+                Label("Strategy scanner results:", id="scanner-results"),
+                id="title-row"),
+            Horizontal(
+                Button("Select", id="gainers-select-button", variant="primary"),
+                    Button("Refresh", id="gainers-refresh-button"),
+                    Button("Select", id="scanner-select-button", variant="primary"),
+                    Button("Refresh", id="scanner-refresh-button"),
+                id="table-buttons-row",
+            ),
+            Horizontal(
+            Container(
+                DataTable(id="gainers-table"),
+                    id="gainers-container",
+                ),
+                Container(
+                DataTable(id="scanner-table"),
+                    id="scanner-container",
+                ),
+                id="data-table-row",
+            ),
+            id="ticker_input_dlg_body",
         )
 
     async def on_mount(self, event: events.Mount) -> None:
-        table = self.query_one("#movers-table", DataTable)
-        table.add_columns("Symbol", "% Δ", "Price")
+        table = self.query_one("#gainers-table", DataTable)
+        table.add_columns("Symbol", "% Δ", "Curr Price", "Open Price")
+        table.cursor_type = "row"  # ← NEW: enables row selection by mouse
+        table = self.query_one("#scanner-table", DataTable)
+        table.add_columns("Symbol", "% Δ", "Curr Price", "Open Price")
+        table.cursor_type = "row"  # ← NEW: enables row selection by mouse
         self.refresh_top_movers()
+
+    def on_data_table_cell_selected(
+            self,
+            event: DataTable.CellSelected
+    ) -> None:
+        """When the user clicks a symbol row, append it to the input box."""
+        if event.table.id not in ("gainers-table", "scanner-table"):
+            return  # ignore other tables
+
+        # value of the first column is always the symbol
+        symbol = str(event.value).strip().upper()
+        if not symbol:
+            return
+
+        input_widget = self.query_one("#ticker-input", Input)
+        current_syms = [s for s in input_widget.value.upper().split(",") if s]
+
+        if symbol not in current_syms:
+            current_syms.append(symbol)
+            input_widget.value = ",".join(current_syms)
 
     def on_button_pressed(self, event: Button.Pressed):
         match event.button.id:
             case "submit-button":
                 self._submit()
-            case "select-button":
-                self._select_movers()
-            case "refresh-button":
+            case "gainers-select-button":
+                self._select_gainers()
+            case "gainers-refresh-button":
                 self.refresh_top_movers()
 
     def on_input_submitted(self, event: Input.Submitted):
@@ -56,21 +100,39 @@ class TickerInputDialog(ModalScreen):
             self.dismiss()
             self.callback(symbols)
 
-    def _select_movers(self):
-        if not self.movers:
+    def _select_gainers(self):
+        if not self.gainers:
             return
-        top10 = ",".join(row["symbol"] for row in self.movers)
+        top10 = ",".join(row["symbol"] for row in self.gainers)
         self.query_one("#ticker-input", Input).value = top10
 
     def refresh_top_movers(self):
-        self.movers = self.top_movers_cb(limit=10)
-        log.debug(f"Top 10 gainers today: {self.movers}")
-        table = self.query_one("#movers-table", DataTable)
+        self.gainers = self.top_gainers_cb(limit=20)
+        log.debug(f"Top 20 gainers today: {self.gainers}")
+        table = self.query_one("#gainers-table", DataTable)
         table.clear()
-        for row in self.movers:
+        for row in self.gainers:
+            open_price = row["price"] - row["change"]
             table.add_row(
                 row["symbol"],
                 row["changesPercentage"],
                 f"${row['price']:.2f}",
+                f"${open_price:.2f}",
+            )
+        table.scroll_home()
+
+    # TODO: finish implementing this properly. Just shows gainers for now.
+    def refresh_scanner(self):
+        self.gainers = self.top_gainers_cb(limit=20)
+        log.debug(f"Strategy scanner results: {self.gainers}")
+        table = self.query_one("#scanner-table", DataTable)
+        table.clear()
+        for row in self.gainers:
+            open_price = row["price"] - row["change"]
+            table.add_row(
+                row["symbol"],
+                row["changesPercentage"],
+                f"${row['price']:.2f}",
+                f"${open_price:.2f}",
             )
         table.scroll_home()

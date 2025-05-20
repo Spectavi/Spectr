@@ -1,9 +1,12 @@
+import logging
+
 from textual.screen import Screen
 from textual.widgets import Static, DataTable, Header, Footer
 from textual.containers import Vertical
 from textual.reactive import reactive
 from textual import events
 
+log = logging.getLogger(__name__)
 
 class PortfolioScreen(Screen):
     """Modal screen that shows cash, invested value, and current holdings."""
@@ -27,22 +30,22 @@ class PortfolioScreen(Screen):
         self.portfolio_value = portfolio_value
         self.positions = positions
         self.real_trades = real_trades
-        self.top_title = Static(id="portfolio_title") # gets filled in on_mount
+        self.top_title = Static(id="portfolio-title") # gets filled in on_mount
         self.table = DataTable(zebra_stripes=True)
         self.table.add_columns("Symbol", "Qty", "Value")
 
     def compose(self):
-        yield Static()
-        yield self.top_title
-        yield Static()
-        yield Vertical(self.table, id="port_table_container")
-        #yield Footer()
+        yield Vertical(
+            self.top_title,
+            self.table,
+            id="portfolio-screen",
+        )
 
     async def on_mount(self, event: events.Mount) -> None:
         # title
         acct = "PAPER" if self.is_paper else "LIVE"
 
-        top_title_widget = self.query_one("#portfolio_title", Static)
+        top_title_widget = self.query_one("#portfolio-title", Static)
         top_title_widget.update(
             f"[b]{acct} ACCOUNT[/b] — "
             f"Cash: [green]${self.cash:,.2f}[/] • "
@@ -53,10 +56,11 @@ class PortfolioScreen(Screen):
         # table
         self.table.clear()
         for pos in self.positions:
+            log.debug(f"position: {pos}")
             self.table.add_row(
-                pos["symbol"],
-                str(pos["qty"]),
-                f"${pos['value']:,.2f}",
+                pos.symbol,
+                pos.qty,
+                pos.market_value,
             )           # one-time load
         self.table.scroll_home()
 

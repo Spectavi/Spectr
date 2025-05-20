@@ -44,7 +44,8 @@ class OrderDialog(ModalScreen):
         symbol: str,
         side:   str,
         initial_price: float,
-        pos: dict,
+        position_value: float,
+        position_qty: float,
         get_price_cb,                     # async () -> float
     ) -> None:
         """
@@ -56,8 +57,8 @@ class OrderDialog(ModalScreen):
         self.symbol       = symbol.upper()
         self.side         = side.upper()          # "BUY" / "SELL"
         self.price        = initial_price
-        self.pos_qty      = pos.quantity if pos else 0.0
-        self.pos_value    = pos.value if pos else 0.00
+        self.pos_qty      = position_qty
+        self.pos_value    = position_value
         self._get_price   = get_price_cb
         self._refresh_job = None                  # handle for cancel
 
@@ -75,7 +76,7 @@ class OrderDialog(ModalScreen):
             ),
             Static(self._total_fmt(), id="dlg_total"),
             Horizontal(
-                Button("Submit", id="dlg_ok", variant="success"),
+                Button(self.side.upper(), id="dlg_ok", variant="success"),
                 Button("Cancel", id="dlg_cancel", variant="error"),
             ),
             id="dlg_body",
@@ -85,8 +86,8 @@ class OrderDialog(ModalScreen):
         return f"Price: [green]${self.price:,.2f}[/]  (auto-updates)"
 
     def _pos_fmt(self) -> str:
-        return f"Current position: [cyan]{self.pos_qty}[/]  " \
-               f"Value: [cyan]${self.pos_value:,.2f}[/]"
+        return f"Current position: [cyan]{self.pos_qty}[/]"
+               #f"Value: [cyan]${self.pos_value:,.2f}[/]"
 
     def _total_fmt(self) -> str:
         return f"Order total: [yellow]${self.total:,.2f}[/]"
@@ -135,7 +136,7 @@ class OrderDialog(ModalScreen):
             self.app.pop_screen()
 
     async def action_submit(self) -> None:
-        await self.post_message(
+        self.post_message(
             self.Submit(
                 self,
                 symbol=self.symbol,

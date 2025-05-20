@@ -1,11 +1,7 @@
 import logging
 import os
-from datetime import datetime
 
-import pandas as pd
-import pytz
-from alpaca_trade_api import TimeFrame, REST
-from alpaca_trade_api.common import URL
+from alpaca.trading import TradingClient, MarketOrderRequest, OrderSide, TimeInForce, GetOrdersRequest
 from dotenv import load_dotenv
 
 from .broker_interface import BrokerInterface
@@ -20,8 +16,8 @@ log = logging.getLogger(__name__)
 class AlpacaInterface(BrokerInterface):
 
     def get_api(self, real_trades=False):
-        url = 'https://api.alpaca.markets' if real_trades else 'https://paper-api.alpaca.markets'
-        api = REST(API_KEY, SECRET_KEY, base_url=URL(url))
+        #url = 'https://api.alpaca.markets' if real_trades else 'https://paper-api.alpaca.markets'
+        api = TradingClient(API_KEY, SECRET_KEY, paper=(not real_trades))
         return api
 
     def get_balance(self, real_trades: bool = False):
@@ -36,45 +32,57 @@ class AlpacaInterface(BrokerInterface):
             log.debug(f"Failed to fetch account balance: {exc}")
             return {}
 
-    def has_pending_order(self, symbol, real_trades=False):
-        open_orders = self.get_api(real_trades).list_orders(status='open', symbols=[symbol.upper()])
-        return len(open_orders) > 0
+    def has_pending_order(self, symbol: str, real_trades: bool = False) -> bool:
+        """
+        True if there is *any* open order for `symbol` (market or limit).
+        """
+        try:
+            tc = self.get_api(real_trades)
+            req = GetOrdersRequest(status="open", symbols=[symbol.upper()])
+            open_orders = tc.get_orders(req)
+            return len(open_orders) > 0
+        except Exception as exc:
+            log.debug(f"has_pending_order error: {exc}")
+            return False
 
     # Return position for symbol, if present.
-    def has_position(self, symbol, real_trades=False):
-        try:
-            pos = self.get_position(symbol.upper(), real_trades)
-            return float(pos.qty) > 0
-        except:
-            return False
+    def has_position(self, symbol: str, real_trades: bool = False) -> bool:
+        pos = self.get_position(symbol, real_trades)
+        return bool(pos and float(pos.qty) > 0)
 
     # Return all open positions.
     def get_positions(self, real_trades: bool = False):
         try:
-            return self.get_api(real_trades).list_positions()
+            return self.get_api(real_trades).get_all_positions()
         except Exception as exc:
             log.debug(f"Failed to fetch positions: {exc}")
             return []
 
-    def get_position(self, symbol, real_trades=False):
+    def get_position(self, symbol: str, real_trades: bool = False):
         try:
-            pos = self.get_api(real_trades).get_position(symbol.upper())
-            return pos
-        except:
+            return self.get_api(real_trades).get_open_position(symbol.upper())
+        except Exception:
             log.debug("No position")
             return None
 
 
-    def submit_order(self, symbol, signal, qty=1, real_trades=False):
-        side = 'buy' if signal == 'buy' else 'sell'
+    def submit_order(
+        self,
+        symbol: str,
+        side: str,
+        quantity: int = 1,
+        real_trades: bool = False,
+    ):
         try:
-            self.get_api(real_trades).submit_order(
-                symbol=symbol,
-                qty=qty,
-                side=side,
-                type='market',
-                time_in_force='gtc'
+            tc = self.get_api(real_trades)
+            order_req = MarketOrderRequest(
+                symbol=symbol.upper(),
+                qty=quantity,
+                side=OrderSide.BUY if side.lower() == "buy" else OrderSide.SELL,
+                time_in_force=TimeInForce.GTC,
             )
-            log.debug(f"ORDER PLACED: {side.upper()} {qty} shares of {symbol}")
-        except Exception as e:
-            log.debug(f"ORDER FAILED: {e}")
+            tc.submit_order(order_req)
+            log.debug(f"ORDER PLACED: {side.upper()} {quantity} shares of {symbol.upper()}")
+        except Exception as exc:
+            log.error(f"ORDER FAILED: {exc}")
+            raise

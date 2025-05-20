@@ -48,7 +48,7 @@ OrderDialog {
 }
 
 #dlg_body {
-    width: 50%;
+    width: 70%;
     height: 50%;
     border: solid green;
     padding: 1 2;
@@ -58,12 +58,66 @@ OrderDialog {
 #dlg_title { text-align: center; }
 #dlg_price, #dlg_total { margin-left: 4; }
 
-PortfolioScreen > #portfolio_title {
-    width: 100%;
+PortfolioScreen {
+    align: center middle;
+}
+
+#portfolio-screen {
+    width: 70%;
+    height: 70%;
     text-align: center;
     content-align-horizontal: center;
+    content-align-vertical: top;
+    background: $panel;
+    border: solid green;
+    padding: 1 2;
 }
-#portfolio_title {
+#portfolio-title {
     padding: 0 1;
     text-align: center;
+}
+
+TickerInputDialog {
+    align: center middle;
+}
+#ticker_input_dlg_body {
+    width: 90%;
+    height: 70%;
+    border: solid green;
+    padding: 1 2;
+    content-align-horizontal: center;
+    background: $panel;
+    overflow: auto;
+}
+
+#title-row {
+    height: 2;
+}
+
+#gainers-title, #scanner-title {
+    width: 50%;
+}
+
+#gainers-select-button, #gainers-refresh-button, #scanner-select-button, #scanner-refresh-button {
+    width: 25%;
+}
+
+#table-buttons-row {
+    height: 6;
+    padding: 1 1;
+    width: 100%;
+}
+
+#data-table-row {
+    width: 100%;
+}
+#gainers-container {
+    height: 32;
+    width: 50%;
+    overflow: auto;
+}
+#scanner-container {
+    height: 32;
+    width: 50%;
+    overflow: auto;
 }
