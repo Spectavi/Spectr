@@ -1,0 +1,3 @@
+[app.Spectr]
+command = "python src/spectr/spectr.py --broker alpaca --data_api fmp --scale 0.5 --symbols BTCUSD --candles"
+slug = "spectr"

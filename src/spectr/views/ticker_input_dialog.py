@@ -18,6 +18,7 @@ class TickerInputDialog(ModalScreen):
         self.callback = callback
         self.top_gainers_cb = top_movers_cb  # one quick client
         self.gainers: list[dict] = []
+        self.gainers_table_columns = None
 
     def compose(self):
         yield Vertical(
@@ -54,32 +55,32 @@ class TickerInputDialog(ModalScreen):
 
     async def on_mount(self, event: events.Mount) -> None:
         table = self.query_one("#gainers-table", DataTable)
-        table.add_columns("Symbol", "% Δ", "Curr Price", "Open Price")
+        self.gainers_table_columns = table.add_columns("Symbol", "% Δ", "Curr Price", "Open Price")
         table.cursor_type = "row"  # ← NEW: enables row selection by mouse
+        table.show_cursor = True
+        table.focus()
         table = self.query_one("#scanner-table", DataTable)
         table.add_columns("Symbol", "% Δ", "Curr Price", "Open Price")
         table.cursor_type = "row"  # ← NEW: enables row selection by mouse
+        table.show_cursor = True
         self.refresh_top_movers()
 
-    def on_data_table_cell_selected(
+    def on_data_table_row_selected(
             self,
-            event: DataTable.CellSelected
+            event: DataTable.RowSelected,
     ) -> None:
-        """When the user clicks a symbol row, append it to the input box."""
-        if event.table.id not in ("gainers-table", "scanner-table"):
-            return  # ignore other tables
+        log.debug(f"row selected: {event.row_key}")
 
-        # value of the first column is always the symbol
-        symbol = str(event.value).strip().upper()
+        symbol = str(event.data_table.get_cell(event.row_key, self.gainers_table_columns[0])).strip().upper()  # row_key is the first column
         if not symbol:
             return
 
         input_widget = self.query_one("#ticker-input", Input)
-        current_syms = [s for s in input_widget.value.upper().split(",") if s]
+        current = [s for s in input_widget.value.upper().split(",") if s]
 
-        if symbol not in current_syms:
-            current_syms.append(symbol)
-            input_widget.value = ",".join(current_syms)
+        if symbol not in current:
+            current.append(symbol)
+            input_widget.value = ",".join(current)
 
     def on_button_pressed(self, event: Button.Pressed):
         match event.button.id:
@@ -118,6 +119,7 @@ class TickerInputDialog(ModalScreen):
                 row["changesPercentage"],
                 f"${row['price']:.2f}",
                 f"${open_price:.2f}",
+                key=row["symbol"],
             )
         table.scroll_home()
 

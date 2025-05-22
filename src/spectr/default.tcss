@@ -56,7 +56,13 @@ OrderDialog {
     background: $panel;
 }
 #dlg_title { text-align: center; }
-#dlg_price, #dlg_total { margin-left: 4; }
+#dlg_price, #dlg_total { margin-left: 4; padding: 1 1;}
+#dlg_qty_in {
+    width: 25%
+}
+#dlg_ok, #dlg_cancel {
+    margin: 2 2;
+}
 
 PortfolioScreen {
     align: center middle;
@@ -87,11 +93,11 @@ TickerInputDialog {
     padding: 1 2;
     content-align-horizontal: center;
     background: $panel;
-    overflow: auto;
 }
 
 #title-row {
-    height: 2;
+    margin: 1 1;
+    height: 1;
 }
 
 #gainers-title, #scanner-title {
@@ -100,16 +106,17 @@ TickerInputDialog {
 
 #gainers-select-button, #gainers-refresh-button, #scanner-select-button, #scanner-refresh-button {
     width: 25%;
+    margin: 1 2;
 }
 
 #table-buttons-row {
-    height: 6;
-    padding: 1 1;
     width: 100%;
+    height: 5;
 }
 
 #data-table-row {
     width: 100%;
+    height: 32;
 }
 #gainers-container {
     height: 32;
@@ -120,4 +127,13 @@ TickerInputDialog {
     height: 32;
     width: 50%;
     overflow: auto;
+}
+
+#pending-orders-table, #holdings-table {
+    width: 100%;
+    padding: 1 1;
+}
+#orders-title, #assets-title {
+    margin: 1 1;
+    height: 1;
 }

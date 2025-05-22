@@ -87,7 +87,7 @@ class GraphView(Static):
             has_bb_lower = True
             plt.plot(dates, df['bb_lower'], color="lime", label="BB Lower", yside="right", marker='dot')
 
-        if self.args.candles and self.symbol is not 'BTCUSD':
+        if self.args.candles:
             # Add candlesticks
             plt.candlestick(dates, df[['Open', 'Close', 'High', 'Low']], yside='right')
         else:
@@ -135,22 +135,6 @@ class GraphView(Static):
 
         # Align the latest price_label in a center vertically
         current_price = df['Close'].iloc[-1]
-        # current_bb_upper = df['bb_upper'].iloc[-1] if has_bb_upper else current_price * 1.05
-        # current_bb_lower = df['bb_lower'].iloc[-1] if has_bb_lower else current_price * 0.95
-        # highs = self.df['bb_upper']
-        # lows = self.df['bb_lower']
-        # if current_price > current_bb_upper:
-        #     # If we're above bb_upper, then bottom only needs to show mid.
-        #     lows = self.df['bb_mid'].tail(int(max_points / 2))
-        # elif current_price < current_bb_lower:
-        #     # If we're below bb_lower, then top only needs to show mid.
-        #     highs = self.df['bb_mid'].tail(int(max_points / 2))
-        # else:
-        #     highs = self.df['close'].tail(int(max_points/2))
-        #     lows = self.df['close'].tail(int(max_points/2))
-
-        # price_range = current_price * 1.05 - lows.min() * 1.05
-        # margin = price_range * 4 if price_range else 1
         plt.ylim(current_price * 0.90, current_price * 1.1)
 
         width = max(self.size.width, 20)  # leave some margin

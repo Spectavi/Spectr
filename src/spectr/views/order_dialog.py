@@ -18,7 +18,8 @@ class OrderDialog(ModalScreen):
     """Pop-up order ticket that displays live price and current position."""
 
     BINDINGS = [
-        ("enter",  "submit",          "Submit"),
+        ("enter", "submit", "SELL"),
+        ("enter", "submit", "BUY"),
         ("escape", "app.pop_screen",  "Cancel"),
     ]
 
@@ -41,8 +42,8 @@ class OrderDialog(ModalScreen):
 
     def __init__(
         self,
-        symbol: str,
-        side:   str,
+        side: str,
+        symbol:   str,
         initial_price: float,
         position_value: float,
         position_qty: float,
@@ -86,8 +87,8 @@ class OrderDialog(ModalScreen):
         return f"Price: [green]${self.price:,.2f}[/]  (auto-updates)"
 
     def _pos_fmt(self) -> str:
-        return f"Current position: [cyan]{self.pos_qty}[/]"
-               #f"Value: [cyan]${self.pos_value:,.2f}[/]"
+        return f"Current position: [cyan]{self.pos_qty}[/] @ " \
+               f"[cyan]${self.pos_value:,.2f}[/]"
 
     def _total_fmt(self) -> str:
         return f"Order total: [yellow]${self.total:,.2f}[/]"
@@ -129,13 +130,16 @@ class OrderDialog(ModalScreen):
             self.total = self.qty * self.price
             self.query_one("#dlg_total", Static).update(self._total_fmt())
 
+    def on_input_submitted(self, event: Input.Submitted):
+        self.action_submit()
+
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "dlg_ok":
-            await self.action_submit()
+            self.action_submit()
         else:
             self.app.pop_screen()
 
-    async def action_submit(self) -> None:
+    def action_submit(self) -> None:
         self.post_message(
             self.Submit(
                 self,

@@ -1,7 +1,7 @@
 import logging
 import os
 
-from alpaca.trading import TradingClient, MarketOrderRequest, OrderSide, TimeInForce, GetOrdersRequest
+from alpaca.trading import TradingClient, MarketOrderRequest, OrderSide, TimeInForce, GetOrdersRequest, QueryOrderStatus
 from dotenv import load_dotenv
 
 from .broker_interface import BrokerInterface
@@ -44,6 +44,40 @@ class AlpacaInterface(BrokerInterface):
         except Exception as exc:
             log.debug(f"has_pending_order error: {exc}")
             return False
+
+    def get_pending_orders(
+        self,
+        symbol: str | None = None,
+        real_trades: bool = False,
+    ):
+        """
+        Return **all open / partially-filled orders**.
+
+        Parameters
+        ----------
+        symbol : str | None
+            • If given, only that symbol is returned (case-insensitive).
+            • If None, all open orders for the account are returned.
+        real_trades : bool
+            • False (default) → paper account
+            • True           → live account
+
+        Returns
+        -------
+        list[alpaca.trading.models.Order]   (empty list if none or on error)
+        """
+        try:
+            tc = self.get_api(real_trades)
+
+            req = GetOrdersRequest(
+                status=QueryOrderStatus.OPEN,     # "open" orders only
+                symbols=[symbol.upper()] if symbol else None,
+            )
+            return tc.get_orders(req)
+
+        except Exception as exc:
+            log.debug(f"get_pending_orders error: {exc}")
+            return []
 
     # Return position for symbol, if present.
     def has_position(self, symbol: str, real_trades: bool = False) -> bool:

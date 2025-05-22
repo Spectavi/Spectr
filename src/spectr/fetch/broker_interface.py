@@ -13,6 +13,10 @@ class BrokerInterface(ABC):
         """Check if there's a pending order."""
         pass
 
+    def get_pending_orders(self, symbol: str, real_trades: bool = False) -> pd.DataFrame:
+        """Gets all pending orders."""
+        pass
+
     @abstractmethod
     def has_position(self, symbol: str, real_trades: bool = False) -> bool:
         """Check if you currently hold the stock."""
