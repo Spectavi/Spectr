@@ -3,6 +3,7 @@ import logging
 import pandas as pd
 import plotext as plt
 from rich.text import Text
+from textual._ansi_theme import rgb
 from textual.reactive import reactive
 from textual.widgets import Static
 
@@ -72,8 +73,8 @@ class MACDView(Static):
 
         baseline_x = [times[0], times[-1]]
         plt.plot(baseline_x, [0, 0], marker="-", color="gray", yside="right", label="")
-        plt.plot(times, df["macd"], color="white", label="MACD", marker="hd", yside="right")
-        plt.plot(times, df["macd_signal"], color="orange", label="Signal", marker="hd", yside="right")
+        plt.plot(times, df["macd"], color="green", label="MACD", marker="hd", yside="right")
+        plt.plot(times, df["macd_signal"], color="red", label="Signal", marker="hd", yside="right")
 
         # Y range adjustment
         macd_range = max(df["macd"]) - min(df["macd_signal"])

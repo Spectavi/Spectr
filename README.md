@@ -12,7 +12,7 @@
 
 While monitoring a stock, Ctrl+A arms / dis-arms auto-trading:
 
-![Example 1](src/spectr/res/example1.png)
+![Example 1](src/spectr/res/example3.png)
 
 Zoom in / out using Ctrl + / - :
 
