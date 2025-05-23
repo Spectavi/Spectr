@@ -6,7 +6,7 @@
 
 ---
 
-**Spectr** is a terminal-based algorithmic trading terminal. It supports live-monitoring w/ algo-based auto-trading and historical backtesting via Backtrader. Supports Robinhood, Alpaca, and FMP. Multi-stock scanning and OpenAI integration are coming soon. 
+**Spectr** is a terminal-based algorithmic trading terminal. It supports live-monitoring w/ algo-based auto-trading and historical backtesting via Backtrader. Supports Robinhood, Alpaca, and FMP. Scan as many stocks as your CPU allows. 
 
 ![Example GIF](src/spectr/res/example_features.gif)
 
@@ -18,9 +18,13 @@ Zoom in / out using Ctrl + / - :
 
 ![Example 2](src/spectr/res/example2.png)
 
-Change ticker symbols list by pressing ` / ~:
+Change ticker symbols list by pressing ` / ~ / T:
 
-![Example 3](src/spectr/res/example3.png)
+![Example 3](src/spectr/res/top_gainers.png)
+
+See portfolio with owned assets and any open / pending orders:
+
+![Example 4](src/spectr/res/portfolio.png)
 
 
 
@@ -29,15 +33,17 @@ Change ticker symbols list by pressing ` / ~:
 ## ✨ Features
 
 - 📈 Real-time price monitoring with interactive charts.
-- ⌨ Cycle up to 10 stocks with 0-9 keys.
+-  ⌨ Cycle up to 10 stocks with 0-9 keys or + / - keys for > 10 symbols being tracked.
 - 🤖 Arm / dis-arm auto-trading with `Ctrl+A`
-- 🔄 Change symbols list with `` / ~`
+- 🔄 Change symbols list with `` / ~` or T
+- 🔄 Click symbols in Top Gainers list to add to watchlist.
+- 💵 See portfolio info + open / pending orders with `P`
 - 🧠 Supports strategies w/ MACD & Bollinger Bands (all major indicators coming soon!)
 - 💵 Live trading based on your custom strategy.
 - 💵 Paper trading based on your custom strategy. (Alpaca-only)
 - 📈 Real-time data API support (FMP)
 - 👁️ Broker API support (Alpaca, Robinhood (currently broken))
-- 🔁 Backtest mode with visual result playback (Under construction!)
+- 🔁 Backtest mode with visual result playback, press B key.
 
 ---
 

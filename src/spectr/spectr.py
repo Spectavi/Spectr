@@ -18,7 +18,7 @@ from textual.reactive import reactive
 
 import metrics
 import utils
-from custom_strategy import CustomStrategy
+from CustomStrategy import CustomStrategy
 from fetch.broker_interface import BrokerInterface
 from utils import load_cache, save_cache
 from views.backtest_input_dialog import BacktestInputDialog
