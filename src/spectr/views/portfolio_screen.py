@@ -61,7 +61,7 @@ class PortfolioScreen(Screen):
 
         top_title_widget = self.query_one("#portfolio-title", Static)
         top_title_widget.update(
-            f"[b]{acct} ACCOUNT[/b] — "
+            f"** [b]{acct} ACCOUNT[/b] **\n"
             f"Cash: [green]${self.cash:,.2f}[/]\n"
             f"Buying Power: [cyan]${self.buying_power:,.2f}[/]\n"
             f"Portfolio Value: [cyan]${self.portfolio_value:,.2f}[/]",
