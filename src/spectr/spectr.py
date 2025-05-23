@@ -6,6 +6,7 @@ import os
 import queue
 import threading
 import traceback
+from concurrent.futures._base import wait
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
@@ -225,6 +226,7 @@ class SpectrApp(App):
             # Check for signal
             if signal_dict:
                 signal = signal_dict.get("signal")
+                playsound.playsound(BUY_SOUND_PATH if signal == "buy" else SELL_SOUND_PATH)
                 curr_price = quote.get("price")
                 log.debug(f"Signal detected for {symbol}.")
                 df.at[df.index[-1], 'trade'] = signal  # mark bar for plotting
@@ -254,25 +256,18 @@ class SpectrApp(App):
 
         while not self._stop_event.is_set() and not self._shutting_down:
             # fan-out
-            for symbol in self.ticker_symbols:
-                if self._shutting_down or self._stop_event.is_set():
-                    return
-                try:
-                    try:
-                        self._poll_pool.submit(self._poll_one_symbol, symbol)
-                    except RuntimeError:
-                        log.debug("Pool shut down, leaving _polling_loop...")
-                        return
-                except Exception as exc:
-                    log.error(f"[poll] {symbol}: {exc}")
+            futures = [
+                self._poll_pool.submit(self._poll_one_symbol, sym)
+                for sym in self.ticker_symbols
+            ]
 
             # fan-in – wait until ALL symbols finish
-            # wait(futures, return_when="ALL_COMPLETED")
+            wait(futures, return_when="ALL_COMPLETED")
 
-            # (optional) bail early if any worker raised
-            # for f in futures:
-            #     if exc := f.exception():
-            #         log.error(f"Worker crashed: {exc}")
+            #(optional) bail early if any worker raised
+            for f in futures:
+                if exc := f.exception():
+                    log.error(f"Worker crashed: {exc}")
 
             if self._stop_event.wait(REFRESH_INTERVAL):
                 break
@@ -673,7 +668,7 @@ if __name__ == "__main__":
                         help="List of ticker symbols (e.g. NVDA,TSLA,AAPL)")
     parser.add_argument("--candles", action="store_true", help="Show candlestick chart.")
     parser.add_argument("--macd_thresh", type=float, default=0.002, help="MACD threshold")
-    parser.add_argument("--bb_period", type=int, default=140, help="Bollinger Band period")
+    parser.add_argument("--bb_period", type=int, default=200, help="Bollinger Band period")
     parser.add_argument("--bb_dev", type=float, default=2.0, help="Bollinger Band std dev")
     parser.add_argument("--real_trades", action='store_true', help="Enable live trading (vs paper)")
     parser.add_argument('--interval', default='1min')

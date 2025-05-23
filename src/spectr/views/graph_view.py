@@ -94,6 +94,8 @@ class GraphView(Static):
             plt.plot(dates, df['Close'], yside='right', marker='hd', color='green')
 
         # -------- BUY / SELL MARKERS ---------
+        last_buy_y = last_buy_x = None
+        last_sell_y = last_sell_x = None
         if 'buy_signals' in df.columns:
             log.debug(f"buy_signals column detected: {df.columns}")
             buy_mask = df['buy_signals'].astype(bool)
@@ -101,14 +103,12 @@ class GraphView(Static):
 
             # Plot green ▲ for buys
             if buy_mask.any():
-                plt.scatter(
-                    np.array(dates)[buy_mask],
-                    df.loc[buy_mask, 'Close'],
-                    marker='^',
-                    color='green',
-                    label='Buy',
-                    yside='right',
-                )
+                buy_x = np.array(dates)[buy_mask]
+                buy_y = df.loc[buy_mask, 'Close']
+                plt.scatter(buy_x, buy_y,
+                            marker='^', color='green',
+                            label = 'Buy', yside = 'right')
+                last_buy_x, last_buy_y = buy_x[-1], float(buy_y.iloc[-1])
 
         if 'sell_signals' in df.columns:
             log.debug(f"sell_signals column detected: {df.columns}")
@@ -117,14 +117,29 @@ class GraphView(Static):
 
             # Plot red ▼ for sells
             if sell_mask.any():
-                plt.scatter(
-                    np.array(dates)[sell_mask],
-                    df.loc[sell_mask, 'Close'],
-                    marker='v',
-                    color='red',
-                    label='Sell',
-                    yside='right',
-                )
+                sell_x = np.array(dates)[sell_mask]
+                sell_y = df.loc[sell_mask, 'Close']
+                plt.scatter(sell_x, sell_y,
+                             marker = 'v', color = 'red',
+                             label = 'Sell', yside = 'right')
+                # remember the LAST sell to label on the right
+                last_sell_x, last_sell_y = sell_x[-1], float(sell_y.iloc[-1])
+
+        # -------- PRICE LABELS ON THE RIGHT EDGE -------------------------
+
+        if last_buy_y is not None:
+            plt.text(f"${last_buy_y:.2f}",
+                                  last_buy_x,
+                                  last_buy_y,
+                                  color = "green",
+            yside = "right")
+
+        if last_sell_y is not None:
+            plt.text(f"${last_sell_y:.2f}",
+                                last_sell_x,
+                                last_sell_y,
+                                color = "red",
+            yside = "right")
 
         last_x = dates[-2]
         last_y = df['Close'].iloc[-1]
