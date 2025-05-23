@@ -85,7 +85,7 @@ class GraphView(Static):
             plt.plot(dates, df['bb_mid'], color="blue", label="BB Mid", yside="right", marker='-')
         if "bb_lower" in df.columns and not df["bb_lower"].isna().all():
             has_bb_lower = True
-            plt.plot(dates, df['bb_lower'], color="lime", label="BB Lower", yside="right", marker='dot')
+            plt.plot(dates, df['bb_lower'], color="green", label="BB Lower", yside="right", marker='dot')
 
         if self.args.candles:
             # Add candlesticks

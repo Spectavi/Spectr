@@ -23,7 +23,7 @@ class PortfolioScreen(Screen):
     cash      = reactive(0.0)
     buying_power = reactive(0.0)
     portfolio_value = reactive(0.0)
-    is_paper  = reactive(True)
+    real_trades  = reactive(False)
 
     def __init__(self, cash: float, buying_power: float, portfolio_value: float, positions: list, pending_orders_callback, real_trades: bool) -> None:
         super().__init__()
@@ -57,7 +57,7 @@ class PortfolioScreen(Screen):
 
     async def on_mount(self, event: events.Mount) -> None:
         # title
-        acct = "PAPER" if self.is_paper else "LIVE"
+        acct = "LIVE" if self.real_trades else "PAPER"
 
         top_title_widget = self.query_one("#portfolio-title", Static)
         top_title_widget.update(
@@ -92,17 +92,25 @@ class PortfolioScreen(Screen):
         if not self.is_mounted:
             return
 
-        pending_orders = self.pending_orders_callback(self.real_trades)
-        log.debug(f"Pending orders: {pending_orders}")
+        pending_orders = None
+        try:
+            pending_orders = self.pending_orders_callback(self.real_trades)
+        except Exception:
+            top_title_widget = self.query_one("#portfolio-title", Static)
+            top_title_widget.update(
+                f"[b]ACCOUNT ACCESS FAILED![/b]"
+            )
         if pending_orders:
-            table = self.query_one("#pending-orders-table", DataTable)
-            table.clear()
-            for order in pending_orders:
-                table.add_row(
-                    order.symbol,
-                    order.side,
-                    order.qty,
-                    order.type,
-                    order.status,
-                )
-            table.scroll_home()
+            log.debug(f"Pending orders: {pending_orders}")
+            if pending_orders:
+                table = self.query_one("#pending-orders-table", DataTable)
+                table.clear()
+                for order in pending_orders:
+                    table.add_row(
+                        order.symbol,
+                        order.side,
+                        order.qty,
+                        order.type,
+                        order.status,
+                    )
+                table.scroll_home()

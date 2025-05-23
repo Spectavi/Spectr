@@ -8,6 +8,8 @@ from .broker_interface import BrokerInterface
 
 # Loading from .env file, you need to create one and define both ALPACA_API_KEY and ALPACA_SECRET_KEY
 load_dotenv()
+PAPER_API_KEY = os.getenv("ALPACA_API_KEY_PAPER")
+PAPER_SECRET_KEY = os.getenv('ALPACA_SECRET_KEY_PAPER')
 API_KEY = os.getenv('ALPACA_API_KEY')
 SECRET_KEY = os.getenv('ALPACA_SECRET_KEY')
 
@@ -17,7 +19,10 @@ class AlpacaInterface(BrokerInterface):
 
     def get_api(self, real_trades=False):
         #url = 'https://api.alpaca.markets' if real_trades else 'https://paper-api.alpaca.markets'
-        api = TradingClient(API_KEY, SECRET_KEY, paper=(not real_trades))
+        if real_trades:
+            api = TradingClient(API_KEY, SECRET_KEY, paper=False)
+        else:
+            api = TradingClient(PAPER_API_KEY, PAPER_SECRET_KEY, paper=True)
         return api
 
     def get_balance(self, real_trades: bool = False):

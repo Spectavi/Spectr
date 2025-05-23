@@ -486,11 +486,13 @@ class SpectrApp(App):
             self.pop_screen()
         else:
             # pass your broker instance; adjust if you keep it elsewhere
-            balance_info = BROKER_API.get_balance()
+            balance_info = BROKER_API.get_balance(self.args.real_trades)
+            if not balance_info:
+                self.flash_message("ERROR ACCESSING BROKER ACCOUNT!")
             cash = balance_info.get("cash") if balance_info else 0.00
             buying_power = balance_info.get("buying_power") if balance_info else 0.00
             portfolio_value = balance_info.get("portfolio_value") if balance_info else 0.00
-            positions = BROKER_API.get_positions()
+            positions = BROKER_API.get_positions(self.args.real_trades)
             log.debug(f"Portfolio balance: {balance_info}")
             self.push_screen(PortfolioScreen(cash, buying_power, portfolio_value, positions, BROKER_API.get_pending_orders, args.real_trades))
 
