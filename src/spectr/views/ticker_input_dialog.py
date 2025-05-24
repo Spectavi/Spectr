@@ -54,11 +54,11 @@ class TickerInputDialog(ModalScreen):
         )
 
     async def on_mount(self, event: events.Mount) -> None:
+        self.query_one("#ticker-input", Input).focus()
         table = self.query_one("#gainers-table", DataTable)
         self.gainers_table_columns = table.add_columns("Symbol", "% Δ", "Curr Price", "Open Price")
         table.cursor_type = "row"  # ← NEW: enables row selection by mouse
         table.show_cursor = True
-        table.focus()
         table = self.query_one("#scanner-table", DataTable)
         table.add_columns("Symbol", "% Δ", "Curr Price", "Open Price")
         table.cursor_type = "row"  # ← NEW: enables row selection by mouse
