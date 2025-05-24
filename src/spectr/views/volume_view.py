@@ -53,7 +53,10 @@ class VolumeView(Static):
 
         # Plot volume as vertical bars on the RIGHT y-axis
         # Choose a colour per bar: green if close ≥ open, else red
-        colors = np.where(df["close"] >= df["open"], "green", "red")
+        #colors = np.where(df["close"] >= df["open"], "green", "red")
+        prev_close = df["close"].shift(1).fillna(df["close"])
+        colors = np.where(df["close"] >= prev_close, "green", "red")
+        log.debug(f"colors: {colors.tolist()}")
 
         # Plot volume bars on the RIGHT y-axis with per-bar colors
         plt.bar(
