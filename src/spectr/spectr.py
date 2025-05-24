@@ -21,6 +21,7 @@ import metrics
 import utils
 from CustomStrategy import CustomStrategy
 from fetch.broker_interface import BrokerInterface
+from views.volume_view import VolumeView
 from utils import load_cache, save_cache
 from views.backtest_input_dialog import BacktestInputDialog
 from views.graph_view import GraphView
@@ -84,11 +85,11 @@ class SpectrApp(App):
     ticker_symbols = reactive([])
     active_symbol_index = reactive(0)
     auto_trading_enabled: reactive[bool] = reactive(False)
-    # strategies = reactive({})
     is_backtest: reactive[bool] = reactive(False)  # ‹NEW› flag
 
     graph: reactive[GraphView] = reactive(None)
     macd: reactive[MACDView] = reactive(None)
+    volume: reactive[VolumeView] = reactive(None)
 
     def __init__(self, args):
         super().__init__()
@@ -97,7 +98,7 @@ class SpectrApp(App):
         self._poll_pool: ThreadPoolExecutor | None = None
         # self._sig_lock = threading.Lock()  # protects self.signal_detected
         # self._poll_now = asyncio.Event()
-        # self._poll_thread = threading.Thread()
+        self._poll_thread = threading.Thread()
         self.macd_thresh = self.args.macd_thresh
         self.bb_period = self.args.bb_period
         self.bb_dev = self.args.bb_dev
@@ -114,6 +115,7 @@ class SpectrApp(App):
         yield TopOverlay(id="overlay-text")
         yield GraphView(id="graph")
         yield MACDView(id="macd-view")
+        yield VolumeView(id="volume-view")
 
     async def on_mount(self):
         # Set symbols and active symbol
@@ -127,6 +129,7 @@ class SpectrApp(App):
         # Populate view with active symbols data.
         self.graph = self.query_one("#graph", GraphView)
         self.macd = self.query_one("#macd-view", MACDView)
+        self.volume = self.query_one("#volume-view", VolumeView)
         self.graph.symbol = symbol  # Update graph title
         self.graph.args = self.args
         self.macd.args = self.args
@@ -156,7 +159,6 @@ class SpectrApp(App):
             df_new = combined[~combined.index.duplicated(keep="last")].sort_index()
             log.info(f"Cache for {symbol} extended to {df_new.index.max().date()}")
 
-        # self.df_cache[symbol] = df_new
         save_cache(symbol, df_new)
 
     def get_live_data(self, symbol):
@@ -174,20 +176,20 @@ class SpectrApp(App):
         """
         log.debug(f"Fetching historical data for {symbol}…")
 
-        # ➊ Extend the request one calendar day back
+        # Extend the request one calendar day back
         dt_from = datetime.strptime(from_date, "%Y-%m-%d").date()
         extended_from = (dt_from - timedelta(days=1)).strftime("%Y-%m-%d")
         log.debug(f"dt_from: {dt_from}")
         log.debug(f"extended_from: {extended_from}")
 
-        # ➋ Pull the data and quote
+        # Pull the data and quote
         df = DATA_API.fetch_chart_data_for_backtest(symbol, from_date=extended_from, to_date=to_date)
 
         # Fallback to 5min data if 1min isn't present.
         if df.empty:
             df = DATA_API.fetch_chart_data_for_backtest(symbol, from_date=extended_from, to_date=to_date,
                                                         interval="5min")
-        # ➌ Compute indicators on the *full* frame (needs the extra bar)
+        # Compute indicators on the *full* frame (needs the extra bar)
         df = metrics.analyze_indicators(df, self.bb_period, self.bb_dev, self.macd_thresh)
         quote = None
         try:
@@ -195,7 +197,7 @@ class SpectrApp(App):
         except Exception:
             log.warning(f"Failed to fetch quote for {symbol}")
 
-        # ➍ Trim back to the exact range the caller requested
+        # Trim back to the exact range the caller requested
         df = df.loc[from_date:to_date]  # string slice → inclusive
 
         return df, quote
@@ -226,7 +228,6 @@ class SpectrApp(App):
             # Check for signal
             if signal_dict:
                 signal = signal_dict.get("signal")
-                playsound.playsound(BUY_SOUND_PATH if signal == "buy" else SELL_SOUND_PATH)
                 curr_price = quote.get("price")
                 log.debug(f"Signal detected for {symbol}.")
                 df.at[df.index[-1], 'trade'] = signal  # mark bar for plotting
@@ -234,11 +235,11 @@ class SpectrApp(App):
                 if signal == "buy":
                     log.debug("Buy signal detected!")
                     self.signal_detected.append((symbol, curr_price, signal))
-                    # playsound.playsound(BUY_SOUND_PATH)
+                    playsound.playsound(BUY_SOUND_PATH)
                 elif signal == "sell":
                     log.debug("Sell signal detected!")
                     self.signal_detected.append((symbol, curr_price, signal))
-                    # playsound.playsound(SELL_SOUND_PATH)
+                    playsound.playsound(SELL_SOUND_PATH)
 
             # Notify UI thread
             self.df_cache[symbol] = df
@@ -255,16 +256,16 @@ class SpectrApp(App):
             return
 
         while not self._stop_event.is_set() and not self._shutting_down:
-            # fan-out
+            # Fan-out
             futures = [
                 self._poll_pool.submit(self._poll_one_symbol, sym)
                 for sym in self.ticker_symbols
             ]
 
-            # fan-in – wait until ALL symbols finish
+            # Fan-in – wait until ALL symbols finish
             wait(futures, return_when="ALL_COMPLETED")
 
-            #(optional) bail early if any worker raised
+            # (optional) bail early if any worker raised
             for f in futures:
                 if exc := f.exception():
                     log.error(f"Worker crashed: {exc}")
@@ -309,11 +310,7 @@ class SpectrApp(App):
                 if not self.is_backtest:
                     df = self.df_cache.get(symbol)
                     if df is not None:
-                        self.graph.df = df
-                        self.macd.df = df
-                        self.graph.refresh()
-                        self.macd.refresh()
-                        self.refresh()
+                        self.update_view(symbol)
 
     def _safe_submit(self, fn, *args, **kw):
         if (
@@ -473,6 +470,28 @@ class SpectrApp(App):
             log.error(e)
             self.flash_message(f"{e}")
 
+        # mark the last bar so GraphView can plot the trade immediately
+        symbol = msg.symbol.upper()
+        side = msg.side.lower()  # "buy" / "sell"
+        df = self.df_cache.get(symbol)
+        if df is not None and not df.empty:
+            last_ts = df.index[-1]
+
+            # add / update the helper columns used by GraphView
+            if side == "buy":
+                if "buy_signals" not in df.columns: df["buy_signals"] = None
+                df.at[last_ts, "buy_signals"] = True
+            elif side == "sell":
+                if "sell_signals" not in df.columns: df["sell_signals"] = None
+                df.at[last_ts, "sell_signals"] = True
+
+            # cache the modified frame
+            self.df_cache[symbol] = df
+
+            # if the user is currently viewing that symbol, refresh the plot now
+            if symbol == self.ticker_symbols[self.active_symbol_index]:
+                self.update_view(symbol)
+
 
     # --------------
 
@@ -497,9 +516,11 @@ class SpectrApp(App):
         self.query_one("#graph", GraphView).symbol = symbol  # Update graph title
         self.query_one("#overlay-text", TopOverlay).symbol = symbol
 
-        if self.df_cache.get(symbol) is not None and not self.is_backtest:
-            self.query_one("#graph", GraphView).df = self.df_cache.get(symbol)
-            self.query_one('#macd-view', MACDView).df = self.df_cache.get(symbol)
+        df = self.df_cache.get(symbol)
+        if df is not None and not self.is_backtest:
+            self.query_one("#graph", GraphView).df = df
+            self.query_one('#macd-view', MACDView).df = df
+            self.query_one('#volume-view', VolumeView).load_df(df, self.args)
 
         self.update_status_bar()
 

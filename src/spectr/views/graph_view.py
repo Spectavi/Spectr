@@ -65,7 +65,7 @@ class GraphView(Static):
         #ohlc_data = list(zip(df['open'], df['high'], df['low'], df['close']))
 
         # Rename the 'open' column to 'Open'
-        df = df.rename(columns={'low': 'Low', 'high': 'High', 'open': 'Open', 'close': 'Close'})
+        df = df.rename(columns={'low': 'Low', 'high': 'High', 'open': 'Open', 'close': 'Close', 'volume': 'Volume'})
 
         # Clear and configure plotext
         plt.clf()
@@ -106,7 +106,7 @@ class GraphView(Static):
                 buy_x = np.array(dates)[buy_mask]
                 buy_y = df.loc[buy_mask, 'Close']
                 plt.scatter(buy_x, buy_y,
-                            marker='^', color='green',
+                            marker='dot', color='green',
                             label = 'Buy', yside = 'right')
                 last_buy_x, last_buy_y = buy_x[-1], float(buy_y.iloc[-1])
 
@@ -120,7 +120,7 @@ class GraphView(Static):
                 sell_x = np.array(dates)[sell_mask]
                 sell_y = df.loc[sell_mask, 'Close']
                 plt.scatter(sell_x, sell_y,
-                             marker = 'v', color = 'red',
+                             marker = 'dot', color = 'red',
                              label = 'Sell', yside = 'right')
                 # remember the LAST sell to label on the right
                 last_sell_x, last_sell_y = sell_x[-1], float(sell_y.iloc[-1])

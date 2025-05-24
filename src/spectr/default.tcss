@@ -6,15 +6,20 @@ Screen {
 
 #graph {
     padding: 0;
-    height: 70%;
+    height: 60%;
     overflow: auto;
     scrollbar-color: $primary;
 }
 
 #macd-view {
-    height: 30%;
+    height: 20%;
     background: black;
     color: white;
+}
+
+#volume-view {
+    height: 20%;
+    background: black;
 }
 
 ScreenModal {
