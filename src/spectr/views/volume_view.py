@@ -65,6 +65,8 @@ class VolumeView(Static):
             label = "Volume",
             color = colors.tolist(),  # ← list of colors, one per bar
             yside = "right",
+            marker = "hd",
+            width = 0.4,
         )
 
         # A zero baseline (optional, comment out if you prefer)
