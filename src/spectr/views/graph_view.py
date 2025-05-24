@@ -163,6 +163,6 @@ class GraphView(Static):
 
         width = max(self.size.width, 20)  # leave some margin
         height = max(self.size.height, 10)  # reasonable min height
-        plt.plotsize(width-1, height)
+        plt.plotsize(width-3, height)
 
         return Text.from_ansi(plt.build())
