@@ -41,6 +41,12 @@ class GraphView(Static):
     def watch_is_backtest(self, old, new):
         self.refresh()
 
+    def load_df(self, df, args):
+        """Store the DataFrame and redraw on next refresh."""
+        self.df = df
+        self.args = args
+        self.refresh()
+
     def render(self):
         log.debug("Rendering graph")
         return self.build_graph()

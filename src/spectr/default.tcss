@@ -4,6 +4,16 @@ Screen {
     background: black;
 }
 
+SymbolView > Vertical {
+        height: 1fr;           /* fill parent but let internal views size themselves */
+        width: 100%;
+    }
+
+    /* Allocate space: 60% price, 20% MACD, 20% volume (adjust to taste) */
+    SymbolView GraphView   { height: 6fr; }
+    SymbolView MACDView    { height: 2fr; }
+    SymbolView VolumeView  { height: 2fr; }
+
 #graph {
     padding: 0;
     height: 60%;

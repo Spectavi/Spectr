@@ -16,27 +16,18 @@ class VolumeView(Static):
         self.df = None          # DataFrame injected by SpectrApp
         self.args = None        # same args object GraphView uses
 
-    # ------------------------------------------------------------------ #
-    #  Public API – called by SpectrApp whenever the cache is updated    #
-    # ------------------------------------------------------------------ #
     def load_df(self, df, args):
         """Store the DataFrame and redraw on next refresh."""
         self.df = df
         self.args = args
         self.refresh()
 
-    # ------------------------------------------------------------------ #
-    #  Textual draw                                                      #
-    # ------------------------------------------------------------------ #
     def render(self):
         if self.df is None or self.df.empty:
             return "No volume data yet…"
 
         return self.build_graph()
 
-    # ------------------------------------------------------------------ #
-    #  Internal – build the Plotext figure                               #
-    # ------------------------------------------------------------------ #
     def build_graph(self):
         plt.clear_data()
         plt.clear_figure()

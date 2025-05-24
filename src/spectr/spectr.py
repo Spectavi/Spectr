@@ -21,6 +21,7 @@ import metrics
 import utils
 from CustomStrategy import CustomStrategy
 from fetch.broker_interface import BrokerInterface
+from views.symbol_view import SymbolView
 from views.volume_view import VolumeView
 from utils import load_cache, save_cache
 from views.backtest_input_dialog import BacktestInputDialog
@@ -87,9 +88,7 @@ class SpectrApp(App):
     auto_trading_enabled: reactive[bool] = reactive(False)
     is_backtest: reactive[bool] = reactive(False)  # ‹NEW› flag
 
-    graph: reactive[GraphView] = reactive(None)
-    macd: reactive[MACDView] = reactive(None)
-    volume: reactive[VolumeView] = reactive(None)
+    symbol_view: reactive[SymbolView] = reactive(None)
 
     def __init__(self, args):
         super().__init__()
@@ -113,9 +112,7 @@ class SpectrApp(App):
 
     def compose(self) -> ComposeResult:
         yield TopOverlay(id="overlay-text")
-        yield GraphView(id="graph")
-        yield MACDView(id="macd-view")
-        yield VolumeView(id="volume-view")
+        yield SymbolView(id="symbol-view")
 
     async def on_mount(self):
         # Set symbols and active symbol
@@ -127,12 +124,7 @@ class SpectrApp(App):
         log.debug(f"symbol: {symbol}")
 
         # Populate view with active symbols data.
-        self.graph = self.query_one("#graph", GraphView)
-        self.macd = self.query_one("#macd-view", MACDView)
-        self.volume = self.query_one("#volume-view", VolumeView)
-        self.graph.symbol = symbol  # Update graph title
-        self.graph.args = self.args
-        self.macd.args = self.args
+
 
         log.debug("App mounted.")
         # self.update_cache()
@@ -433,8 +425,6 @@ class SpectrApp(App):
             self.ticker_symbols = [x.strip().upper() for x in symbols.split(',')]  # Update the symbol used by the app
             log.debug(f"on_ticker_submit: {self.ticker_symbols}")
             self.active_symbol_index = 0
-            self.graph.df = None
-            self.macd.df = None
             symbol = self.ticker_symbols[self.active_symbol_index]
 
             if self._poll_pool:
@@ -513,14 +503,12 @@ class SpectrApp(App):
     # --------------
 
     def update_view(self, symbol: str):
-        self.query_one("#graph", GraphView).symbol = symbol  # Update graph title
         self.query_one("#overlay-text", TopOverlay).symbol = symbol
 
         df = self.df_cache.get(symbol)
         if df is not None and not self.is_backtest:
-            self.query_one("#graph", GraphView).df = df
-            self.query_one('#macd-view', MACDView).df = df
-            self.query_one('#volume-view', VolumeView).load_df(df, self.args)
+            self.symbol_view = self.query_one("#symbol-view", SymbolView)
+            self.symbol_view.load_df(df, self.args)
 
         self.update_status_bar()
 
@@ -618,14 +606,9 @@ class SpectrApp(App):
             df = df.join(price_df[["buy_signals", "sell_signals"]])
 
             # Switch the UI into back-test mode
-            self.graph.is_backtest = True
-            self.graph.df = df
-            self.macd.is_backtest = True
-            self.macd.df = df
-            self.graph.symbol = symbol
-            self.graph.refresh()
-            self.macd.refresh()
-            # self.update_view(symbol)
+            self.symbol_view.graph.is_backtest = True
+            self.symbol_view.macd.is_backtest = True
+            self.update_view(symbol)
 
         except Exception as exc:
             self.query_one("#overlay-text", TopOverlay).flash_message(

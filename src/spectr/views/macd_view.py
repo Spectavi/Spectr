@@ -38,6 +38,12 @@ class MACDView(Static):
         log.debug("Rendering macd")
         return self.build_graph()
 
+    def load_df(self, df, args):
+        """Store the DataFrame and redraw on next refresh."""
+        self.df = df
+        self.args = args
+        self.refresh()
+
     def build_graph(self) -> str:
         if self.df is None or self.df.empty or "macd" not in self.df.columns:
             return "Waiting for MACD data..."
