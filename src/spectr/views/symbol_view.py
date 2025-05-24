@@ -69,12 +69,13 @@ class SymbolView(Widget):
             yield self.macd
             yield self.volume
 
-    def load_df(self, df, args) -> None:
+    def load_df(self, symbol, df, args) -> None:
         """Push *df* + *args* down to every child view and refresh them."""
         if not (self.graph and self.macd and self.volume):
             log.debug("SymbolView.load_df called before compose finished")
             return
 
+        self.graph.symbol = symbol
         self.graph.load_df(df, args)
         self.macd.load_df(df, args)
         self.volume.load_df(df, args)

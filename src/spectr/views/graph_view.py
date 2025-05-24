@@ -71,7 +71,7 @@ class GraphView(Static):
         #ohlc_data = list(zip(df['open'], df['high'], df['low'], df['close']))
 
         # Rename the 'open' column to 'Open'
-        df = df.rename(columns={'low': 'Low', 'high': 'High', 'open': 'Open', 'close': 'Close', 'volume': 'Volume'})
+        df = df.rename(columns={'low': 'Low', 'high': 'High', 'open': 'Open', 'close': 'Close', 'volume': 'Volume', 'vwap': 'VWAP'})
 
         # Clear and configure plotext
         plt.clf()
@@ -92,6 +92,9 @@ class GraphView(Static):
         if "bb_lower" in df.columns and not df["bb_lower"].isna().all():
             has_bb_lower = True
             plt.plot(dates, df['bb_lower'], color="green", label="BB Lower", yside="right", marker='dot')
+
+        if "VWAP" in df.columns:
+            plt.plot(dates, df['VWAP'], yside='right', marker='hd', color="orange", label="VWAP")
 
         if self.args.candles:
             # Add candlesticks
@@ -160,6 +163,6 @@ class GraphView(Static):
 
         width = max(self.size.width, 20)  # leave some margin
         height = max(self.size.height, 10)  # reasonable min height
-        plt.plotsize(width, height)
+        plt.plotsize(width-1, height)
 
         return Text.from_ansi(plt.build())

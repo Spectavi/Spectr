@@ -27,6 +27,14 @@ def analyze_indicators(df, bb_period, bb_dev, macd_thresh):
         df['bb_lower'] = bb.bollinger_lband()
         df['bb_angle'] = bollinger_band_angle(df['close'], period=5)
         df['bb_mid'] = (df['bb_upper'] + df['bb_lower']) / 2
+
+    # ---- VWAP ----------------------------------------------------------
+    # Needs both 'close' (or 'typical price') and 'volume'
+    if {'close', 'volume'}.issubset(df.columns):
+        pv = df['close'] * df['volume']  # price × volume
+        vwap = pv.cumsum() / df['volume'].cumsum()
+        df['vwap'] = vwap
+
     print(f"Analyzed indicators: {df}")
     return df
 

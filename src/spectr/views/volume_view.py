@@ -44,10 +44,8 @@ class VolumeView(Static):
 
         # Plot volume as vertical bars on the RIGHT y-axis
         # Choose a colour per bar: green if close ≥ open, else red
-        #colors = np.where(df["close"] >= df["open"], "green", "red")
         prev_close = df["close"].shift(1).fillna(df["close"])
         colors = np.where(df["close"] >= prev_close, "green", "red")
-        log.debug(f"colors: {colors.tolist()}")
 
         # Plot volume bars on the RIGHT y-axis with per-bar colors
         plt.bar(
@@ -59,9 +57,6 @@ class VolumeView(Static):
             marker = "hd",
             width = 0.4,
         )
-
-        # A zero baseline (optional, comment out if you prefer)
-        #plt.horizontal_line(0, color="gray", yside="right")
 
         # Cosmetics – keep the same theme as other views
         #plt.title(f"Volume — {self.args.symbols[self.args.active_index]}")

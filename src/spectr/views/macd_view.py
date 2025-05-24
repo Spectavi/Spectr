@@ -88,6 +88,6 @@ class MACDView(Static):
         margin = macd_range * 1.2 if macd_range else 1
         plt.ylim(center - margin, center + margin)
 
-        plt.plotsize(self.size.width, self.size.height)
+        plt.plotsize(self.size.width-1, self.size.height)
 
         return Text.from_ansi(plt.build())

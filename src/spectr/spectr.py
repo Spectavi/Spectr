@@ -19,14 +19,11 @@ from textual.reactive import reactive
 
 import metrics
 import utils
-from CustomStrategy import CustomStrategy
+from custom_strategy import CustomStrategy
 from fetch.broker_interface import BrokerInterface
 from views.symbol_view import SymbolView
-from views.volume_view import VolumeView
 from utils import load_cache, save_cache
 from views.backtest_input_dialog import BacktestInputDialog
-from views.graph_view import GraphView
-from views.macd_view import MACDView
 from views.order_dialog import OrderDialog
 from views.portfolio_screen import PortfolioScreen
 from views.ticker_input_dialog import TickerInputDialog
@@ -508,7 +505,7 @@ class SpectrApp(App):
         df = self.df_cache.get(symbol)
         if df is not None and not self.is_backtest:
             self.symbol_view = self.query_one("#symbol-view", SymbolView)
-            self.symbol_view.load_df(df, self.args)
+            self.symbol_view.load_df(symbol, df, self.args)
 
         self.update_status_bar()
 
@@ -618,16 +615,16 @@ class SpectrApp(App):
             self.is_backtest = False
 
             # Turn is_backtest off for every graph shown.
-            self.graph.is_backtest = False
-            self.macd.is_backtest = False
+            self.symbol_view.graph.is_backtest = False
+            self.symbol_view.macd.is_backtest = False
             self.update_status_bar()
 
     def _exit_backtest(self) -> None:
         """Return to live data when the user presses 0-9."""
         self.is_backtest = False
         # Turn is_backtest off for every graph shown.
-        self.graph.is_backtest = False
-        self.macd.is_backtest = False
+        self.symbol_view.graph.is_backtest = False
+        self.symbol_view.macd.is_backtest = False
 
         current = self.ticker_symbols[self.active_symbol_index]
         self.update_view(current)

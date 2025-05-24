@@ -6,7 +6,8 @@
 
 ---
 
-**Spectr** is a terminal-based algorithmic trading terminal. It supports live-monitoring w/ algo-based auto-trading and historical backtesting via Backtrader. Supports Robinhood, Alpaca, and FMP. Scan as many stocks as your CPU allows. 
+**Spectr** is a terminal-based algorithmic trading terminal. It supports live-monitoring w/ algo-based auto-trading and historical backtesting. Supports Robinhood, Alpaca, and FMP.
+
 
 ![Newest UI](src/spectr/res/example_volume.png)
 
@@ -40,7 +41,7 @@ See portfolio with owned assets and any open / pending orders:
 - 🔄 Change symbols list with `` / ~` or T
 - 🔄 Click symbols in Top Gainers list to add to watchlist.
 - 💵 See portfolio info + open / pending orders with `P`
-- 🧠 Supports strategies w/ MACD & Bollinger Bands (all major indicators coming soon!)
+- 🧠 Supports MACD, Bollinger Bands, and Volume / VWAP.
 - 💵 Live trading based on your custom strategy.
 - 💵 Paper trading based on your custom strategy. (Alpaca-only)
 - 📈 Real-time data API support (FMP)
