@@ -83,7 +83,7 @@ class SpectrApp(App):
     ticker_symbols = reactive([])
     active_symbol_index = reactive(0)
     auto_trading_enabled: reactive[bool] = reactive(False)
-    is_backtest: reactive[bool] = reactive(False)  # ‹NEW› flag
+    is_backtest: reactive[bool] = reactive(False)
 
     symbol_view: reactive[SymbolView] = reactive(None)
 
@@ -495,7 +495,7 @@ class SpectrApp(App):
             portfolio_value = balance_info.get("portfolio_value") if balance_info else 0.00
             positions = BROKER_API.get_positions(self.args.real_trades)
             log.debug(f"Portfolio balance: {balance_info}")
-            self.push_screen(PortfolioScreen(cash, buying_power, portfolio_value, positions, BROKER_API.get_pending_orders, args.real_trades))
+            self.push_screen(PortfolioScreen(cash, buying_power, portfolio_value, positions, BROKER_API.get_all_orders, self.args.real_trades))
 
     # --------------
 
