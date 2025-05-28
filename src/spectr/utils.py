@@ -30,47 +30,49 @@ def load_cache(symbol):
         log.debug("Cache not found.")
     return pd.DataFrame() # Return empty dataframe.
 
-def inject_quote_into_df(df: pd.DataFrame, quote: dict, tz='US/Eastern') -> pd.DataFrame:
+def inject_quote_into_df(
+    df: pd.DataFrame,
+    quote: dict,
+    tz=datetime.now().astimezone().tzinfo,                        # default to system zone
+) -> pd.DataFrame:
     """
-    Injects a new row into the OHLCV DataFrame using the latest quote.
-    Ensures datetime index and proper column types.
+    Append the latest quote as a new bar and guarantee the entire frame
+    ends up in *tz*.
     """
     if df.empty:
-        raise ValueError("DataFrame is empty. Cannot append quote.")
+        raise ValueError("DataFrame is empty; cannot append quote.")
 
-    # Use last close and volume as fallback
-    last_close = df.iloc[-1]["close"]
-    last_volume = df.iloc[-1]["volume"]
-    last_high = df.iloc[-1]["high"]
-    last_low = df.iloc[-1]["low"]
-    log.debug(f"last_close {last_close}")
+    # ---------- build timestamp in *tz* ---------------------------------
+    ts_raw = quote.get("timestamp")
+    if isinstance(ts_raw, (int, float)):
+        ts = pd.to_datetime(ts_raw, unit="s", utc=True).tz_convert(tz)
+    else:                               # assume str or datetime-like
+        ts = pd.to_datetime(ts_raw, utc=True, errors="coerce").tz_convert(tz)
 
-    # Convert quote timestamp to datetime
-    timestamp = quote.get("timestamp")
-    if isinstance(timestamp, (int, float)):
-        dt_index = pd.to_datetime(datetime.fromtimestamp(timestamp, pytz.timezone(tz)))
-    elif isinstance(timestamp, str):
-        dt_index = pd.to_datetime(timestamp)
+    # ---------- normalise df’s index to *tz* ----------------------------
+    if df.index.tz is None:
+        # If the historical data are naïve (FMP says “US/Eastern” but values
+        # are really UTC), assume they were UTC and convert
+        df.index = df.index.tz_localize("UTC").tz_convert(tz)
     else:
-        dt_index = pd.to_datetime(datetime.utcnow())
+        df.index = df.index.tz_convert(tz)
 
-    # Build the new row
-    price = quote["price"]
-    log.debug(f"quote {quote}")
-    new_row = pd.DataFrame({
-        "open": [last_close],
-        "high": [last_high],
-        "low":  [last_low],
-        "close": [price],
-        "volume": [last_volume]
-    }, index=pd.Index([dt_index], name="datetime"))
+    # ---------- create the new row --------------------------------------
+    last_row = df.iloc[-1]
+    new_row = pd.DataFrame(
+        {
+            "open":   last_row["close"],
+            "high":   last_row["high"],
+            "low":    last_row["low"],
+            "close":  quote["price"],
+            "volume": last_row["volume"],
+        },
+        index=pd.Index([ts], name="datetime"),
+    )
 
-    # Ensure index is datetime
-    df.index = pd.to_datetime(df.index, errors="coerce")
-    new_row.index = pd.to_datetime(new_row.index, errors="coerce")
+    # ---------- concatenate & dedupe ------------------------------------
+    out = pd.concat([df, new_row])
+    out = out[~out.index.duplicated(keep="last")]
 
-    df = pd.concat([df, new_row])
-    df.index.name = "datetime"
-    df = df[~df.index.duplicated(keep='last')]  # avoid repeated timestamps
-    log.debug(f"Injected quote data into df: {df}")
-    return df
+    log.debug("Injected quote row:\n%s", out.tail(3))
+    return out

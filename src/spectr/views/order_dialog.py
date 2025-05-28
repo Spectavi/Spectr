@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
 import logging
 
 from textual.screen import ModalScreen
@@ -11,6 +10,7 @@ from textual.containers import Horizontal, Vertical
 from textual.message import Message
 from textual.reactive import reactive
 from textual import events
+
 
 log = logging.getLogger(__name__)
 
@@ -40,13 +40,13 @@ class OrderDialog(ModalScreen):
     price  = reactive(0.0)
     total  = reactive(0.0)
 
+
     def __init__(
         self,
         side: str,
         symbol:   str,
-        initial_price: float,
-        position_value: float,
-        position_qty: float,
+        pos_pct: float,
+        get_pos_cb,
         get_price_cb,                     # async () -> float
     ) -> None:
         """
@@ -55,11 +55,12 @@ class OrderDialog(ModalScreen):
         """
         super().__init__()
 
+        self.side         = side  # "BUY" / "SELL"
         self.symbol       = symbol.upper()
-        self.side         = side.upper()          # "BUY" / "SELL"
-        self.price        = initial_price
-        self.pos_qty      = position_qty
-        self.pos_value    = position_value
+        self.pos_pct      = pos_pct
+        self.get_pos      = get_pos_cb
+        self.pos_qty      = 0.00
+        self.pos_value    = 0.00
         self._get_price   = get_price_cb
         self._refresh_job = None                  # handle for cancel
 
@@ -77,25 +78,46 @@ class OrderDialog(ModalScreen):
             ),
             Static(self._total_fmt(), id="dlg_total"),
             Horizontal(
-                Button(self.side.upper(), id="dlg_ok", variant="success"),
+                Button(self.side, id="dlg_ok", variant="success"),
                 Button("Cancel", id="dlg_cancel", variant="error"),
             ),
             id="dlg_body",
         )
 
     def _price_fmt(self) -> str:
-        return f"Price: [green]${self.price:,.2f}[/]  (auto-updates)"
+        if self.price <= 0:
+            return "Price: [red]N/A[/] (fetching quote...)"
+        else:
+            return f"Price: [green]${self.price:,.2f}[/]  (auto-updates)"
 
     def _pos_fmt(self) -> str:
-        return f"Current position: [cyan]{self.pos_qty}[/] @ " \
-               f"[cyan]${self.pos_value:,.2f}[/]"
+        if self.pos_qty > 0:
+            return f"Current position: [cyan]{self.pos_qty}[/] @ [cyan]${self.pos_value}[/]"
+        else:
+            return f"Current position: [yellow]NO POSITION[/]"
 
     def _total_fmt(self) -> str:
         return f"Order total: [yellow]${self.total:,.2f}[/]"
 
     async def on_mount(self, event: events.Mount) -> None:
-        self.query_one("#dlg_qty_in", Input).focus()
+        qty_input = self.query_one("#dlg_qty_in", Input)
+        qty_input.focus()
 
+        pos = self.get_pos(self.symbol)
+        if pos:
+            self.pos_qty = pos.qty
+            self.pos_value = pos.market_value
+        log.debug(f"pos_qty: {self.pos_qty}")
+        log.debug(f"pos_value: {self.pos_value}")
+        self.query_one("#dlg_pos", Static).update(self._pos_fmt())
+        if self.side.upper() == "SELL":
+            if pos:
+                self.qty = float(self.pos_qty) * self.pos_pct
+                qty_input.value = str(self.qty)
+
+        self.price = self._get_price(self.symbol)['price']
+        self.total = self.qty * self.price
+        self.query_one("#dlg_total", Static).update(self._total_fmt())
         # schedule auto-refresh of the quote
         self._refresh_job = self.set_interval(
             self.REFRESH_SECS, self._refresh_price, pause=False
@@ -112,8 +134,8 @@ class OrderDialog(ModalScreen):
             return
 
         #with contextlib.suppress(Exception):   # network hiccups → ignore
-        new_price = self._get_price(self.symbol).get("price")
-        log.debug(f"New quote price: {new_price}")
+        new_price = self._get_price(self.symbol).get("ask")
+        log.debug(f"New ask price: {new_price}")
         if new_price:
             self.price = new_price
             self.query_one("#dlg_price", Static).update(self._price_fmt())

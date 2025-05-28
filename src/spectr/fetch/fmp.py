@@ -3,7 +3,7 @@ import os
 import pandas as pd
 import requests
 from dotenv import load_dotenv
-import pytz
+from datetime import datetime, timedelta, timezone
 
 from .data_interface import DataInterface
 
@@ -20,7 +20,7 @@ class FMPInterface(DataInterface):
 
     def fetch_chart_data(self, symbol: str, from_date: str, to_date: str, interval: str = "1min") -> pd.DataFrame:
         # Fetch intraday data
-        url = f"https://financialmodelingprep.com/api/v3/historical-chart/{interval}/{symbol}?from_date={from_date}&to_date={to_date}&timeseries=390&apikey={FMP_API_KEY}"
+        url = f"https://financialmodelingprep.com/api/v3/historical-chart/{interval}/{symbol}?from_date={from_date}&to_date={to_date}&extended=true&timeseries=390&apikey={FMP_API_KEY}"
         resp = requests.get(url)
         data = resp.json()
 
@@ -28,10 +28,10 @@ class FMPInterface(DataInterface):
             raise ValueError(f"No data returned from FMP for {symbol}")
 
         df = pd.DataFrame(data)
-        df['datetime'] = pd.to_datetime(df['date'])
+        df['datetime'] = pd.to_datetime(df['date'], utc=True)
         df.set_index('datetime', inplace=True)
         # Set timezone to US/Eastern
-        df.index = df.index.tz_localize("US/Eastern")
+        #df.index = df.index.tz_localize("US/Eastern")
         df = df.sort_index()
 
         df.rename(columns={
@@ -44,15 +44,22 @@ class FMPInterface(DataInterface):
 
         return df[['open', 'high', 'low', 'close', 'volume']]
 
-    def fetch_quote(self, symbol: str) -> dict:
+    def fetch_quote(self, symbol: str, afterhours: bool = False) -> dict:
         """Fetch the latest quote for a symbol from FMP."""
-        url = f"https://financialmodelingprep.com/api/v3/quote/{symbol}?apikey={FMP_API_KEY}"
+        if afterhours:
+            url = f"https://financialmodelingprep.com/api/v4/pre-post-market/{symbol}?apikey={FMP_API_KEY}"
+        else:
+            url = f"https://financialmodelingprep.com/api/v3/quote/{symbol}?apikey={FMP_API_KEY}"
         try:
             response = requests.get(url)
             response.raise_for_status()
             data = response.json()
             if not data or not isinstance(data, list):
-                raise ValueError(f"No quote data returned for {symbol}")
+                try:
+                    return self.fetch_quote(symbol, not afterhours)
+                except Exception as e:
+                    raise ValueError(f"No quote data returned for {symbol}")
+            log.debug(f"Fetched quote for {symbol}: {data[0]}")
             return data[0]  # return the first (and only) quote object
         except Exception as e:
             log.warning(f"Failed to fetch quote for {symbol}: {e}")
@@ -68,10 +75,10 @@ class FMPInterface(DataInterface):
             raise ValueError(f"No data returned from FMP for {symbol}")
 
         df = pd.DataFrame(data)
-        df['datetime'] = pd.to_datetime(df['date'])
+        df['datetime'] = pd.to_datetime(df['date'], utc=True)
         df.set_index('datetime', inplace=True)
         # Set timezone to US/Eastern
-        df.index = df.index.tz_localize("US/Eastern")
+        #df.index = df.index.tz_localize("US/Eastern")
         df = df.sort_index()
 
         df.rename(columns={
@@ -100,3 +107,28 @@ class FMPInterface(DataInterface):
         except Exception as exc:
             log.warning(f"Failed to fetch top movers: {exc}")
             return []
+
+    def has_recent_positive_news(self, symbol: str, hours: int = 12) -> bool:
+        """
+            Return True if the News-Sentiment endpoint contains at least one
+            article with *overall_sentiment_score* > 0 in the last *hours*.
+        """
+
+        since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%d")
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        url = (
+            f"https://financialmodelingprep.com/api/v3/stock_news?tickers={symbol.upper()}&from_date={since}&to_date={now}&apikey={FMP_API_KEY}"
+        )
+
+        try:
+            news = requests.get(url, timeout=10).json()
+            log.debug(f"Fetched {len(news)} news: {news}")
+            if len(news) > 0:
+                return True
+
+            # TODO: add in sentiment analysis.
+
+            return False
+        except Exception as exc:
+            log.debug(f"news lookup failed for {symbol}: {exc}")
+            return False

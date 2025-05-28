@@ -22,3 +22,8 @@ class DataInterface(ABC):
     def fetch_top_movers(self, limit: int = 10) -> list[dict]:
         """Fetch the top 10 movers for the day."""
         pass
+
+    @abstractmethod
+    def has_recent_positive_news(self, symbol: str, hours: int = 12) -> bool:
+         # True if FMP has any bullish news for *symbol* in the last *hours*.
+        pass

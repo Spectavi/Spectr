@@ -19,16 +19,31 @@ from textual.reactive import reactive
 
 import metrics
 import utils
-from custom_strategy import CustomStrategy
-from fetch.broker_interface import BrokerInterface
-from views.symbol_view import SymbolView
+from CustomStrategy import CustomStrategy
+from fetch.broker_interface import BrokerInterface, OrderSide, OrderType
 from utils import load_cache, save_cache
 from views.backtest_input_dialog import BacktestInputDialog
 from views.order_dialog import OrderDialog
 from views.portfolio_screen import PortfolioScreen
+from views.symbol_view import SymbolView
 from views.ticker_input_dialog import TickerInputDialog
 from views.top_overlay import TopOverlay
 from views.trades_screen import TradesScreen
+
+# Notes for scanner filter:
+# - Already up 10%.
+# - 5x relative volume
+# - News catalyst within the last 24 hrs.
+# - < 10mill float?
+# - Between $1.00 and $20.00?
+
+# Add float metric.
+
+# Ensure buying ask is default, and selling bid.
+
+# Multi-thread scanner calls.
+# Show how long it was since last scan.
+
 
 # --- SOUND PATHS ---
 BUY_SOUND_PATH = 'src/spectr/res/buy.mp3'
@@ -61,8 +76,10 @@ class SpectrApp(App):
         ("t", "prompt_symbol", "Change Ticker"),  # T key
         ("`", "prompt_symbol", "Change Ticker"),  # ~ key
         ("ctrl+a", "arm_auto_trading", "Arms Auto-Trading - REAL trades will occur!"),
-        ("ctrl+q", "sell_current_symbol", "Opens sell dialog for current symbol."),
-        ("ctrl+z", "buy_current_symbol", "Opens buy dialog for current symbol."),
+        ("ctrl+q", "buy_current_symbol", "Opens buy dialog for current symbol."),
+        ("ctrl+z", "sell_current_symbol", "Opens sell dialog for current symbol, set to 100% of position"),
+        ("ctrl+x", "sell_half_current_symbol", "Opens sell dialog for current symbol, set to 50% of position"),
+        ("ctrl+c", "sell_quarter_current_symbol", "Opens sell dialog for current symbol, set to 25% of position"),
         ("1", "select_symbol('1')", "Symbol 1"),
         ("2", "select_symbol('2')", "Symbol 2"),
         ("3", "select_symbol('3')", "Symbol 3"),
@@ -73,8 +90,8 @@ class SpectrApp(App):
         ("8", "select_symbol('8')", "Symbol 8"),
         ("9", "select_symbol('9')", "Symbol 9"),
         ("0", "select_symbol('0')", "Symbol 10"),
-        ("=", "prev_symbol", "Previous Symbol"),  # + key
-        ("-", "next_symbol", "Next Symbol"),
+        ("=", "next_symbol", "Next Symbol"),  # + key
+        ("-", "prev_symbol", "Previous Symbol"),
         ("b", "prompt_backtest", "Back-test"),
         ("tab", "toggle_trades", "Trades Table"),
         ("p", "toggle_portfolio", "Portfolio"),
@@ -122,7 +139,6 @@ class SpectrApp(App):
 
         # Populate view with active symbols data.
 
-
         log.debug("App mounted.")
         # self.update_cache()
         log.debug("Cache updated.")
@@ -141,14 +157,17 @@ class SpectrApp(App):
         asyncio.create_task(self._process_updates())
 
     def update_cache(self, symbol: str, df_new: pd.DataFrame):
-        cache = load_cache(symbol)
-        # Merge & dedupe
-        if not cache.empty:
-            combined = pd.concat([cache, df_new])
-            df_new = combined[~combined.index.duplicated(keep="last")].sort_index()
-            log.info(f"Cache for {symbol} extended to {df_new.index.max().date()}")
+        try:
+            cache = load_cache(symbol)
+            # Merge & dedupe
+            if not cache.empty:
+                combined = pd.concat([cache, df_new])
+                df_new = combined[~combined.index.duplicated(keep="last")].sort_index()
+                log.info(f"Cache for {symbol} extended to {df_new.index.max().date()}")
 
-        save_cache(symbol, df_new)
+            save_cache(symbol, df_new)
+        except Exception as e:
+            log.error(f"Failed to update cache for {symbol}: {traceback.format_exc()}")
 
     def get_live_data(self, symbol):
         df = DATA_API.fetch_chart_data(symbol, from_date=datetime.now().date().strftime("%Y-%m-%d"),
@@ -201,6 +220,7 @@ class SpectrApp(App):
             log.debug(f"Injecting quote for {symbol}")
             df = utils.inject_quote_into_df(df, quote)
             log.debug(f"Analyzing {symbol}...")
+
             df = metrics.analyze_indicators(
                 df, self.bb_period, self.bb_dev, self.macd_thresh
             )
@@ -232,12 +252,12 @@ class SpectrApp(App):
 
             # Notify UI thread
             self.df_cache[symbol] = df
-            self.update_cache(symbol, df)  # Update cache files.
+            #self.update_cache(symbol, df)  # Update cache files.
             self._update_queue.put(symbol)
             self.update_view(self.ticker_symbols[self.active_symbol_index])
 
         except Exception as exc:
-            log.error(f"[poll] {symbol}: {exc}")
+            log.error(f"[poll] {symbol}: {traceback.format_exc()}")
 
     def _polling_loop(self) -> None:
         """Runs in *one* native thread; spins a pool for the symbols."""
@@ -336,7 +356,9 @@ class SpectrApp(App):
         if self._poll_thread and self._poll_thread.is_alive():
             self._poll_thread.join()
 
-    ### Action Functions ###
+
+
+    # ------------ Action Functions -------------
 
     def action_select_symbol(self, key: str):
         self._exit_backtest()
@@ -351,7 +373,7 @@ class SpectrApp(App):
                 self._safe_submit(self._poll_one_symbol, symbol)
             if hasattr(self, "_poll_now"):
                 self._poll_now.set()
-            #self.update_view(symbol)
+            # self.update_view(symbol)
 
     def action_prev_symbol(self):
         self._exit_backtest()
@@ -364,7 +386,7 @@ class SpectrApp(App):
             self._safe_submit(self._poll_one_symbol, symbol)
         if hasattr(self, "_poll_now"):
             self._poll_now.set()
-        #self.update_view(symbol)
+        # self.update_view(symbol)
 
     def action_next_symbol(self):
         self._exit_backtest()
@@ -377,44 +399,54 @@ class SpectrApp(App):
             self._safe_submit(self._poll_one_symbol, symbol)
         if hasattr(self, "_poll_now"):
             self._poll_now.set()
-        #self.update_view(symbol)
+        # self.update_view(symbol)
 
-    # ------------- Order Dialog
+
+
+    # ------------- Order Dialog -------------
 
     def action_buy_current_symbol(self):
         self._exit_backtest()
         symbol = self.ticker_symbols[self.active_symbol_index]
-        result = DATA_API.fetch_quote(symbol)
-        self.open_order_dialog("buy", symbol, result.get("price"))
+        self.open_order_dialog(OrderSide.BUY, 0.00, symbol)
 
     def action_sell_current_symbol(self):
         self._exit_backtest()
         symbol = self.ticker_symbols[self.active_symbol_index]
-        result = DATA_API.fetch_quote(symbol)
-        self.open_order_dialog("sell", symbol, result.get("price"))
+        self.open_order_dialog(OrderSide.SELL, 1.0, symbol)
 
-    def open_order_dialog(self, side: str, symbol: str, price: float):
-        pos = BROKER_API.get_position(symbol)  # ← your own call
-        qty = pos.qty if pos else 0.00
-        if not pos and side == "sell":
-            log.debug("Ignoring sell signal, no position.")
-            return
-        value = float(pos.market_value) if pos else 0.00
-        self.push_screen(OrderDialog(side, symbol, price, value,
-                                           qty,
-                                           get_price_cb=DATA_API.fetch_quote))
+    def action_sell_half_current_symbol(self):
+        self._exit_backtest()
+        symbol = self.ticker_symbols[self.active_symbol_index]
+        self.open_order_dialog(OrderSide.SELL, 0.50, symbol)
 
-    # ------------ Arm / Dis-arm
+    def action_sell_quarter_current_symbol(self):
+        self._exit_backtest()
+        symbol = self.ticker_symbols[self.active_symbol_index]
+        self.open_order_dialog(OrderSide.SELL, 0.25, symbol)
+
+    def open_order_dialog(self, side: OrderSide, pct: float, symbol: str):
+        self.push_screen(OrderDialog(side.name, symbol, pct,
+                                     get_pos_cb=BROKER_API.get_position,
+                                     get_price_cb=DATA_API.fetch_quote))
+
+
+
+    # ------------ Arm / Dis-arm -------------
 
     def action_arm_auto_trading(self):
         self.auto_trading_enabled = not self.auto_trading_enabled
         self.update_status_bar()
 
-    # ------------ Select Ticker
+
+
+    # ------------ Select Ticker -------------
 
     def action_prompt_symbol(self):
         self.auto_trading_enabled = False
-        self.push_screen(TickerInputDialog(callback=self.on_ticker_submit, top_movers_cb=DATA_API.fetch_top_movers))
+        self.push_screen(TickerInputDialog(callback=self.on_ticker_submit, top_movers_cb=DATA_API.fetch_top_movers,
+                                           quote_cb=DATA_API.fetch_quote,
+                                           has_recent_positive_news_cb=DATA_API.has_recent_positive_news))
 
     def on_ticker_submit(self, symbols: str):
         if (symbols):
@@ -438,7 +470,8 @@ class SpectrApp(App):
             else:
                 self.push_screen(TradesScreen(self._last_backtest_trades))
 
-    # ------------ Order Dialog Submit Logic
+
+    # ------------ Order Dialog Submit Logic -------------
 
     async def on_order_dialog_submit(self, msg: OrderDialog.Submit) -> None:
         """Receive the order details and route them to your broker layer."""
@@ -449,7 +482,8 @@ class SpectrApp(App):
         try:
             BROKER_API.submit_order(
                 symbol=msg.symbol,
-                side=msg.side.lower(),
+                side=OrderSide.SELL if msg.side == "SELL" else OrderSide.BUY,
+                type=OrderType.MARKET,
                 quantity=msg.qty,
                 real_trades=self.args.real_trades,
             )
@@ -479,7 +513,6 @@ class SpectrApp(App):
             if symbol == self.ticker_symbols[self.active_symbol_index]:
                 self.update_view(symbol)
 
-
     # --------------
 
     def action_toggle_portfolio(self) -> None:
@@ -495,7 +528,8 @@ class SpectrApp(App):
             portfolio_value = balance_info.get("portfolio_value") if balance_info else 0.00
             positions = BROKER_API.get_positions(self.args.real_trades)
             log.debug(f"Portfolio balance: {balance_info}")
-            self.push_screen(PortfolioScreen(cash, buying_power, portfolio_value, positions, BROKER_API.get_all_orders, self.args.real_trades))
+            self.push_screen(PortfolioScreen(cash, buying_power, portfolio_value, positions, BROKER_API.get_all_orders,
+                                             self.args.real_trades))
 
     # --------------
 
@@ -621,13 +655,14 @@ class SpectrApp(App):
 
     def _exit_backtest(self) -> None:
         """Return to live data when the user presses 0-9."""
-        self.is_backtest = False
-        # Turn is_backtest off for every graph shown.
-        self.symbol_view.graph.is_backtest = False
-        self.symbol_view.macd.is_backtest = False
+        if self.is_backtest:
+            self.is_backtest = False
+            # Turn is_backtest off for every graph shown.
+            self.symbol_view.graph.is_backtest = False
+            self.symbol_view.macd.is_backtest = False
 
-        current = self.ticker_symbols[self.active_symbol_index]
-        self.update_view(current)
+            current = self.ticker_symbols[self.active_symbol_index]
+            self.update_view(current)
 
     def run_backtest(self, df, symbol, args, starting_cash=1000):
         cerebro = bt.Cerebro()
@@ -665,7 +700,7 @@ class SpectrApp(App):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--symbols", type=str, default='AAPL,AMZN,META,MSFT,NVDA,TSLA,GOOG,VTI,GLD',
+    parser.add_argument("--symbols", type=str, default='AAPL,AMZN,META,MSFT,NVDA,TSLA,GOOG,VTI,GLD,BTCUSD',
                         help="List of ticker symbols (e.g. NVDA,TSLA,AAPL)")
     parser.add_argument("--candles", action="store_true", help="Show candlestick chart.")
     parser.add_argument("--macd_thresh", type=float, default=0.002, help="MACD threshold")

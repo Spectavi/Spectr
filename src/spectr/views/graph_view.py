@@ -1,4 +1,7 @@
 import logging
+import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -67,7 +70,8 @@ class GraphView(Static):
             df = self.df.copy()
 
         # Extract time labels and prices
-        dates = df.index.strftime('%Y-%m-%d %H:%M:%S')
+
+        dates = df.index.strftime("%Y-%m-%d %H:%M:%S")
         #ohlc_data = list(zip(df['open'], df['high'], df['low'], df['close']))
 
         # Rename the 'open' column to 'Open'
@@ -82,15 +86,11 @@ class GraphView(Static):
         plt.date_form(input_form="Y-m-d H:M:S", output_form="H:M:S")  # for times like 13:45:12
 
         # Plot Bollinger Bands
-        has_bb_upper = False
-        has_bb_lower = False
         if "bb_upper" in df.columns and not df["bb_upper"].isna().all():
-            has_bb_upper = True
             plt.plot(dates, df['bb_upper'], color="red", label="BB Upper", yside="right", marker='dot')
         if "bb_mid" in df.columns and not df["bb_mid"].isna().all():
             plt.plot(dates, df['bb_mid'], color="blue", label="BB Mid", yside="right", marker='-')
         if "bb_lower" in df.columns and not df["bb_lower"].isna().all():
-            has_bb_lower = True
             plt.plot(dates, df['bb_lower'], color="green", label="BB Lower", yside="right", marker='dot')
 
         if "VWAP" in df.columns:

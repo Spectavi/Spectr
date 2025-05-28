@@ -2,7 +2,7 @@ import logging
 import os
 
 import pandas as pd
-from alpaca.trading import TradingClient, MarketOrderRequest, OrderSide, TimeInForce, GetOrdersRequest, QueryOrderStatus, LimitOrderRequest, StopLimitOrderRequest, TrailingStopOrderRequest
+from alpaca.trading import TradingClient, MarketOrderRequest, OrderSide, TimeInForce, GetOrdersRequest, QueryOrderStatus
 from dotenv import load_dotenv
 
 from .broker_interface import BrokerInterface
