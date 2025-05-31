@@ -71,7 +71,7 @@ class GraphView(Static):
 
         # Extract time labels and prices
 
-        dates = df.index.strftime("%Y-%m-%d %H:%M:%S")
+        dates = df.index.tz_convert("UTC").strftime("%Y-%m-%d %H:%M:%S")
         #ohlc_data = list(zip(df['open'], df['high'], df['low'], df['close']))
 
         # Rename the 'open' column to 'Open'
@@ -98,6 +98,7 @@ class GraphView(Static):
 
         if self.args.candles:
             # Add candlesticks
+            log.debug(f"dates: {dates}")
             plt.candlestick(dates, df[['Open', 'Close', 'High', 'Low']], yside='right')
         else:
             plt.plot(dates, df['Close'], yside='right', marker='hd', color='green')
@@ -150,7 +151,7 @@ class GraphView(Static):
                                 color = "red",
             yside = "right")
 
-        last_x = dates[-2]
+        last_x = dates[-1]
         last_y = df['Close'].iloc[-1]
         price_label = f"${last_y:.2f}"
 

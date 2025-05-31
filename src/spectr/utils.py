@@ -1,8 +1,9 @@
 
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
+from tzlocal import get_localzone
 
 import pandas as pd
 import pytz
@@ -33,7 +34,7 @@ def load_cache(symbol):
 def inject_quote_into_df(
     df: pd.DataFrame,
     quote: dict,
-    tz=datetime.now().astimezone().tzinfo,                        # default to system zone
+    tz=get_localzone(),                        # default to system zone
 ) -> pd.DataFrame:
     """
     Append the latest quote as a new bar and guarantee the entire frame
@@ -42,36 +43,40 @@ def inject_quote_into_df(
     if df.empty:
         raise ValueError("DataFrame is empty; cannot append quote.")
 
-    # ---------- build timestamp in *tz* ---------------------------------
-    ts_raw = quote.get("timestamp")
+    if df.index.tz is None:  # naïve → assume UTC
+        df.index = df.index.tz_localize("America/New_York")
+
+    log.debug(f"tz before: {df.index.tz}")
+    df.index = df.index.tz_convert(tz)  # now local-time
+
+    ts_raw = quote.get("timestamp") or datetime.utcnow().timestamp()
+
     if isinstance(ts_raw, (int, float)):
         ts = pd.to_datetime(ts_raw, unit="s", utc=True).tz_convert(tz)
-    else:                               # assume str or datetime-like
-        ts = pd.to_datetime(ts_raw, utc=True, errors="coerce").tz_convert(tz)
+    else:  # ISO string from FMP
+        ts = (
+            pd.to_datetime(ts_raw, utc=True, errors="coerce")
+            .tz_convert(tz)
+        )
 
-    # ---------- normalise df’s index to *tz* ----------------------------
-    if df.index.tz is None:
-        # If the historical data are naïve (FMP says “US/Eastern” but values
-        # are really UTC), assume they were UTC and convert
-        df.index = df.index.tz_localize("UTC").tz_convert(tz)
-    else:
-        df.index = df.index.tz_convert(tz)
+    ts = ts.floor("T")  # align to minute grid
 
-    # ---------- create the new row --------------------------------------
-    last_row = df.iloc[-1]
+    # ------------------------------------------------------------------
+    # 3. Compose the new row (fallback to last OHLC/vol)
+    # ------------------------------------------------------------------
+    last = df.iloc[-1]
     new_row = pd.DataFrame(
         {
-            "open":   last_row["close"],
-            "high":   last_row["high"],
-            "low":    last_row["low"],
-            "close":  quote["price"],
-            "volume": last_row["volume"],
+            "open": last["close"],
+            "high": last["high"],
+            "low": last["low"],
+            "close": quote["price"],
+            "volume": last["volume"],
         },
         index=pd.Index([ts], name="datetime"),
     )
 
-    # ---------- concatenate & dedupe ------------------------------------
-    out = pd.concat([df, new_row])
+    out = pd.concat([df, new_row]).sort_index()
     out = out[~out.index.duplicated(keep="last")]
 
     log.debug("Injected quote row:\n%s", out.tail(3))

@@ -77,7 +77,7 @@ class TickerInputDialog(ModalScreen):
                 DataTable(id="gainers-table"),
                 id="gainers-container",
             ),
-            Label("Scanner results:", id="scanner-results"),
+            Label("Scanner results:", id="scanner-title"),
             Container(
             DataTable(id="scanner-table"),
                 id="scanner-container",
@@ -88,12 +88,12 @@ class TickerInputDialog(ModalScreen):
     async def on_mount(self, event: events.Mount) -> None:
         self.query_one("#ticker-input", Input).focus()
         table = self.query_one("#gainers-table", DataTable)
-        self.gainers_table_columns = table.add_columns("Symbol", "% Δ", "Curr Price", "Open Price")
+        self.gainers_table_columns = table.add_columns("Symbol", "% Δ", "Curr Price", "Open Price", "% Avg Vol", "Avg Vol", "Float")
         table.cursor_type = "row"
         table.show_cursor = True
 
         scanner_table = self.query_one("#scanner-table", DataTable)
-        self.scanner_table_columns = scanner_table.add_columns("Symbol", "% Δ", "Curr Price", "Open Price")
+        self.scanner_table_columns = scanner_table.add_columns("Symbol", "% Δ", "Curr Price", "Open Price", "% Avg Vol", "Avg Vol", "Float")
         scanner_table.cursor_type = "row"
         scanner_table.show_cursor = True
         self.refresh_top_movers()

@@ -103,30 +103,17 @@ TickerInputDialog {
 }
 #ticker_input_dlg_body {
     width: 90%;
-    height: 70%;
+    height: 80%;
     border: solid green;
     padding: 1 2;
     content-align-horizontal: center;
     background: $panel;
 }
 
-#title-row {
-    margin: 1 1;
-    height: 1;
-}
-
 #gainers-title, #scanner-title {
     width: 50%;
-}
-
-#gainers-select-button, #gainers-refresh-button, #scanner-select-button, #scanner-refresh-button {
-    width: 25%;
-    margin: 1 2;
-}
-
-#table-buttons-row {
-    width: 100%;
-    height: 5;
+    padding: 1 1;
+    height: 3;
 }
 
 #data-table-row {
@@ -134,13 +121,13 @@ TickerInputDialog {
     height: 32;
 }
 #gainers-container {
-    height: 32;
-    width: 50%;
+    height: 16;
+    width: 100%;
     overflow: auto;
 }
 #scanner-container {
-    height: 32;
-    width: 50%;
+    height: 16;
+    width: 100%;
     overflow: auto;
 }
 

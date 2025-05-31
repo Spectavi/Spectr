@@ -5,6 +5,8 @@ import requests
 from dotenv import load_dotenv
 from datetime import datetime, timedelta, timezone
 
+from tzlocal import get_localzone
+
 from .data_interface import DataInterface
 
 load_dotenv()
@@ -28,10 +30,10 @@ class FMPInterface(DataInterface):
             raise ValueError(f"No data returned from FMP for {symbol}")
 
         df = pd.DataFrame(data)
-        df['datetime'] = pd.to_datetime(df['date'], utc=True)
+        df['datetime'] = pd.to_datetime(df['date'], utc=False)
         df.set_index('datetime', inplace=True)
         # Set timezone to US/Eastern
-        #df.index = df.index.tz_localize("US/Eastern")
+        df.index = df.index.tz_localize("America/New_York").tz_convert(get_localzone())
         df = df.sort_index()
 
         df.rename(columns={

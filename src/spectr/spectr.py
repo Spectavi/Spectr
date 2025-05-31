@@ -219,8 +219,8 @@ class SpectrApp(App):
 
             log.debug(f"Injecting quote for {symbol}")
             df = utils.inject_quote_into_df(df, quote)
-            log.debug(f"Analyzing {symbol}...")
 
+            log.debug(f"Analyzing {symbol}...")
             df = metrics.analyze_indicators(
                 df, self.bb_period, self.bb_dev, self.macd_thresh
             )
@@ -252,7 +252,7 @@ class SpectrApp(App):
 
             # Notify UI thread
             self.df_cache[symbol] = df
-            #self.update_cache(symbol, df)  # Update cache files.
+            self.update_cache(symbol, df)  # Update cache files.
             self._update_queue.put(symbol)
             self.update_view(self.ticker_symbols[self.active_symbol_index])
 
