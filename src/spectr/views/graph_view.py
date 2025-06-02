@@ -98,7 +98,6 @@ class GraphView(Static):
 
         if self.args.candles:
             # Add candlesticks
-            log.debug(f"dates: {dates}")
             plt.candlestick(dates, df[['Open', 'Close', 'High', 'Low']], yside='right')
         else:
             plt.plot(dates, df['Close'], yside='right', marker='hd', color='green')

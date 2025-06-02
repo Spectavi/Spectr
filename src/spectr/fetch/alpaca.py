@@ -18,20 +18,25 @@ log = logging.getLogger(__name__)
 
 class AlpacaInterface(BrokerInterface):
 
-    def get_api(self, real_trades=False):
+    def __init__(self, real_trades: bool = False):
+        self._real_trades = real_trades
+
+    @property
+    def real_trades(self) -> bool:
+        return self._real_trades
+
+    def get_api(self):
         #url = 'https://api.alpaca.markets' if real_trades else 'https://paper-api.alpaca.markets'
-        if real_trades:
-            api = TradingClient(API_KEY, SECRET_KEY, paper=False)
-        else:
-            api = TradingClient(PAPER_API_KEY, PAPER_SECRET_KEY, paper=True)
-        return api
+        return TradingClient(API_KEY if self.real_trades else PAPER_API_KEY,
+                             SECRET_KEY if self.real_trades else PAPER_SECRET_KEY,
+                             paper=not self.real_trades)
 
     # ------------------------------------------------------------------ #
     #  Returns account balance info.
     # ------------------------------------------------------------------ #
-    def get_balance(self, real_trades: bool = False):
+    def get_balance(self):
         try:
-            acct = self.get_api(real_trades).get_account()
+            acct = self.get_api().get_account()
             return {
                 "cash": float(acct.cash) if acct.cash else 0.00,
                 "buying_power": float(acct.buying_power) if acct.buying_power else 0.00,
@@ -44,12 +49,12 @@ class AlpacaInterface(BrokerInterface):
     # ------------------------------------------------------------------ #
     #  Returns whether the account has a pending order on the symbol.
     # ------------------------------------------------------------------ #
-    def has_pending_order(self, symbol: str, real_trades: bool = False) -> bool:
+    def has_pending_order(self, symbol: str) -> bool:
         """
         True if there is *any* open order for `symbol` (market or limit).
         """
         try:
-            tc = self.get_api(real_trades)
+            tc = self.get_api()
             req = GetOrdersRequest(status="open", symbols=[symbol.upper()])
             open_orders = tc.get_orders(req)
             return len(open_orders) > 0
@@ -82,7 +87,7 @@ class AlpacaInterface(BrokerInterface):
         list[alpaca.trading.models.Order]   (empty list if none or on error)
         """
         try:
-            tc = self.get_api(real_trades)
+            tc = self.get_api()
 
             req = GetOrdersRequest(
                 status=QueryOrderStatus.OPEN,     # "open" orders only
@@ -115,7 +120,7 @@ class AlpacaInterface(BrokerInterface):
           don't crash.
         """
         try:
-            api = self.get_api(real_trades)
+            api = self.get_api()
 
             req = GetOrdersRequest(status=QueryOrderStatus.CLOSED)
             orders = api.get_orders(req)  # list[Order]
@@ -162,7 +167,7 @@ class AlpacaInterface(BrokerInterface):
         """
         try:
             log.debug("get_all_orders called...")
-            api = self.get_api(real_trades)
+            api = self.get_api()
 
             # Empty request object => no filters → returns every order
             return  api.get_orders(GetOrdersRequest(status=QueryOrderStatus.ALL))
@@ -216,7 +221,7 @@ class AlpacaInterface(BrokerInterface):
             Empty DataFrame on error or when no orders exist.
         """
         try:
-            trading = self.get_api(real_trades)
+            trading = self.get_api()
 
             req = GetOrdersRequest(symbols=[symbol.upper()])  # no status filter
             orders = trading.get_orders(req)  # list[Order]
@@ -242,16 +247,18 @@ class AlpacaInterface(BrokerInterface):
     # ------------------------------------------------------------------ #
     #  Returns whether the account has a position open on the symbol.
     # ------------------------------------------------------------------ #
-    def has_position(self, symbol: str, real_trades: bool = False) -> bool:
-        pos = self.get_position(symbol, real_trades)
+    def has_position(self, symbol: str) -> bool:
+        pos = self.get_position(symbol)
         return bool(pos and float(pos.qty) > 0)
 
     # ------------------------------------------------------------------ #
     #  Returns ALL open positions for the account.
     # ------------------------------------------------------------------ #
-    def get_positions(self, real_trades: bool = False):
+    def get_positions(self):
         try:
-            return self.get_api(real_trades).get_all_positions()
+            pos = self.get_api().get_all_positions()
+            log.debug(f"Fetched {len(pos)} positions: {pos}")
+            return pos
         except Exception as exc:
             log.debug(f"Failed to fetch positions: {exc}")
             return []
@@ -259,9 +266,11 @@ class AlpacaInterface(BrokerInterface):
     # ------------------------------------------------------------------ #
     #  Returns any open position for the symbol on the account.
     # ------------------------------------------------------------------ #
-    def get_position(self, symbol: str, real_trades: bool = False):
+    def get_position(self, symbol: str):
         try:
-            return self.get_api(real_trades).get_open_position(symbol.upper())
+            pos = self.get_api().get_open_position(symbol.upper())
+            log.debug(f"Fetched {symbol} position: {pos}")
+            return pos
         except Exception:
             log.debug("No position")
             return None
@@ -278,7 +287,7 @@ class AlpacaInterface(BrokerInterface):
         real_trades: bool = False,
     ):
         try:
-            tc = self.get_api(real_trades)
+            tc = self.get_api()
             order_req = MarketOrderRequest(
                 symbol=symbol.upper(),
                 qty=quantity,

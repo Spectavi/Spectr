@@ -2,57 +2,43 @@
 
 ---
 
-## EARLY DEVELOPMENT! Use at your own risk!
+## EARLY DEVELOPMENT! Do NOT use yet! 
+
+
 
 ---
 
 **Spectr** is a terminal-based algorithmic trading terminal. It supports live-monitoring w/ algo-based auto-trading and historical backtesting. Supports Robinhood, Alpaca, and FMP.
 
+BYOS - Bring Your Own Strategy. You must implement your own trading strategy in custom_strategy.py.
 
-![Newest UI](src/spectr/res/example_volume.png)
 
 ![Example GIF](src/spectr/res/example_features.gif)
-
-While monitoring a stock, Ctrl+A arms / dis-arms auto-trading:
-
-![Example 1](src/spectr/res/example3.png)
-
-Zoom in / out using Ctrl + / - :
-
-![Example 2](src/spectr/res/example2.png)
-
-Change ticker symbols list by pressing ` / ~ / T:
-
-![Example 3](src/spectr/res/top_gainers.png)
-
-See portfolio with owned assets and any open / pending orders:
-
-![Example 4](src/spectr/res/portfolio.png)
-
-
 
 ---
 
 ## ✨ Features
 
 - 📈 Real-time price monitoring with interactive charts.
--  ⌨ Cycle up to 10 stocks with 0-9 keys or + / - keys for > 10 symbols being tracked.
+- 📈 Advanced hot-keys for quick sells of current position: 100% - `Ctrl+Z`, 50% - `Ctrl+X`, and 25% - `Ctrl+C`.
+-  ⌨ Cycle through unlimited # of symbols with 0-9 keys or + / - keys.
 - 🤖 Arm / dis-arm auto-trading with `Ctrl+A`
-- 🔄 Change symbols list with `` / ~` or T
+- 🔄 Change symbols list with `~` or `T`
 - 🔄 Click symbols in Top Gainers list to add to watchlist.
-- 💵 See portfolio info + open / pending orders with `P`
+- 🔄 Scanner that filters top 50 gainers for favorable conditions.
+- 💵 See portfolio info + open / pending orders with `P`.
 - 🧠 Supports MACD, Bollinger Bands, and Volume / VWAP.
 - 💵 Live trading based on your custom strategy.
 - 💵 Paper trading based on your custom strategy. (Alpaca-only)
 - 📈 Real-time data API support (FMP)
 - 👁️ Broker API support (Alpaca, Robinhood (currently broken))
-- 🔁 Backtest mode with visual result playback, press B key.
+- 🔁 Backtest mode with visual result playback with `b`.
 
 ---
 
 ## 🤝 Broker Support
 
-Recommended to use Alpaca for broker and FMP for data.
+Currently focusing on Alpaca for broker and FMP for data. Robinhood currently broken / untested!
 
 | Broker    | Real Trading | Historical Data | Notes                                                                       |
 | --------- | ------------ | --------------- |-----------------------------------------------------------------------------|
@@ -61,13 +47,19 @@ Recommended to use Alpaca for broker and FMP for data.
 | FMP       | ❌            | ✅               | Read-only via API key                                                       |
 
 
-##⌨️ Keyboard Shortcuts
+## ⌨️ Keyboard Shortcuts
 
-| Shortcut | Action                    |
-|----------| ------------------------- |
-| `Esc`    | Quit the app              |
-| `` / ~`      | Enter a new ticker symbol |
-| `Ctrl+A` | Toggle live trading mode  |
+| Shortcut | Action                              |
+|----------|-------------------------------------|
+| `Esc`    | Quit the app                        |
+| `~ / T`  | Open ticker select + scanner dialog |
+| `0-9`    | Select ticker by index              |
+| `+ / -`  | Cycle through symbols list          |
+| `Ctrl+A` | Arm auto-trading mode               |
+| `Ctrl+Q` | Buy current ticker                  |
+| `Ctrl+Z` | Sell 100% of position               |
+| `Ctrl+X` | Sell 50% of position                |
+| `Ctrl+C` | Sell 25% of position                |
 
 
 ## 📦 Installation
@@ -84,22 +76,28 @@ pip install -r requirements.txt
 ```
 # Usage
 ```bash
-python src/spectr/spectr.py --broker alpaca --data_api fmp --scale 0.5 --symbols BTCUSD,NVDA --candles
+python -m spectr --broker alpaca --data_api fmp --scale 0.5 --symbols NVDA,TSLA,BTCUSD --candles
 ```
 
 
-| Flag                | Description                                 |
-|---------------------|---------------------------------------------|
-| `--mode`            | `live` or `backtest`                        |
-| `--symbol`          | Stock ticker to track (e.g., AAPL)          |
-| `--broker`          | `alpaca` or `robinhood`                     |
-| `--data_api`        | `alpaca`, `fmp`, or `robinhood`             |
-| `--real_trades`     | If set, will place real trades.             |
-| `--macd_thresh`     | Threshold for MACD crossover (default: 0.1) |
-| `--bb_period`       | Bollinger Band period (default: 200)        |
-| `--bb_dev`          | Bollinger Band std deviation (default: 2.0) |
-| `--from_date`       | Start data for backtest mode: YYYY-MM-DD    |
-| `--to_date`         | End date for backtest mode: YYYY-MM-DD      |
-| `--stop_loss-pct`   | Stop loss percent.                          |
-| `--take_profit_pct` | Take profit percent.                        |
+| Flag                | Description                                             |
+|---------------------|---------------------------------------------------------|
+| `--symbols`         | List of stock tickers to track (e.g., NVDA,AAPL,BTCUSD) |
+| `--broker`          | `alpaca` or `robinhood`                                 |
+| `--data_api`        | `alpaca`, `fmp`, or `robinhood`                         |
+| `--real_trades`     | If set, will place real trades.                         |
+| `--macd_thresh`     | Threshold for MACD crossover (default: 0.1)             |
+| `--bb_period`       | Bollinger Band period (default: 200)                    |
+| `--bb_dev`          | Bollinger Band std deviation (default: 2.0)             |
+| `--stop_loss-pct`   | Stop loss percent.                                      |
+| `--take_profit_pct` | Take profit percent.                                    |
+| `--scale`           | Scale the terminal UI (default: 1.0)                    |
+| `--candles`         | Enable candle chart mode.                               |
 
+---------------
+### Ticker Select Dialog with Scanner. Select rows to add to watchlist:
+![Ticker Dialog](src/spectr/res/ticker_select_scanner.png)
+
+---------------
+
+* Created by a human with the assistance of AI.

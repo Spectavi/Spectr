@@ -4,6 +4,7 @@ import contextlib
 import logging
 import os
 import queue
+import sys
 import threading
 import traceback
 from concurrent.futures._base import wait
@@ -16,6 +17,8 @@ import playsound
 from dotenv import load_dotenv
 from textual.app import App, ComposeResult
 from textual.reactive import reactive
+from textual.screen import Screen
+from textual.widgets import Static
 
 import metrics
 import utils
@@ -25,21 +28,21 @@ from utils import load_cache, save_cache
 from views.backtest_input_dialog import BacktestInputDialog
 from views.order_dialog import OrderDialog
 from views.portfolio_screen import PortfolioScreen
+from views.splash_screen import SplashScreen
 from views.symbol_view import SymbolView
 from views.ticker_input_dialog import TickerInputDialog
 from views.top_overlay import TopOverlay
 from views.trades_screen import TradesScreen
 
 # Notes for scanner filter:
-# - Already up 10%.
-# - 5x relative volume
-# - News catalyst within the last 24 hrs.
+# - Already up 5%.
+# - 3x relative volume
+# - News catalyst within the last 48 hrs.
 # - < 10mill float?
-# - Between $1.00 and $20.00?
+# - Between $1.00 and $50.00?
+# - Volume > 50k?
 
 # Add float metric.
-
-# Ensure buying ask is default, and selling bid.
 
 # Multi-thread scanner calls.
 # Show how long it was since last scan.
@@ -61,6 +64,13 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
+
+class OrderSignal:
+    """A simple class to hold order signals."""
+    def __init__(self, symbol: str, side: OrderSide, pos_pct: float = 100.0):
+        self.symbol = symbol
+        self.side = side
+        self.pos_pct = pos_pct
 
 # --- Backtest Function ---
 class CommInfoFractional(bt.CommissionInfo):
@@ -129,6 +139,7 @@ class SpectrApp(App):
         yield SymbolView(id="symbol-view")
 
     async def on_mount(self):
+        await self.push_screen(SplashScreen())
         # Set symbols and active symbol
         self.ticker_symbols = self.args.symbols
         self.active_symbol_index = 0
@@ -230,7 +241,7 @@ class SpectrApp(App):
             signal_dict = CustomStrategy.detect_signals(
                 df,
                 symbol,
-                position=BROKER_API.get_position(symbol, self.args.real_trades),
+                position=BROKER_API.get_position(symbol),
             )
             log.debug("Detect signals finished.")
 
@@ -254,6 +265,9 @@ class SpectrApp(App):
             self.df_cache[symbol] = df
             self.update_cache(symbol, df)  # Update cache files.
             self._update_queue.put(symbol)
+            if symbol == self.ticker_symbols[self.active_symbol_index]:
+                if self.screen_stack and isinstance(self.screen_stack[-1], SplashScreen):
+                    self.pop_screen()
             self.update_view(self.ticker_symbols[self.active_symbol_index])
 
         except Exception as exc:
@@ -304,7 +318,7 @@ class SpectrApp(App):
 
                     if not self.auto_trading_enabled and sig:
                         self.signal_detected.remove(signal)
-                        self.open_order_dialog(side=sig, symbol=symbol, price=float(price))
+                        self.open_order_dialog(side=sig, pos_pct=100.0, symbol=sym)
                         continue
                     else:
                         msg = f"ORDER SUBMITTED! {msg}"
@@ -425,8 +439,8 @@ class SpectrApp(App):
         symbol = self.ticker_symbols[self.active_symbol_index]
         self.open_order_dialog(OrderSide.SELL, 0.25, symbol)
 
-    def open_order_dialog(self, side: OrderSide, pct: float, symbol: str):
-        self.push_screen(OrderDialog(side.name, symbol, pct,
+    def open_order_dialog(self, side: OrderSide, pos_pct: float, symbol: str):
+        self.push_screen(OrderDialog(side=side, symbol=symbol, pos_pct=pos_pct,
                                      get_pos_cb=BROKER_API.get_position,
                                      get_price_cb=DATA_API.fetch_quote))
 
@@ -483,9 +497,8 @@ class SpectrApp(App):
             BROKER_API.submit_order(
                 symbol=msg.symbol,
                 side=OrderSide.SELL if msg.side == "SELL" else OrderSide.BUY,
-                type=OrderType.MARKET,
+                type=msg.order_type,
                 quantity=msg.qty,
-                real_trades=self.args.real_trades,
             )
         except Exception as e:
             log.error(e)
@@ -520,14 +533,15 @@ class SpectrApp(App):
             self.pop_screen()
         else:
             # pass your broker instance; adjust if you keep it elsewhere
-            balance_info = BROKER_API.get_balance(self.args.real_trades)
+            balance_info = BROKER_API.get_balance()
             if not balance_info:
                 self.flash_message("ERROR ACCESSING BROKER ACCOUNT!")
+
             cash = balance_info.get("cash") if balance_info else 0.00
             buying_power = balance_info.get("buying_power") if balance_info else 0.00
             portfolio_value = balance_info.get("portfolio_value") if balance_info else 0.00
-            positions = BROKER_API.get_positions(self.args.real_trades)
-            log.debug(f"Portfolio balance: {balance_info}")
+            positions = BROKER_API.get_positions()
+
             self.push_screen(PortfolioScreen(cash, buying_power, portfolio_value, positions, BROKER_API.get_all_orders,
                                              self.args.real_trades))
 
@@ -542,6 +556,8 @@ class SpectrApp(App):
             self.symbol_view.load_df(symbol, df, self.args)
 
         self.update_status_bar()
+        if self.query("#splash") and df is not None and not df.empty:
+            self.remove(self.query_one("#splash"))
 
     def update_status_bar(self):
         live_icon = "🤖" if self.auto_trading_enabled else "🚫"
@@ -698,7 +714,29 @@ class SpectrApp(App):
         }
 
 
+# def show_splash():
+#     # Clear the terminal window
+#     if sys.platform == 'win32':
+#         os.system('cls')
+#     else:
+#         os.system('clear')
+#
+#     # Center the ASCII art
+#     terminal_width = 80  # You might want to calculate this dynamically
+#     spaces = ' ' * ((terminal_width - len(max(GHOST.split('\n'), key=len))) // 2)
+#
+#     print(spaces + "Loading... Please wait")
+#     print()
+#     for line in GHOST.split('\n'):
+#         if line.strip() != '':
+#             print(spaces + line)
+
 if __name__ == "__main__":
+    # Show splash screen in a separate thread
+    # splash_thread = threading.Thread(target=show_splash)
+    # splash_thread.daemon = True  # So the thread dies when the program exits
+    # splash_thread.start()
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--symbols", type=str, default='AAPL,AMZN,META,MSFT,NVDA,TSLA,GOOG,VTI,GLD,BTCUSD',
                         help="List of ticker symbols (e.g. NVDA,TSLA,AAPL)")
@@ -708,9 +746,6 @@ if __name__ == "__main__":
     parser.add_argument("--bb_dev", type=float, default=2.0, help="Bollinger Band std dev")
     parser.add_argument("--real_trades", action='store_true', help="Enable live trading (vs paper)")
     parser.add_argument('--interval', default='1min')
-    # parser.add_argument('--mode', choices=['live', 'backtest'], required=True)
-    parser.add_argument('--from_date', default='2025-04-17')
-    parser.add_argument('--to_date', default='2025-04-21')
     parser.add_argument('--stop_loss_pct', type=float, default=0.01, help="Stop loss pct")
     parser.add_argument('--take_profit_pct', type=float, default=0.05, help="Take profit pct")
     parser.add_argument('--lookback_period', type=int, default=1000, help="Lookback period")
@@ -737,7 +772,7 @@ if __name__ == "__main__":
     if args.broker == "alpaca":
         from fetch.alpaca import AlpacaInterface
 
-        BROKER_API: BrokerInterface = AlpacaInterface()
+        BROKER_API: BrokerInterface = AlpacaInterface(real_trades=args.real_trades)
     elif args.broker == "robinhood":
         from fetch.robinhood import RobinhoodInterface, RobinhoodInterface
 
@@ -753,7 +788,7 @@ if __name__ == "__main__":
         if args.broker == "alpaca":
             DATA_API = BROKER_API
         else:
-            DATA_API = AlpacaInterface()
+            DATA_API = AlpacaInterface(real_trades=args.real_trades)
     elif args.data_api == "robinhood":
         from fetch.robinhood import RobinhoodInterface
 
