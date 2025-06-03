@@ -69,7 +69,7 @@ class OrderDialog(ModalScreen):
         *,
         side: OrderSide,
         symbol: str,
-        pos_pct: float,
+        pos_pct: float = 1.0,
         get_pos_cb: Callable,
         get_price_cb: Callable,
     ) -> None:
@@ -138,10 +138,9 @@ class OrderDialog(ModalScreen):
 
     def _total_fmt(self) -> str:
         if self.order_type == OrderType.MARKET.name:
-            return f"Market Order total: [yellow]${self.qty * self.price:,.2f}[/]"
+            return f"Market Order total: [yellow]${self.total:,.2f}[/]"
         elif self.order_type == OrderType.LIMIT.name:
-            return f"Limit Order total: [yellow]${self.qty * self.limit_price:,.2f}[/]"
-        return f"Order total: [yellow]${self.total:,.2f}[/]"
+            return f"Limit Order total: [yellow]${self.total:,.2f}[/]"
 
     # ------------------------------------------------------------------
     async def on_mount(self, event: events.Mount):
@@ -169,11 +168,14 @@ class OrderDialog(ModalScreen):
         pos = self._get_pos(self.symbol)
         if pos:
             log.debug(f"Position for {self.symbol}: {pos}")
+            self.query_one("#dlg_ok", Button).disabled = False
             self.pos_qty   = float(pos.qty)
             self.pos_value = float(pos.market_value)
-            if self.side.name.upper() == "SELL":
+            if self.side.name.upper() == "SELL" and self.pos_pct:
                 self.qty = self.pos_qty * self.pos_pct
-                self.query_one("#dlg_qty_in", Input).value = str(self.qty)
+                qty_input = self.query_one("#dlg_qty_in", Input)
+                if qty_input.value == "0":
+                    qty_input.value = str(self.qty)
         else:
             self.query_one("#dlg_ok", Button).disabled = True
         self.query_one("#dlg_pos", Static).update(self._pos_fmt())

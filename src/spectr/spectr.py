@@ -313,12 +313,15 @@ class SpectrApp(App):
                     msg = f"{sym} @ {price} 🚀"
                     if sig == 'buy':
                         msg = f"BUY {msg}"
+                        side = OrderSide.BUY
                     if sig == 'sell':
                         msg = f"SELL {msg}"
+                        side = OrderSide.SELL
 
                     if not self.auto_trading_enabled and sig:
                         self.signal_detected.remove(signal)
-                        self.open_order_dialog(side=sig, pos_pct=100.0, symbol=sym)
+                        if (self.screen_stack and not isinstance(self.screen_stack[-1], OrderDialog)):
+                            self.open_order_dialog(side=side, pos_pct=100.0, symbol=sym)
                         continue
                     else:
                         msg = f"ORDER SUBMITTED! {msg}"
@@ -327,7 +330,7 @@ class SpectrApp(App):
                         else:
                             msg = f"REAL {msg}"
                         self.signal_detected.remove(signal)
-                        BROKER_API.submit_order(symbol, sig, 1, self.args.real_trades)
+                        BROKER_API.submit_order(symbol, side, OrderType.MARKET, self.args.real_trades)
                         playsound.playsound(BUY_SOUND_PATH if sig == "buy" else SELL_SOUND_PATH)
             elif symbol == self.ticker_symbols[self.active_symbol_index]:
                 if not self.is_backtest:
