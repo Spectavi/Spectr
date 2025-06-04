@@ -100,6 +100,7 @@ class OrderDialog(ModalScreen):
                     value=self.order_type,
                     options=[(ot.name.replace("_", " "), ot.name) for ot in OrderType],
                 ),
+                id="dlg_ot_row",
             ),
             Horizontal(
                 Label("Qty:", id="dlg_qty_lbl"),
@@ -115,6 +116,7 @@ class OrderDialog(ModalScreen):
             Horizontal(
                 Button(self.side.name.upper(), id="dlg_ok", variant="success"),
                 Button("Cancel", id="dlg_cancel", variant="error"),
+                id="dlg_buttons_row",
             ),
             id="dlg_body",
         )

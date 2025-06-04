@@ -45,7 +45,6 @@ class PortfolioScreen(Screen):
 
 
 
-
     def compose(self):
         yield Vertical(
             self.top_title,

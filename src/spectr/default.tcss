@@ -140,13 +140,21 @@ OrderDialog {
     content-align-horizontal: center;
     background: $panel;
 }
-#dlg_title { text-align: center; }
-#dlg_price, #dlg_total { margin-left: 4; padding: 1 1;}
+#dlg_title, #dlg_pos { text-align: center; padding: 1 1; }
+#dlg_price, #dlg_total { text-align: center; padding: 1 1;}
 #dlg_ot_sel {
     width: 30%;
 }
+
 #dlg_qty_in {
     width: 25%
+}
+
+#dlg_buttons_row {
+    width: 100%;
+    content-align-horizontal: center;
+    text-align: center;
+    align: center middle;
 }
 #dlg_ok, #dlg_cancel {
     margin: 2 2;
