@@ -156,6 +156,7 @@ class OrderDialog(ModalScreen):
             self.query_one("#dlg_ok", Button).disabled = True
 
         # start quote refresher
+        await self._refresh_data(is_initial_load=True)
         self._refresh_job = self.set_interval(self.REFRESH_SECS, self._refresh_data)
 
     async def on_unmount(self, event: events.Unmount):
@@ -164,20 +165,27 @@ class OrderDialog(ModalScreen):
             self._refresh_job = None
 
     # ---------------- event handlers ----------------------------------
-    async def _refresh_data(self):
+    async def _refresh_data(self, is_initial_load: bool = False):
         pos = self._get_pos(self.symbol)
         if pos:
             log.debug(f"Position for {self.symbol}: {pos}")
             self.query_one("#dlg_ok", Button).disabled = False
             self.pos_qty   = float(pos.qty)
             self.pos_value = float(pos.market_value)
-            if self.side.name.upper() == "SELL" and self.pos_pct:
+            if self.side == OrderSide.SELL and self.pos_pct > 0:
                 self.qty = self.pos_qty * self.pos_pct
                 qty_input = self.query_one("#dlg_qty_in", Input)
-                if qty_input.value == "0":
+                if is_initial_load:
                     qty_input.value = str(self.qty)
         else:
-            self.query_one("#dlg_ok", Button).disabled = True
+            # When there's no position on the symbol, keep the BUY button
+            # active and show "NO POSITION" instead of "N/A".
+            if self.side == OrderSide.SELL:
+                self.query_one("#dlg_ok", Button).disabled = True
+            else:
+                self.query_one("#dlg_ok", Button).disabled = False
+            self.pos_qty = 0
+            self.pos_value = 0.0
         self.query_one("#dlg_pos", Static).update(self._pos_fmt())
 
         new_price = self._get_price(self.symbol).get("price", 0)

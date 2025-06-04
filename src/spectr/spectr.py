@@ -160,12 +160,14 @@ class SpectrApp(App):
             thread_name_prefix="poll",
         )
 
-        threading.Thread(target=self._polling_loop,
-                         name="data-poller",
-                         daemon=True).start()
-        # self._poll_thread.start()
+        self._poll_thread = threading.Thread(
+            target=self._polling_loop,
+            name="data-poller",
+            daemon=True,
+        )
+        self._poll_thread.start()
         self.update_status_bar()
-        asyncio.create_task(self._process_updates())
+        self._consumer_task = asyncio.create_task(self._process_updates())
 
     def update_cache(self, symbol: str, df_new: pd.DataFrame):
         try:
@@ -351,27 +353,26 @@ class SpectrApp(App):
             return None
 
     async def on_shutdown(self, event):
-        # 🚦 tell every background task we are quitting
+        # tell every background task we are quitting
         self._exit_backtest()
-
         self._shutting_down = True
         self._stop_event.set()
 
-        loop = asyncio.get_running_loop()
-        await loop.shutdown_default_executor()  # ← kills the to_thread workers
+        # Wait for polling thread to finish before closing the worker pool
+        if self._poll_thread and self._poll_thread.is_alive():
+            self._poll_thread.join()
 
-        # 📨 unblock and cancel the queue consumer **before** closing the pool
-        if hasattr(self, "_consumer_task"):
-            self._update_queue.put_nowait(None)  # sentinel wakes .get()
+        if self._poll_pool:
+            self._poll_pool.shutdown(wait=False, cancel_futures=True)
+
+        if self._consumer_task:
+            self._update_queue.put_nowait(None)
             self._consumer_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._consumer_task
 
-        # 🏊 shut down the worker pool and wait until every worker thread dies
-        if self._poll_pool:
-            self._poll_pool.shutdown(wait=False, cancel_futures=True)
-        if self._poll_thread and self._poll_thread.is_alive():
-            self._poll_thread.join()
+        loop = asyncio.get_running_loop()
+        await loop.shutdown_default_executor()
 
 
 
