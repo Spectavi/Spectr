@@ -172,6 +172,14 @@ class SpectrApp(App):
     def update_cache(self, symbol: str, df_new: pd.DataFrame):
         try:
             cache = load_cache(symbol)
+
+            # Normalise timezone handling – persist everything in UTC naïve
+            if isinstance(df_new.index, pd.DatetimeIndex) and df_new.index.tz is not None:
+                df_new.index = df_new.index.tz_convert("UTC").tz_localize(None)
+
+            if not cache.empty and isinstance(cache.index, pd.DatetimeIndex) and cache.index.tz is not None:
+                cache.index = cache.index.tz_convert("UTC").tz_localize(None)
+
             # Merge & dedupe
             if not cache.empty:
                 combined = pd.concat([cache, df_new])
