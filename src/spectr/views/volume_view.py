@@ -65,8 +65,13 @@ class VolumeView(Static):
         plt.axes_color("default")
         plt.ticks_color("default")
 
-        plt.ylim(0, max(df["volume"]) * 1.1, yside="right")
-        plt.plotsize(self.size.width, self.size.height)
+        max_vol = float(df["volume"].astype(float).max())
+        top = max_vol * 1.1 if max_vol > 0 else 1
+        plt.ylim(0, top, yside="right")
+
+        width = max(self.size.width, 20)
+        height = max(self.size.height, 10)
+        plt.plotsize(width, height)
 
         #plt.xticks(auto=True, rotation=90)
         #plt.frame(True)

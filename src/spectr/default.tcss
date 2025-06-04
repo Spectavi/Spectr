@@ -78,7 +78,13 @@ TickerInputDialog {
     border: heavy green;
     padding: 0 1;
     background: #262626;
-    color: green;
+    color: #00ff55;
+}
+
+#submit-button {
+    width: 20%;
+    height: 3;
+    text-style: bold;
 }
 
 #gainers-title, #scanner-title {

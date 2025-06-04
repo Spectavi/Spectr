@@ -129,9 +129,13 @@ class TickerInputDialog(ModalScreen):
             event: DataTable.RowSelected,
     ) -> None:
         log.debug(f"row selected: {event.row_key}")
-        log.debug(f"data table: {event.data_table.name}")
+        log.debug(f"data table id: {event.data_table.id}")
 
-        columns = self.gainers_table_columns if event.data_table.name == "gainers-table" else self.scanner_table_columns
+        columns = (
+            self.gainers_table_columns
+            if event.data_table.id == "gainers-table"
+            else self.scanner_table_columns
+        )
         symbol = str(event.data_table.get_cell(event.row_key, columns[0])).strip().upper()  # row_key is the first column
         if not symbol:
             return
