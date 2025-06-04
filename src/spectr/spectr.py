@@ -147,12 +147,7 @@ class SpectrApp(App):
         log.debug(f"self.ticker_symbols: {self.ticker_symbols}")
         log.debug(f"self.active_symbol_index: {self.active_symbol_index}")
         log.debug(f"symbol: {symbol}")
-
-        # Populate view with active symbols data.
-
         log.debug("App mounted.")
-        # self.update_cache()
-        log.debug("Cache updated.")
 
         # Kick off producer & consumer
         self._poll_pool = ThreadPoolExecutor(
@@ -168,27 +163,6 @@ class SpectrApp(App):
         self._poll_thread.start()
         self.update_status_bar()
         self._consumer_task = asyncio.create_task(self._process_updates())
-
-    def update_cache(self, symbol: str, df_new: pd.DataFrame):
-        try:
-            cache = load_cache(symbol)
-
-            # Normalise timezone handling – persist everything in UTC naïve
-            if isinstance(df_new.index, pd.DatetimeIndex) and df_new.index.tz is not None:
-                df_new.index = df_new.index.tz_convert("UTC").tz_localize(None)
-
-            if not cache.empty and isinstance(cache.index, pd.DatetimeIndex) and cache.index.tz is not None:
-                cache.index = cache.index.tz_convert("UTC").tz_localize(None)
-
-            # Merge & dedupe
-            if not cache.empty:
-                combined = pd.concat([cache, df_new])
-                df_new = combined[~combined.index.duplicated(keep="last")].sort_index()
-                log.info(f"Cache for {symbol} extended to {df_new.index.max().date()}")
-
-            save_cache(symbol, df_new)
-        except Exception as e:
-            log.error(f"Failed to update cache for {symbol}: {traceback.format_exc()}")
 
     def get_live_data(self, symbol):
         df = DATA_API.fetch_chart_data(symbol, from_date=datetime.now().date().strftime("%Y-%m-%d"),
@@ -273,7 +247,6 @@ class SpectrApp(App):
 
             # Notify UI thread
             self.df_cache[symbol] = df
-            self.update_cache(symbol, df)  # Update cache files.
             self._update_queue.put(symbol)
             if symbol == self.ticker_symbols[self.active_symbol_index]:
                 if self.screen_stack and isinstance(self.screen_stack[-1], SplashScreen):
@@ -449,17 +422,17 @@ class SpectrApp(App):
     def action_sell_current_symbol(self):
         self._exit_backtest()
         symbol = self.ticker_symbols[self.active_symbol_index]
-        self.open_order_dialog(OrderSide.SELL, 1.0, symbol)
+        self.open_order_dialog(OrderSide.SELL, 100.0, symbol)
 
     def action_sell_half_current_symbol(self):
         self._exit_backtest()
         symbol = self.ticker_symbols[self.active_symbol_index]
-        self.open_order_dialog(OrderSide.SELL, 0.50, symbol)
+        self.open_order_dialog(OrderSide.SELL, 50.0, symbol)
 
     def action_sell_quarter_current_symbol(self):
         self._exit_backtest()
         symbol = self.ticker_symbols[self.active_symbol_index]
-        self.open_order_dialog(OrderSide.SELL, 0.25, symbol)
+        self.open_order_dialog(OrderSide.SELL, 25.0, symbol)
 
     def open_order_dialog(self, side: OrderSide, pos_pct: float, symbol: str):
         self.push_screen(OrderDialog(side=side, symbol=symbol, pos_pct=pos_pct,

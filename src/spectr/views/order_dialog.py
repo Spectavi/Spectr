@@ -69,7 +69,7 @@ class OrderDialog(ModalScreen):
         *,
         side: OrderSide,
         symbol: str,
-        pos_pct: float = 1.0,
+        pos_pct: float = 100.0,
         get_pos_cb: Callable,
         get_price_cb: Callable,
     ) -> None:
@@ -166,6 +166,7 @@ class OrderDialog(ModalScreen):
 
     # ---------------- event handlers ----------------------------------
     async def _refresh_data(self, is_initial_load: bool = False):
+        # Check position first to see if it's changed. Only update qty input field if it's the initial load.
         pos = self._get_pos(self.symbol)
         if pos:
             log.debug(f"Position for {self.symbol}: {pos}")
@@ -173,7 +174,7 @@ class OrderDialog(ModalScreen):
             self.pos_qty   = float(pos.qty)
             self.pos_value = float(pos.market_value)
             if self.side == OrderSide.SELL and self.pos_pct > 0:
-                self.qty = self.pos_qty * self.pos_pct
+                self.qty = self.pos_qty * (self.pos_pct / 100.0)
                 qty_input = self.query_one("#dlg_qty_in", Input)
                 if is_initial_load:
                     qty_input.value = str(self.qty)
