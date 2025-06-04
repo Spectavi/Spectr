@@ -115,6 +115,9 @@ class TickerInputDialog(ModalScreen):
         # cancel the refresher when the dialog closes
         self._refresh_job.stop()
         self._refresh_job = None
+        if self._scan_pool:
+            self._scan_pool.shutdown(wait=False, cancel_futures=True)
+            self._scan_pool = None
 
     def on_data_table_row_selected(
             self,

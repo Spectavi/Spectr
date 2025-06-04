@@ -363,7 +363,14 @@ class SpectrApp(App):
             self._poll_thread.join()
 
         if self._poll_pool:
-            self._poll_pool.shutdown(wait=False, cancel_futures=True)
+            self._poll_pool.shutdown(wait=True, cancel_futures=True)
+            self._poll_pool = None
+
+        # If the ticker dialog is still open, ensure its scan pool shuts down
+        for screen in list(self.screen_stack):
+            if isinstance(screen, TickerInputDialog) and getattr(screen, "_scan_pool", None):
+                screen._scan_pool.shutdown(wait=False, cancel_futures=True)
+                screen._scan_pool = None
 
         if self._consumer_task:
             self._update_queue.put_nowait(None)
