@@ -537,8 +537,17 @@ class SpectrApp(App):
             portfolio_value = balance_info.get("portfolio_value") if balance_info else 0.00
             positions = BROKER_API.get_positions()
 
-            self.push_screen(PortfolioScreen(cash, buying_power, portfolio_value, positions, BROKER_API.get_all_orders,
-                                             self.args.real_trades))
+            self.push_screen(
+                PortfolioScreen(
+                    cash,
+                    buying_power,
+                    portfolio_value,
+                    positions,
+                    BROKER_API.get_all_orders,
+                    self.args.real_trades,
+                    self.set_real_trades,
+                )
+            )
 
     # --------------
 
@@ -570,6 +579,12 @@ class SpectrApp(App):
     def flash_message(self, msg: str):
         overlay = self.query_one("#overlay-text", TopOverlay)
         overlay.flash_message(f"ORDER FAILED: {msg}", 10)
+
+    def set_real_trades(self, enabled: bool) -> None:
+        """Update trading mode for the app and broker."""
+        self.args.real_trades = enabled
+        if hasattr(BROKER_API, "_real_trades"):
+            setattr(BROKER_API, "_real_trades", enabled)
 
     # ---------- Back-test workflow ----------
 

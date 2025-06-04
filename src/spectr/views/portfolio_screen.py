@@ -1,8 +1,8 @@
 import logging
 
 from textual.screen import Screen
-from textual.widgets import Static, DataTable, Header, Footer
-from textual.containers import Vertical
+from textual.widgets import Static, DataTable, Header, Footer, Switch
+from textual.containers import Vertical, Horizontal
 from textual.reactive import reactive
 from textual import events
 
@@ -25,13 +25,16 @@ class PortfolioScreen(Screen):
     portfolio_value = reactive(0.0)
     real_trades  = reactive(False)
 
-    def __init__(self, cash: float, buying_power: float, portfolio_value: float, positions: list, orders_callback, real_trades: bool) -> None:
+    def __init__(self, cash: float, buying_power: float, portfolio_value: float,
+                 positions: list, orders_callback, real_trades: bool,
+                 set_real_trades_cb=None) -> None:
         super().__init__()
         self.cash = cash
         self.buying_power = buying_power
         self.portfolio_value = portfolio_value
         self.positions = positions
         self.real_trades = real_trades
+        self._set_real_trades_cb = set_real_trades_cb
         self.top_title = Static(id="portfolio-title") # gets filled in on_mount
         # Holdings Table
         self.holdings_table = DataTable(zebra_stripes=True, id="holdings-table")
@@ -40,6 +43,7 @@ class PortfolioScreen(Screen):
         #Orders Table
         self.order_table = DataTable(zebra_stripes=True, id="orders-table")
         self.order_table.add_columns("Symbol", "Side", "Qty", "Value", "Type", "Status")
+        self.mode_switch = Switch(value=self.real_trades, id="trade-mode-switch")
         self.orders_callback = orders_callback
         self._refresh_job = None  # handle for cancel
 
@@ -48,6 +52,11 @@ class PortfolioScreen(Screen):
     def compose(self):
         yield Vertical(
             self.top_title,
+            Horizontal(
+                Static("Live Trading", id="mode-label"),
+                self.mode_switch,
+                id="trade-mode-row",
+            ),
             Static("Portfolio assets:", id="assets-title"),
             self.holdings_table,
             Static("Order History:", id="orders-title"),
@@ -136,3 +145,18 @@ class PortfolioScreen(Screen):
                     order.status,
                 )
             table.scroll_home()
+
+    async def on_switch_changed(self, event: Switch.Changed) -> None:
+        if event.switch.id == "trade-mode-switch":
+            self.real_trades = event.value
+            if callable(self._set_real_trades_cb):
+                self._set_real_trades_cb(event.value)
+            top_title_widget = self.query_one("#portfolio-title", Static)
+            acct = "LIVE" if self.real_trades else "PAPER"
+            top_title_widget.update(
+                f"** [b]{acct} ACCOUNT[/b] **\n"
+                f"Cash: [green]${self.cash:,.2f}[/]\n"
+                f"Buying Power: [cyan]${self.buying_power:,.2f}[/]\n"
+                f"Portfolio Value: [cyan]${self.portfolio_value:,.2f}[/]"
+            )
+            self._refresh_orders()
