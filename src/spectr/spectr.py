@@ -269,8 +269,10 @@ class SpectrApp(App):
             self._update_queue.put(symbol)
             if symbol == self.ticker_symbols[self.active_symbol_index]:
                 if self.screen_stack and isinstance(self.screen_stack[-1], SplashScreen):
-                    self.pop_screen()
-            self.update_view(self.ticker_symbols[self.active_symbol_index])
+                    # schedule screen pop on the main thread – we are in an executor
+                    self.call_from_thread(self.pop_screen)
+                # refresh the active view from the UI thread
+                self.call_from_thread(self.update_view, self.ticker_symbols[self.active_symbol_index])
 
         except Exception as exc:
             log.error(f"[poll] {symbol}: {traceback.format_exc()}")
