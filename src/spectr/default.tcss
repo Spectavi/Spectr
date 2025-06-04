@@ -205,3 +205,10 @@ PortfolioScreen {
     text-align: center;
 }
 
+#trade-mode-row {
+    width: 100%;
+    content-align-horizontal: center;
+    align: center middle;
+    padding-bottom: 1;
+}
+
