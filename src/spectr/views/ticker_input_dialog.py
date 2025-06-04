@@ -143,6 +143,12 @@ class TickerInputDialog(ModalScreen):
         if not symbol:
             return
 
+        # Ignore placeholder rows used during scanning or when no results were
+        # found. These rows don't represent a valid ticker symbol and should
+        # not be added to the input field when selected.
+        if symbol.upper() in {"SCANNING...", NO_RESULT_ROW[0].upper()}:
+            return
+
         input_widget = self.query_one("#ticker-input", Input)
         current = [s for s in input_widget.value.upper().split(",") if s]
 

@@ -70,7 +70,7 @@ TickerInputDialog {
     border: solid green;
     padding: 1 2;
     content-align-horizontal: center;
-    background: #262626;
+    background: #1a1a1a;
 }
 
 #ticker-input {
@@ -151,7 +151,7 @@ OrderDialog {
     border: solid green;
     padding: 1 2;
     content-align-horizontal: center;
-    background: #262626;
+    background: #1a1a1a;
 }
 
 #dlg_title, #dlg_pos {
@@ -196,7 +196,7 @@ PortfolioScreen {
     text-align: center;
     content-align-horizontal: center;
     content-align-vertical: top;
-    background: #262626;
+    background: #1a1a1a;
     border: solid green;
     padding: 1 2;
 }
