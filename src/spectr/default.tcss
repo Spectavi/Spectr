@@ -66,7 +66,7 @@ TickerInputDialog {
 }
 #ticker_input_dlg_body {
     width: 60%;
-    height: 90%;
+    height: 46;
     border: solid green;
     padding: 1 2;
     content-align-horizontal: center;
@@ -75,10 +75,16 @@ TickerInputDialog {
 
 #ticker-input {
     height: 3;
+    width: 80%;
     border: heavy green;
     padding: 0 1;
     background: #262626;
     color: #00ff55;
+}
+
+#ticker_input_row {
+    width: 100%;
+    content-align-horizontal: center;
 }
 
 #submit-button {
@@ -141,7 +147,7 @@ OrderDialog {
 
 #dlg_body {
     width: 50%;
-    height: 60%;
+    height: 40;
     border: solid green;
     padding: 1 2;
     content-align-horizontal: center;

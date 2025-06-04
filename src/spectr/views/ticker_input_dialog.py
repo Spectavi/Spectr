@@ -67,11 +67,14 @@ class TickerInputDialog(ModalScreen):
     def compose(self):
         yield Vertical(
             Label("Enter new ticker symbol list (up to 20):"),
-            Input(
-                placeholder="e.g. AAPL,AMZN,META,MSFT,NVDA,TSLA,GOOG,VTI,GLD",
-                id="ticker-input",
+            Horizontal(
+                Input(
+                    placeholder="e.g. AAPL,AMZN,META,MSFT,NVDA,TSLA,GOOG,VTI,GLD",
+                    id="ticker-input",
+                ),
+                Button("Submit", id="submit-button", variant="success"),
+                id="ticker_input_row",
             ),
-            Button("Submit", id="submit-button", variant="success"),
             Label("Top 20 gainers today:", id="gainers-title"),
             Container(
                 DataTable(id="gainers-table"),
