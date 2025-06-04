@@ -281,14 +281,15 @@ class SpectrApp(App):
             return
 
         while not self._stop_event.is_set() and not self._shutting_down:
-            # Fan-out
-            futures = [
-                self._poll_pool.submit(self._poll_one_symbol, sym)
-                for sym in self.ticker_symbols
-            ]
+            futures = []
+            for sym in self.ticker_symbols:
+                f = self._safe_submit(self._poll_one_symbol, sym)
+                if f:
+                    futures.append(f)
 
-            # Fan-in – wait until ALL symbols finish
-            wait(futures, return_when="ALL_COMPLETED")
+            if futures:
+                # Fan-in – wait until ALL symbols finish
+                wait(futures, return_when="ALL_COMPLETED")
 
             # (optional) bail early if any worker raised
             for f in futures:
