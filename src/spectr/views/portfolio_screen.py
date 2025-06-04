@@ -35,11 +35,11 @@ class PortfolioScreen(Screen):
         self.top_title = Static(id="portfolio-title") # gets filled in on_mount
         # Holdings Table
         self.holdings_table = DataTable(zebra_stripes=True, id="holdings-table")
-        self.holdings_table.add_columns("Symbol", "Qty", "Value")
+        self.holdings_table.add_columns("Symbol", "Qty", "Value", "Avg Cost", "Profit")
 
         #Orders Table
         self.order_table = DataTable(zebra_stripes=True, id="orders-table")
-        self.order_table.add_columns("Symbol", "Side", "Qty", "Type", "Status")
+        self.order_table.add_columns("Symbol", "Side", "Qty", "Value", "Type", "Status")
         self.orders_callback = orders_callback
         self._refresh_job = None  # handle for cancel
 
@@ -72,10 +72,18 @@ class PortfolioScreen(Screen):
         self.holdings_table.clear()
         for pos in self.positions:
             log.debug(f"position: {pos}")
+            cost = getattr(pos, "cost_basis", None)
+            if cost is None:
+                try:
+                    cost = float(pos.qty) * float(pos.avg_entry_price)
+                except Exception:
+                    cost = 0.0
             self.holdings_table.add_row(
                 pos.symbol,
                 pos.qty,
                 pos.market_value,
+                cost,
+                float(pos.market_value) - float(cost) if cost else 0.0,
             )           # one-time load
         self.holdings_table.scroll_home()
 
@@ -110,10 +118,21 @@ class PortfolioScreen(Screen):
             table.clear()
             for order in orders:
                 print(f"Order: {order}")
+                price = (
+                        getattr(order, "filled_avg_price", None)
+                        or getattr(order, "limit_price", None)
+                        or getattr(order, "price", None)
+                        or 0.0
+                )
+                try:
+                    value = float(order.qty) * float(price)
+                except Exception:
+                    value = 0.0
                 table.add_row(
                     order.symbol,
                     order.side,
                     order.qty,
+                    value,
                     order.order_type,
                     order.status,
                 )
