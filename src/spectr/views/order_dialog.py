@@ -144,6 +144,14 @@ class OrderDialog(ModalScreen):
         elif self.order_type == OrderType.LIMIT.name:
             return f"Limit Order total: [yellow]${self.total:,.2f}[/]"
 
+    def _update_total(self) -> None:
+        """Recalculate and update the total based on the current order type."""
+        if self.order_type == OrderType.MARKET.name:
+            self.total = self.qty * self.price
+        else:
+            self.total = self.qty * self.limit_price
+        self.query_one("#dlg_total", Static).update(self._total_fmt())
+
     # ------------------------------------------------------------------
     async def on_mount(self, event: events.Mount):
         qty_in = self.query_one("#dlg_qty_in", Input)
@@ -195,22 +203,14 @@ class OrderDialog(ModalScreen):
         if new_price:
             self.price = new_price
             self.query_one("#dlg_price", Static).update(self._price_fmt())
-            if self.order_type == OrderType.MARKET.name:
-                # Update total if it's a market order
-                self.total = self.qty * self.price
-                self.query_one("#dlg_total", Static).update(self._total_fmt())
-            elif self.order_type == OrderType.LIMIT.name:
-                # Update total if it's a limit order
-                self.total = self.qty * self.limit_price
-                self.query_one("#dlg_total", Static).update(self._total_fmt())
-            self.query_one("#dlg_total", Static).update(self._total_fmt())
+            self._update_total()
 
     async def on_select_changed(self, event: Select.Changed):
         if event.select.id == "dlg_ot_sel":
             self.order_type = event.value
             limit_row = self.query_one("#lim_row")
             limit_row.display = self.order_type != OrderType.MARKET.name
-        self.query_one("#dlg_total", Static).update(self._total_fmt())
+        self._update_total()
 
     async def on_input_changed(self, event: Input.Changed):
         if event.input.id == "dlg_qty_in":
@@ -218,13 +218,12 @@ class OrderDialog(ModalScreen):
                 self.qty = float(event.value)
             except ValueError:
                 self.qty = 0
-            self.total = self.qty * self.price
         elif event.input.id == "dlg_lim_in":
             try:
                 self.limit_price = float(event.value)
             except ValueError:
                 self.limit_price = 0.0
-        self.query_one("#dlg_total", Static).update(self._total_fmt())
+        self._update_total()
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "dlg_ok":
