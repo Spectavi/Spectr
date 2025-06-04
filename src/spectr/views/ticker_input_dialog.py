@@ -62,7 +62,7 @@ class TickerInputDialog(ModalScreen):
         self.quote_cb = quote_cb
         self.has_recent_positive_news_cb = has_recent_positive_news_cb
         self._refresh_job = None  # handle for cancel
-        self._scan_pool = ThreadPoolExecutor(max_workers=50, thread_name_prefix="scan")
+        self._scan_pool = None
 
     def compose(self):
         yield Vertical(
@@ -86,6 +86,7 @@ class TickerInputDialog(ModalScreen):
         )
 
     async def on_mount(self, event: events.Mount) -> None:
+        self._scan_pool = ThreadPoolExecutor(max_workers=20, thread_name_prefix="scan")
         self.query_one("#ticker-input", Input).focus()
         table = self.query_one("#gainers-table", DataTable)
         self.gainers_table_columns = table.add_columns("Symbol", "% Δ", "Curr Price", "Open Price", "% Avg Vol", "Avg Vol", "Float")
@@ -113,8 +114,15 @@ class TickerInputDialog(ModalScreen):
 
     async def on_unmount(self, event: events.Unmount) -> None:
         # cancel the refresher when the dialog closes
-        self._refresh_job.stop()
-        self._refresh_job = None
+        if self._refresh_job:
+            self._refresh_job.stop()
+            self._refresh_job = None
+        if self._scan_pool:
+            self._scan_pool.shutdown(wait=False, cancel_futures=True)
+            self._scan_pool = None
+        if self._scan_pool:
+            self._scan_pool.shutdown(wait=False, cancel_futures=True)
+            self._scan_pool = None
 
     def on_data_table_row_selected(
             self,

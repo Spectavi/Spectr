@@ -281,14 +281,15 @@ class SpectrApp(App):
             return
 
         while not self._stop_event.is_set() and not self._shutting_down:
-            # Fan-out
-            futures = [
-                self._poll_pool.submit(self._poll_one_symbol, sym)
-                for sym in self.ticker_symbols
-            ]
+            futures = []
+            for sym in self.ticker_symbols:
+                f = self._safe_submit(self._poll_one_symbol, sym)
+                if f:
+                    futures.append(f)
 
-            # Fan-in – wait until ALL symbols finish
-            wait(futures, return_when="ALL_COMPLETED")
+            if futures:
+                # Fan-in – wait until ALL symbols finish
+                wait(futures, return_when="ALL_COMPLETED")
 
             # (optional) bail early if any worker raised
             for f in futures:
@@ -353,20 +354,25 @@ class SpectrApp(App):
             return None
 
     async def on_shutdown(self, event):
-        # 🚦 tell every background task we are quitting
+        # tell every background task we are quitting
         self._exit_backtest()
-
         self._shutting_down = True
         self._stop_event.set()
 
-        # 🏊 Wait for polling thread to finish before closing the worker pool
+        # Wait for polling thread to finish before closing the worker pool
         if self._poll_thread and self._poll_thread.is_alive():
             self._poll_thread.join()
 
         if self._poll_pool:
-            self._poll_pool.shutdown(wait=False, cancel_futures=True)
+            self._poll_pool.shutdown(wait=True, cancel_futures=True)
+            self._poll_pool = None
 
-        # 📨 Unblock and cancel the queue consumer before shutting down the default executor
+        # If the ticker dialog is still open, ensure its scan pool shuts down
+        for screen in list(self.screen_stack):
+            if isinstance(screen, TickerInputDialog) and getattr(screen, "_scan_pool", None):
+                screen._scan_pool.shutdown(wait=False, cancel_futures=True)
+                screen._scan_pool = None
+
         if self._consumer_task:
             self._update_queue.put_nowait(None)
             self._consumer_task.cancel()
