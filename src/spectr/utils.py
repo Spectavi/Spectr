@@ -18,7 +18,15 @@ log = logging.getLogger(__name__)
 def save_cache(symbol, df):
     if df is not None:
         cache_path = os.path.join(CACHE_DIR, CACHE_PATH_STR.format(symbol))
-        df.to_parquet(cache_path)
+
+        # Fastparquet (the default engine) struggles with timezone aware
+        # datetimes.  Convert any tz-aware index to UTC and drop the timezone
+        # before persisting so we always write timezone naive timestamps.
+        df_to_save = df.copy()
+        if isinstance(df_to_save.index, pd.DatetimeIndex) and df_to_save.index.tz is not None:
+            df_to_save.index = df_to_save.index.tz_convert("UTC").tz_localize(None)
+
+        df_to_save.to_parquet(cache_path)
         print(f"[Cache] DataFrame cached to {cache_path}")
 
 
