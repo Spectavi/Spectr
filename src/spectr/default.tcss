@@ -61,13 +61,6 @@ ScreenModal {
 
 /* ------- Ticker Input Dialog ------- */
 
-#ticker-input {
-    height: 3;
-    border: heavy green;
-    padding: 0 1;
-    background: transparent;
-}
-
 TickerInputDialog {
     align: center middle;
 }
@@ -77,7 +70,15 @@ TickerInputDialog {
     border: solid green;
     padding: 1 2;
     content-align-horizontal: center;
-    background: $panel;
+    background: #262626;
+}
+
+#ticker-input {
+    height: 3;
+    border: heavy green;
+    padding: 0 1;
+    background: #262626;
+    color: green;
 }
 
 #gainers-title, #scanner-title {
@@ -138,10 +139,19 @@ OrderDialog {
     border: solid green;
     padding: 1 2;
     content-align-horizontal: center;
-    background: $panel;
+    background: #262626;
 }
-#dlg_title, #dlg_pos { text-align: center; padding: 1 1; }
-#dlg_price, #dlg_total { text-align: center; padding: 1 1;}
+
+#dlg_title, #dlg_pos {
+    text-align: center;
+    padding: 1 1;
+}
+
+#dlg_price, #dlg_total {
+    text-align: center;
+    padding: 1 1;
+}
+
 #dlg_ot_sel {
     width: 30%;
 }
@@ -174,7 +184,7 @@ PortfolioScreen {
     text-align: center;
     content-align-horizontal: center;
     content-align-vertical: top;
-    background: $panel;
+    background: #262626;
     border: solid green;
     padding: 1 2;
 }
