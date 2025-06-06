@@ -25,9 +25,18 @@ class PortfolioScreen(Screen):
     portfolio_value = reactive(0.0)
     real_trades  = reactive(False)
 
-    def __init__(self, cash: float, buying_power: float, portfolio_value: float,
-                 positions: list, orders_callback, real_trades: bool,
-                 set_real_trades_cb=None) -> None:
+    def __init__(
+        self,
+        cash: float,
+        buying_power: float,
+        portfolio_value: float,
+        positions: list,
+        orders_callback,
+        real_trades: bool,
+        set_real_trades_cb=None,
+        balance_callback=None,
+        positions_callback=None,
+    ) -> None:
         super().__init__()
         self.cash = cash
         self.buying_power = buying_power
@@ -45,6 +54,8 @@ class PortfolioScreen(Screen):
         self.order_table.add_columns("Symbol", "Side", "Qty", "Value", "Type", "Status")
         self.mode_switch = Switch(value=self.real_trades, id="trade-mode-switch")
         self.orders_callback = orders_callback
+        self.balance_callback = balance_callback
+        self.positions_callback = positions_callback
         self._refresh_job = None  # handle for cancel
 
 
@@ -66,35 +77,7 @@ class PortfolioScreen(Screen):
         )
 
     async def on_mount(self, event: events.Mount) -> None:
-        # title
-        acct = "LIVE" if self.real_trades else "PAPER"
-
-        top_title_widget = self.query_one("#portfolio-title", Static)
-        top_title_widget.update(
-            f"** [b]{acct} ACCOUNT[/b] **\n"
-            f"Cash: [green]${self.cash:,.2f}[/]\n"
-            f"Buying Power: [cyan]${self.buying_power:,.2f}[/]\n"
-            f"Portfolio Value: [cyan]${self.portfolio_value:,.2f}[/]",
-        )
-
-        # table
-        self.holdings_table.clear()
-        for pos in self.positions:
-            log.debug(f"position: {pos}")
-            cost = getattr(pos, "cost_basis", None)
-            if cost is None:
-                try:
-                    cost = float(pos.qty) * float(pos.avg_entry_price)
-                except Exception:
-                    cost = 0.0
-            self.holdings_table.add_row(
-                pos.symbol,
-                pos.qty,
-                pos.market_value,
-                cost,
-                float(pos.market_value) - float(cost) if cost else 0.0,
-            )           # one-time load
-        self.holdings_table.scroll_home()
+        self._reload_account_data()
 
         # schedule auto-refresh of the quote
         self._refresh_job = self.set_interval(
@@ -105,6 +88,51 @@ class PortfolioScreen(Screen):
         # cancel the refresher when the dialog closes
         self._refresh_job.stop()
         self._refresh_job = None
+
+    def _reload_account_data(self):
+        """Refresh balance metrics and positions using callbacks."""
+        if callable(self.balance_callback):
+            info = self.balance_callback()
+            if info:
+                self.cash = info.get("cash", 0.0)
+                self.buying_power = info.get("buying_power", 0.0)
+                self.portfolio_value = info.get("portfolio_value", 0.0)
+
+        if callable(self.positions_callback):
+            try:
+                self.positions = self.positions_callback() or []
+            except Exception:
+                log.warning("Failed to fetch positions")
+                self.positions = []
+
+        # update title
+        top_title_widget = self.query_one("#portfolio-title", Static)
+        acct = "LIVE" if self.real_trades else "PAPER"
+        top_title_widget.update(
+            f"** [b]{acct} ACCOUNT[/b] **\n"
+            f"Cash: [green]${self.cash:,.2f}[/]\n"
+            f"Buying Power: [cyan]${self.buying_power:,.2f}[/]\n"
+            f"Portfolio Value: [cyan]${self.portfolio_value:,.2f}[/]",
+        )
+
+        # refresh holdings table
+        self.holdings_table.clear()
+        for pos in self.positions:
+            cost = getattr(pos, "cost_basis", None)
+            if cost is None:
+                try:
+                    cost = float(pos.qty) * float(pos.avg_entry_price)
+                except Exception:
+                    cost = 0.0
+            profit = float(pos.market_value) - float(cost) if cost else 0.0
+            self.holdings_table.add_row(
+                pos.symbol,
+                pos.qty,
+                pos.market_value,
+                cost,
+                profit,
+            )
+        self.holdings_table.scroll_home()
 
     def _refresh_orders(self):
         log.debug("Refreshing orders")
@@ -152,12 +180,5 @@ class PortfolioScreen(Screen):
             self.real_trades = event.value
             if callable(self._set_real_trades_cb):
                 self._set_real_trades_cb(event.value)
-            top_title_widget = self.query_one("#portfolio-title", Static)
-            acct = "LIVE" if self.real_trades else "PAPER"
-            top_title_widget.update(
-                f"** [b]{acct} ACCOUNT[/b] **\n"
-                f"Cash: [green]${self.cash:,.2f}[/]\n"
-                f"Buying Power: [cyan]${self.buying_power:,.2f}[/]\n"
-                f"Portfolio Value: [cyan]${self.portfolio_value:,.2f}[/]"
-            )
+            self._reload_account_data()
             self._refresh_orders()

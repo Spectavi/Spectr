@@ -627,6 +627,8 @@ class SpectrApp(App):
                     BROKER_API.get_all_orders,
                     self.args.real_trades,
                     self.set_real_trades,
+                    BROKER_API.get_balance,
+                    BROKER_API.get_positions,
                 )
             )
 
