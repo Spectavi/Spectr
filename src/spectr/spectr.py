@@ -3,12 +3,16 @@ import asyncio
 import contextlib
 import logging
 import os
+import json
+import pathlib
+import time
 import queue
 import sys
 import threading
 import traceback
 from concurrent.futures._base import wait
 from concurrent.futures.thread import ThreadPoolExecutor
+from concurrent.futures import as_completed
 from datetime import datetime, timedelta
 
 import backtrader as bt
@@ -53,6 +57,7 @@ BUY_SOUND_PATH = 'src/spectr/res/buy.mp3'
 SELL_SOUND_PATH = 'src/spectr/res/sell.mp3'
 
 REFRESH_INTERVAL = 30  # seconds
+SCANNER_INTERVAL = 60  # seconds
 
 # Setup logging to file
 log_path = "debug.log"
@@ -134,6 +139,11 @@ class SpectrApp(App):
         self.signal_detected = []
         self._shutting_down = False
 
+        self._scanner_cache_file = pathlib.Path.home() / ".spectr_scanner_cache.json"
+        self.scanner_results: list[dict] = self._load_scanner_cache()
+        self._scan_pool: ThreadPoolExecutor | None = None
+        self._scanner_thread = threading.Thread()
+
     def compose(self) -> ComposeResult:
         yield TopOverlay(id="overlay-text")
         yield SymbolView(id="symbol-view")
@@ -161,6 +171,14 @@ class SpectrApp(App):
             daemon=True,
         )
         self._poll_thread.start()
+
+        self._scan_pool = ThreadPoolExecutor(max_workers=20, thread_name_prefix="scan")
+        self._scanner_thread = threading.Thread(
+            target=self._scanner_loop,
+            name="scanner",
+            daemon=True,
+        )
+        self._scanner_thread.start()
         self.update_status_bar()
         self._consumer_task = asyncio.create_task(self._process_updates())
 
@@ -336,6 +354,63 @@ class SpectrApp(App):
         except RuntimeError:
             return None
 
+    def _save_scanner_cache(self, rows: list[dict]) -> None:
+        try:
+            self._scanner_cache_file.write_text(json.dumps({"t": time.time(), "rows": rows}, indent=0))
+        except Exception as exc:
+            log.debug(f"cache write failed: {exc}")
+
+    def _load_scanner_cache(self) -> list[dict]:
+        try:
+            blob = json.loads(self._scanner_cache_file.read_text())
+            if time.time() - blob.get("t", 0) > 900:
+                return []
+            return blob.get("rows", [])
+        except Exception:
+            return []
+
+    def _check_scan_symbol(self, row):
+        sym = row["symbol"]
+        quote = DATA_API.fetch_quote(sym)
+        if not quote:
+            return None
+
+        prev = quote.get("previousClose") or 0
+        if prev == 0 or (quote["price"] - prev) / prev < 0.05:
+            return None
+
+        avg_vol = quote.get("avgVolume") or 0
+        if avg_vol == 0 or quote["volume"] < 3 * avg_vol:
+            return None
+
+        if not DATA_API.has_recent_positive_news(sym, hours=48):
+            return None
+
+        return {**row, "open_price": quote["price"] - quote["change"]}
+
+    def _run_scanner(self) -> list[dict]:
+        gainers = DATA_API.fetch_top_movers(limit=50)
+        futures = [self._scan_pool.submit(self._check_scan_symbol, row) for row in gainers]
+        return [f.result() for f in as_completed(futures) if f.result()]
+
+    def _scanner_loop(self) -> None:
+        self.scanner_results = self._load_scanner_cache()
+        while not self._stop_event.is_set() and not self._shutting_down:
+            try:
+                results = self._run_scanner()
+                self.scanner_results = results
+                self._save_scanner_cache(results)
+                if results:
+                    try:
+                        playsound.playsound(BUY_SOUND_PATH, block=False)
+                    except Exception as exc:
+                        log.debug(f"scan-sound failed: {exc}")
+            except Exception as exc:
+                log.error(f"[scanner] {exc}")
+
+            if self._stop_event.wait(SCANNER_INTERVAL):
+                break
+
     async def on_shutdown(self, event):
         # tell every background task we are quitting
         self._exit_backtest()
@@ -350,11 +425,13 @@ class SpectrApp(App):
             self._poll_pool.shutdown(wait=True, cancel_futures=True)
             self._poll_pool = None
 
-        # If the ticker dialog is still open, ensure its scan pool shuts down
-        for screen in list(self.screen_stack):
-            if isinstance(screen, TickerInputDialog) and getattr(screen, "_scan_pool", None):
-                screen._scan_pool.shutdown(wait=False, cancel_futures=True)
-                screen._scan_pool = None
+        if self._scanner_thread and self._scanner_thread.is_alive():
+            self._scanner_thread.join()
+
+        if self._scan_pool:
+            self._scan_pool.shutdown(wait=True, cancel_futures=True)
+            self._scan_pool = None
+
 
         if self._consumer_task:
             self._update_queue.put_nowait(None)
@@ -453,9 +530,13 @@ class SpectrApp(App):
 
     def action_prompt_symbol(self):
         self.auto_trading_enabled = False
-        self.push_screen(TickerInputDialog(callback=self.on_ticker_submit, top_movers_cb=DATA_API.fetch_top_movers,
-                                           quote_cb=DATA_API.fetch_quote,
-                                           has_recent_positive_news_cb=DATA_API.has_recent_positive_news))
+        self.push_screen(
+            TickerInputDialog(
+                callback=self.on_ticker_submit,
+                top_movers_cb=DATA_API.fetch_top_movers,
+                scanner_results=self.scanner_results,
+            )
+        )
 
     def on_ticker_submit(self, symbols: str):
         if (symbols):
