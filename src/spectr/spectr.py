@@ -370,10 +370,12 @@ class SpectrApp(App):
             return []
 
     def _check_scan_symbol(self, row):
+        """Fetch extra metrics for *row* and flag if it passes the filter."""
         sym = row["symbol"]
         quote = DATA_API.fetch_quote(sym)
         if not quote:
             return None
+
         profile = {}
         if hasattr(DATA_API, "fetch_company_profile"):
             try:
@@ -382,14 +384,9 @@ class SpectrApp(App):
                 profile = {}
 
         prev = quote.get("previousClose") or 0
-        if prev == 0 or (quote["price"] - prev) / prev < 0.05:
-            return None
 
         avg_vol = quote.get("avgVolume") or profile.get("volAvg") or 0
         volume = quote.get("volume") or 0
-        if avg_vol == 0 or volume < 3 * avg_vol:
-            return None
-
         float_shares = (
             profile.get("float")
             or profile.get("floatShares")
@@ -399,8 +396,13 @@ class SpectrApp(App):
 
         rel_vol_pct = 100 * volume / avg_vol if avg_vol else 0
 
+        passed = True
+        if prev == 0 or (quote["price"] - prev) / prev < 0.05:
+            passed = False
+        if avg_vol == 0 or volume < 3 * avg_vol:
+            passed = False
         if not DATA_API.has_recent_positive_news(sym, hours=48):
-            return None
+            passed = False
 
         return {
             **row,
@@ -408,12 +410,14 @@ class SpectrApp(App):
             "avg_volume": avg_vol,
             "volume_pct": rel_vol_pct,
             "float": float_shares,
+            "passed": passed,
         }
 
     def _run_scanner(self) -> list[dict]:
         gainers = DATA_API.fetch_top_movers(limit=50)
         futures = [self._scan_pool.submit(self._check_scan_symbol, row) for row in gainers]
-        return [f.result() for f in as_completed(futures) if f.result()]
+        results = [f.result() for f in as_completed(futures) if f.result()]
+        return [r for r in results if r.get("passed")]
 
     def _scanner_loop(self) -> None:
         self.scanner_results = self._load_scanner_cache()
