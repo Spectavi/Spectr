@@ -134,3 +134,15 @@ class FMPInterface(DataInterface):
         except Exception as exc:
             log.debug(f"news lookup failed for {symbol}: {exc}")
             return False
+
+    def fetch_company_profile(self, symbol: str) -> dict:
+        """Fetch profile information such as share float."""
+        url = f"https://financialmodelingprep.com/api/v3/profile/{symbol}?apikey={FMP_API_KEY}"
+        try:
+            data = requests.get(url, timeout=10).json()
+            if isinstance(data, list) and data:
+                return data[0]
+            return {}
+        except Exception as exc:
+            log.debug(f"Failed to fetch profile for {symbol}: {exc}")
+            return {}

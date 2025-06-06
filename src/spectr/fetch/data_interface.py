@@ -27,3 +27,8 @@ class DataInterface(ABC):
     def has_recent_positive_news(self, symbol: str, hours: int = 12) -> bool:
          # True if FMP has any bullish news for *symbol* in the last *hours*.
         pass
+
+    @abstractmethod
+    def fetch_company_profile(self, symbol: str) -> dict:
+        """Return company profile information such as share float."""
+        pass

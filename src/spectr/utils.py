@@ -39,6 +39,18 @@ def load_cache(symbol):
         log.debug("Cache not found.")
     return pd.DataFrame() # Return empty dataframe.
 
+
+def human_format(num: float) -> str:
+    """Return a human friendly string for large integers."""
+    num = float(num)
+    for unit in ("", "K", "M", "B", "T"):
+        if abs(num) < 1000.0:
+            if unit:
+                return f"{num:.1f}{unit}"
+            return f"{num:.0f}"
+        num /= 1000.0
+    return f"{num:.1f}P"
+
 def inject_quote_into_df(
     df: pd.DataFrame,
     quote: dict,
