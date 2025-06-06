@@ -116,6 +116,17 @@ class RobinhoodInterface(BrokerInterface, DataInterface):
                 return True
         return False
 
+    def fetch_company_profile(self, symbol: str) -> dict:
+        """Return basic company info. Robinhood does not expose float shares."""
+        try:
+            profile = r.stocks.get_fundamentals(symbol)
+            if isinstance(profile, list) and profile:
+                return profile[0]
+            return {}
+        except Exception as exc:
+            log.debug(f"profile lookup failed for {symbol}: {exc}")
+            return {}
+
     # ------------- BrokerInterface methods -------------
 
     def has_pending_order(self, symbol, real_trades=False):

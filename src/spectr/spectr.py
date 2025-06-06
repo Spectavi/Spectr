@@ -374,19 +374,41 @@ class SpectrApp(App):
         quote = DATA_API.fetch_quote(sym)
         if not quote:
             return None
+        profile = {}
+        if hasattr(DATA_API, "fetch_company_profile"):
+            try:
+                profile = DATA_API.fetch_company_profile(sym) or {}
+            except Exception:
+                profile = {}
 
         prev = quote.get("previousClose") or 0
         if prev == 0 or (quote["price"] - prev) / prev < 0.05:
             return None
 
-        avg_vol = quote.get("avgVolume") or 0
-        if avg_vol == 0 or quote["volume"] < 3 * avg_vol:
+        avg_vol = quote.get("avgVolume") or profile.get("volAvg") or 0
+        volume = quote.get("volume") or 0
+        if avg_vol == 0 or volume < 3 * avg_vol:
             return None
+
+        float_shares = (
+            profile.get("float")
+            or profile.get("floatShares")
+            or quote.get("sharesOutstanding")
+            or 0
+        )
+
+        rel_vol_pct = 100 * volume / avg_vol if avg_vol else 0
 
         if not DATA_API.has_recent_positive_news(sym, hours=48):
             return None
 
-        return {**row, "open_price": quote["price"] - quote["change"]}
+        return {
+            **row,
+            "open_price": quote["price"] - quote["change"],
+            "avg_volume": avg_vol,
+            "volume_pct": rel_vol_pct,
+            "float": float_shares,
+        }
 
     def _run_scanner(self) -> list[dict]:
         gainers = DATA_API.fetch_top_movers(limit=50)
@@ -534,6 +556,8 @@ class SpectrApp(App):
             TickerInputDialog(
                 callback=self.on_ticker_submit,
                 top_movers_cb=DATA_API.fetch_top_movers,
+                quote_cb=DATA_API.fetch_quote,
+                profile_cb=getattr(DATA_API, "fetch_company_profile", None),
                 scanner_results=self.scanner_results,
             )
         )
