@@ -110,15 +110,6 @@ TickerInputDialog {
     overflow: auto;
 }
 
-#orders-table, #holdings-table {
-    width: 100%;
-    padding: 1 1;
-}
-#orders-title, #assets-title {
-    margin: 1 1;
-    height: 1;
-}
-
 
 
 /* ------- Status Bar Overlay ------- */
@@ -207,8 +198,20 @@ PortfolioScreen {
 
 #trade-mode-row {
     width: 100%;
-    content-align-horizontal: center;
-    align: center middle;
-    padding-bottom: 1;
+    height: 6;
+}
+
+#trade-mode-switch {
+    height: 6;
+    width: 20%;
+}
+
+#orders-table, #holdings-table {
+    width: 100%;
+    padding: 1 1;
+}
+#orders-title, #assets-title {
+    margin: 1 1;
+    height: 1;
 }
 
