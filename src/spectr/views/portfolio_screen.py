@@ -2,7 +2,7 @@ import logging
 
 from textual.screen import Screen
 from textual.widgets import Static, DataTable, Header, Footer, Switch
-from textual.containers import Vertical, Horizontal
+from textual.containers import Vertical, Horizontal, Container
 from textual.reactive import reactive
 from textual import events
 
@@ -52,11 +52,12 @@ class PortfolioScreen(Screen):
     def compose(self):
         yield Vertical(
             self.top_title,
-            Horizontal(
+            Container(
                 Static("Live Trading", id="mode-label"),
                 self.mode_switch,
-                id="trade-mode-row",
+                id="trade-mode-container",
             ),
+
             Static("Portfolio assets:", id="assets-title"),
             self.holdings_table,
             Static("Order History:", id="orders-title"),
