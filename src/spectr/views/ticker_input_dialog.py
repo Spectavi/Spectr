@@ -8,7 +8,9 @@ import playsound
 
 log = logging.getLogger(__name__)
 
-NO_RESULT_ROW = ("No results found.", "", "", "")    # 4 cols = table layout
+NO_RESULT_ROW = (
+    "No results found.", "", "", "", "", "", ""
+)  # match table layout
 SCAN_SOUND_PATH = 'src/spectr/res/buy.mp3'
 
 
@@ -19,10 +21,11 @@ class TickerInputDialog(ModalScreen):
     ]
 
 
-    def __init__(self, callback, top_movers_cb, scanner_results=None):
+    def __init__(self, callback, top_movers_cb, quote_cb, scanner_results=None):
         super().__init__()
         self.callback = callback
         self.top_gainers_cb = top_movers_cb  # one quick client
+        self.quote_cb = quote_cb
         self.gainers_list: list[dict] = []
         self.gainers_table_columns = None
         self.scanner_list: list[dict] = scanner_results or []
@@ -68,7 +71,7 @@ class TickerInputDialog(ModalScreen):
         if self.scanner_list:
             self._populate_scanner_table(self.scanner_list)
         else:
-            scanner_table.add_row("Scanning...", "", "", "")
+            scanner_table.add_row("Scanning...", "", "", "", "", "", "")
 
 
 
@@ -145,11 +148,19 @@ class TickerInputDialog(ModalScreen):
         table.clear()
         for row in self.gainers_list:
             open_price = row["price"] - row["change"]
+            quote = self.quote_cb(row["symbol"]) if self.quote_cb else {}
+            vol = quote.get("volume") or 0
+            avg_vol = quote.get("avgVolume") or 0
+            shares = quote.get("sharesOutstanding") or 0
+            pct_avg = f"{vol / avg_vol * 100:.0f}%" if avg_vol else ""
             table.add_row(
                 row["symbol"],
                 row["changesPercentage"],
                 f"${row['price']:.2f}",
                 f"${open_price:.2f}",
+                pct_avg,
+                f"{avg_vol:,}" if avg_vol else "",
+                f"{shares:,}" if shares else "",
                 key=row["symbol"],
             )
         table.scroll_home()
@@ -160,14 +171,22 @@ class TickerInputDialog(ModalScreen):
         table.clear()
 
         if not rows:
-            table.add_row("No results found.", "", "", "")
+            table.add_row(*NO_RESULT_ROW)
         else:
             for row in rows:
+                quote = self.quote_cb(row["symbol"]) if self.quote_cb else {}
+                vol = quote.get("volume") or 0
+                avg_vol = quote.get("avgVolume") or 0
+                shares = quote.get("sharesOutstanding") or 0
+                pct_avg = f"{vol / avg_vol * 100:.0f}%" if avg_vol else ""
                 table.add_row(
                     row["symbol"],
                     row["changesPercentage"],
                     f"${row['price']:.2f}",
                     f"${row['open_price']:.2f}",
+                    pct_avg,
+                    f"{avg_vol:,}" if avg_vol else "",
+                    f"{shares:,}" if shares else "",
                 )
             try:
                 playsound.playsound(SCAN_SOUND_PATH, block=False)
