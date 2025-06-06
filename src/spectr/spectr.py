@@ -534,6 +534,7 @@ class SpectrApp(App):
             TickerInputDialog(
                 callback=self.on_ticker_submit,
                 top_movers_cb=DATA_API.fetch_top_movers,
+                quote_cb=DATA_API.fetch_quote,
                 scanner_results=self.scanner_results,
             )
         )
