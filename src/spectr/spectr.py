@@ -119,6 +119,30 @@ class SpectrApp(App):
 
     symbol_view: reactive[SymbolView] = reactive(None)
 
+    def _prepend_open_positions(self) -> None:
+        """Ensure open position symbols are at the start of ``ticker_symbols``."""
+        try:
+            positions = BROKER_API.get_positions()
+        except Exception as exc:
+            log.warning(f"Failed to fetch open positions: {exc}")
+            return
+
+        owned = []
+        for pos in positions or []:
+            sym = getattr(pos, "symbol", None)
+            if sym:
+                sym = sym.upper()
+                if sym not in owned:
+                    owned.append(sym)
+
+        if not owned:
+            return
+
+        # remove any owned symbols already present in the list
+        remaining = [s for s in self.ticker_symbols if s.upper() not in owned]
+
+        self.ticker_symbols = owned + remaining
+
     def __init__(self, args):
         super().__init__()
         self._consumer_task = None
@@ -152,6 +176,8 @@ class SpectrApp(App):
         await self.push_screen(SplashScreen())
         # Set symbols and active symbol
         self.ticker_symbols = self.args.symbols
+        self._prepend_open_positions()
+        self.args.symbols = self.ticker_symbols
         self.active_symbol_index = 0
         symbol = self.ticker_symbols[0]
         log.debug(f"self.ticker_symbols: {self.ticker_symbols}")
@@ -570,7 +596,9 @@ class SpectrApp(App):
     def on_ticker_submit(self, symbols: str):
         if (symbols):
             log.debug(f"on_ticker_submit: {symbols}")
-            self.ticker_symbols = [x.strip().upper() for x in symbols.split(',')]  # Update the symbol used by the app
+            self.ticker_symbols = [x.strip().upper() for x in symbols.split(',')]
+            self._prepend_open_positions()
+            self.args.symbols = self.ticker_symbols
             log.debug(f"on_ticker_submit: {self.ticker_symbols}")
             self.active_symbol_index = 0
             symbol = self.ticker_symbols[self.active_symbol_index]

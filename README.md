@@ -24,6 +24,7 @@ BYOS - Bring Your Own Strategy. You must implement your own trading strategy in 
 -  ⌨ Cycle through unlimited # of symbols with 0-9 keys or + / - keys.
 - 🤖 Arm / dis-arm auto-trading with `Ctrl+A`
 - 🔄 Change symbols list with `~` or `T`
+- 📌 Any stocks you currently own are automatically prepended to the watchlist
 - 🔄 Click symbols in Top Gainers list to add to watchlist.
 - 🔄 Scanner that filters top 50 gainers for favorable conditions.
 - 💵 See portfolio info + open / pending orders with `P`.
