@@ -563,6 +563,7 @@ class SpectrApp(App):
                 quote_cb=DATA_API.fetch_quote,
                 profile_cb=getattr(DATA_API, "fetch_company_profile", None),
                 scanner_results=self.scanner_results,
+                scanner_results_cb=lambda: self.scanner_results,
             )
         )
 
