@@ -160,10 +160,26 @@ class TickerInputDialog(ModalScreen):
     async def refresh_top_movers(self):
         rows = await asyncio.to_thread(self.top_gainers_cb, limit=20)
         log.debug(f"Top 20 gainers today: {rows}")
+
+        async def fetch(symbol: str) -> tuple[dict, dict]:
+            quote = {}
+            profile = {}
+            if self.quote_cb:
+                try:
+                    quote = await asyncio.to_thread(self.quote_cb, symbol)
+                except Exception as exc:
+                    log.debug(f"quote fetch failed for {symbol}: {exc}")
+            if self.profile_cb:
+                try:
+                    profile = await asyncio.to_thread(self.profile_cb, symbol)
+                except Exception as exc:
+                    log.debug(f"profile fetch failed for {symbol}: {exc}")
+            return quote or {}, profile or {}
+
+        quotes_profiles = await asyncio.gather(*(fetch(row["symbol"]) for row in rows))
+
         processed = []
-        for row in rows:
-            quote = self.quote_cb(row["symbol"]) if self.quote_cb else {}
-            profile = self.profile_cb(row["symbol"]) if self.profile_cb else {}
+        for row, (quote, profile) in zip(rows, quotes_profiles):
             avg_vol = quote.get("avgVolume") or profile.get("volAvg") or 0
             vol = quote.get("volume") or 0
             processed.append(
