@@ -1,4 +1,5 @@
 import logging
+import asyncio
 
 from textual import events
 from textual.widgets import Input, Label, Button, DataTable
@@ -20,7 +21,8 @@ class TickerInputDialog(ModalScreen):
     ]
 
 
-    def __init__(self, callback, top_movers_cb, quote_cb=None, profile_cb=None, scanner_results=None):
+    def __init__(self, callback, top_movers_cb, quote_cb=None, profile_cb=None,
+                 scanner_results=None, scanner_results_cb=None):
         super().__init__()
         self.callback = callback
         self.top_gainers_cb = top_movers_cb  # one quick client
@@ -30,6 +32,8 @@ class TickerInputDialog(ModalScreen):
         self.gainers_table_columns = None
         self.scanner_list: list[dict] = scanner_results or []
         self.scanner_table_columns = None
+        self.scanner_results_cb = scanner_results_cb
+        self._scanner_refresh_job = None
 
     def compose(self):
         yield Vertical(
@@ -58,26 +62,37 @@ class TickerInputDialog(ModalScreen):
     async def on_mount(self, event: events.Mount) -> None:
         self.query_one("#ticker-input", Input).focus()
         table = self.query_one("#gainers-table", DataTable)
-        self.gainers_table_columns = table.add_columns("Symbol", "% Δ", "Curr Price", "Open Price", "% Avg Vol", "Avg Vol", "Float")
+        self.gainers_table_columns = table.add_columns(
+            "Symbol", "% Δ", "Curr Price", "Open Price", "% Avg Vol", "Avg Vol", "Float"
+        )
         table.cursor_type = "row"
         table.show_cursor = True
+        table.add_row("Loading...", "", "", "", "", "", "")
 
         scanner_table = self.query_one("#scanner-table", DataTable)
-        self.scanner_table_columns = scanner_table.add_columns("Symbol", "% Δ", "Curr Price", "Open Price", "% Avg Vol", "Avg Vol", "Float")
+        self.scanner_table_columns = scanner_table.add_columns(
+            "Symbol", "% Δ", "Curr Price", "Open Price", "% Avg Vol", "Avg Vol", "Float"
+        )
         scanner_table.cursor_type = "row"
         scanner_table.show_cursor = True
-        self.refresh_top_movers()
+
+        asyncio.create_task(self.refresh_top_movers())
 
         if self.scanner_list:
             self._populate_scanner_table(self.scanner_list)
         else:
             scanner_table.add_row("Scanning...", "", "", "", "", "", "")
+            if self.scanner_results_cb:
+                self._scanner_refresh_job = self.set_interval(
+                    1.0, self._check_scanner_results
+                )
 
 
 
     async def on_unmount(self, event: events.Unmount) -> None:
-        # cancel the refresher when the dialog closes
-        pass
+        if self._scanner_refresh_job:
+            self._scanner_refresh_job.stop()
+            self._scanner_refresh_job = None
 
     def on_data_table_row_selected(
             self,
@@ -115,7 +130,7 @@ class TickerInputDialog(ModalScreen):
             case "gainers-select-button":
                 self._select_gainers()
             case "gainers-refresh-button":
-                self.refresh_top_movers()
+                asyncio.create_task(self.refresh_top_movers())
             case "scanner-select-button":
                 self._select_scanners()
 
@@ -141,32 +156,44 @@ class TickerInputDialog(ModalScreen):
         top10 = ",".join(row["symbol"] for row in self.scanner_list)
         self.query_one("#ticker-input", Input).value = top10
 
-    def refresh_top_movers(self):
-        self.gainers_list = self.top_gainers_cb(limit=20)
-        log.debug(f"Top 20 gainers today: {self.gainers_list}")
-        table = self.query_one("#gainers-table", DataTable)
-        table.clear()
-        for row in self.gainers_list:
-            open_price = row["price"] - row["change"]
+    async def refresh_top_movers(self):
+        rows = await asyncio.to_thread(self.top_gainers_cb, limit=20)
+        log.debug(f"Top 20 gainers today: {rows}")
+        processed = []
+        for row in rows:
             quote = self.quote_cb(row["symbol"]) if self.quote_cb else {}
             profile = self.profile_cb(row["symbol"]) if self.profile_cb else {}
             avg_vol = quote.get("avgVolume") or profile.get("volAvg") or 0
             vol = quote.get("volume") or 0
-            pct = f"{vol / avg_vol * 100:.0f}%" if avg_vol else ""
-            float_val = (
-                profile.get("float")
-                or profile.get("floatShares")
-                or quote.get("sharesOutstanding")
-                or 0
+            processed.append(
+                {
+                    "symbol": row["symbol"],
+                    "changesPercentage": row["changesPercentage"],
+                    "price": row["price"],
+                    "open_price": row["price"] - row.get("change", 0),
+                    "pct": f"{vol / avg_vol * 100:.0f}%" if avg_vol else "",
+                    "avg_vol": avg_vol,
+                    "float": (
+                        profile.get("float")
+                        or profile.get("floatShares")
+                        or quote.get("sharesOutstanding")
+                        or 0
+                    ),
+                }
             )
+
+        self.gainers_list = processed
+        table = self.query_one("#gainers-table", DataTable)
+        table.clear()
+        for row in processed:
             table.add_row(
                 row["symbol"],
                 row["changesPercentage"],
                 f"${row['price']:.2f}",
-                f"${open_price:.2f}",
-                pct,
-                utils.human_format(avg_vol),
-                utils.human_format(float_val),
+                f"${row['open_price']:.2f}",
+                row["pct"],
+                utils.human_format(row["avg_vol"]),
+                utils.human_format(row["float"]),
                 key=row["symbol"],
             )
         table.scroll_home()
@@ -196,3 +223,14 @@ class TickerInputDialog(ModalScreen):
                 log.debug(f"scan-sound failed: {exc}")
 
         table.scroll_home()
+
+    async def _check_scanner_results(self):
+        if not self.scanner_results_cb:
+            return
+        results = self.scanner_results_cb()
+        if results and results != self.scanner_list:
+            self.scanner_list = results
+            self._populate_scanner_table(results)
+            if self._scanner_refresh_job:
+                self._scanner_refresh_job.stop()
+                self._scanner_refresh_job = None
