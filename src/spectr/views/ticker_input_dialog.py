@@ -46,15 +46,15 @@ class TickerInputDialog(ModalScreen):
                 Button("Submit", id="submit-button", variant="success"),
                 id="ticker_input_row",
             ),
+            Label("Scanner results:", id="scanner-title"),
+            Container(
+                DataTable(id="scanner-table"),
+                id="scanner-container",
+            ),
             Label("Top 20 gainers today:", id="gainers-title"),
             Container(
                 DataTable(id="gainers-table"),
                 id="gainers-container",
-            ),
-            Label("Scanner results:", id="scanner-title"),
-            Container(
-            DataTable(id="scanner-table"),
-                id="scanner-container",
             ),
             id="ticker_input_dlg_body",
         )
