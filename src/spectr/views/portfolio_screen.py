@@ -1,10 +1,11 @@
 import logging
 
 from textual.screen import Screen
-from textual.widgets import Static, DataTable, Header, Footer, Switch
-from textual.containers import Vertical, Horizontal, Container
+from textual.widgets import Static, DataTable, Switch
+from textual.containers import Vertical, Container
 from textual.reactive import reactive
 from textual import events
+import asyncio
 
 log = logging.getLogger(__name__)
 
@@ -77,22 +78,24 @@ class PortfolioScreen(Screen):
         )
 
     async def on_mount(self, event: events.Mount) -> None:
-        self._reload_account_data()
+        # Fetch account data in the background so the dialog appears immediately
+        asyncio.create_task(self._reload_account_data())
 
-        # schedule auto-refresh of the quote
+        # schedule auto-refresh of the orders
         self._refresh_job = self.set_interval(
-            self.REFRESH_SECS, self._refresh_orders(), pause=False
+            self.REFRESH_SECS, self._refresh_orders, pause=False
         )
 
     async def on_unmount(self, event: events.Unmount) -> None:
         # cancel the refresher when the dialog closes
-        self._refresh_job.stop()
-        self._refresh_job = None
+        if self._refresh_job:
+            self._refresh_job.stop()
+            self._refresh_job = None
 
-    def _reload_account_data(self):
+    async def _reload_account_data(self):
         """Refresh balance metrics and positions using callbacks."""
         if callable(self.balance_callback):
-            info = self.balance_callback()
+            info = await asyncio.to_thread(self.balance_callback)
             if info:
                 self.cash = info.get("cash", 0.0)
                 self.buying_power = info.get("buying_power", 0.0)
@@ -100,7 +103,7 @@ class PortfolioScreen(Screen):
 
         if callable(self.positions_callback):
             try:
-                self.positions = self.positions_callback() or []
+                self.positions = await asyncio.to_thread(self.positions_callback) or []
             except Exception:
                 log.warning("Failed to fetch positions")
                 self.positions = []
@@ -134,19 +137,19 @@ class PortfolioScreen(Screen):
             )
         self.holdings_table.scroll_home()
 
-    def _refresh_orders(self):
+    async def _refresh_orders(self):
         log.debug("Refreshing orders")
 
         orders = None
         try:
             log.debug("Fetching orders...")
-            orders = self.orders_callback(self.real_trades)
+            orders = await asyncio.to_thread(self.orders_callback, self.real_trades)
             log.debug(f"Account orders: {orders}")
         except Exception:
-            log.warning(f"Account orders fetch failed! get_all_orders()")
+            log.warning("Account orders fetch failed! get_all_orders()")
             top_title_widget = self.query_one("#portfolio-title", Static)
             top_title_widget.update(
-                f"[b]ACCOUNT ACCESS FAILED![/b]"
+                "[b]ACCOUNT ACCESS FAILED![/b]"
             )
 
         if orders:
@@ -180,5 +183,5 @@ class PortfolioScreen(Screen):
             self.real_trades = event.value
             if callable(self._set_real_trades_cb):
                 self._set_real_trades_cb(event.value)
-            self._reload_account_data()
-            self._refresh_orders()
+            await self._reload_account_data()
+            await self._refresh_orders()
