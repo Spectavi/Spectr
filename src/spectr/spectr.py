@@ -30,6 +30,7 @@ from CustomStrategy import CustomStrategy
 from fetch.broker_interface import BrokerInterface, OrderSide, OrderType
 from utils import load_cache, save_cache
 from views.backtest_input_dialog import BacktestInputDialog
+from views.backtest_result_screen import BacktestResultScreen
 from views.order_dialog import OrderDialog
 from views.portfolio_screen import PortfolioScreen
 from views.splash_screen import SplashScreen
@@ -768,7 +769,6 @@ class SpectrApp(App):
                 self.run_backtest, df, symbol, self.args, starting_cash
             )
             log.debug("Backtest completed successfully.")
-            self.is_backtest = True
 
             num_buys = len(result.get("buy_signals", []))
             num_sells = len(result.get("sell_signals", []))
@@ -802,22 +802,28 @@ class SpectrApp(App):
             # left-join adds open/high/low/volume from the original df
             df = df.join(price_df[["buy_signals", "sell_signals"]])
 
-            # Switch the UI into back-test mode
-            self.symbol_view.graph.is_backtest = True
-            self.symbol_view.macd.is_backtest = True
-            self.update_view(symbol)
+
+
+            # Show results screen with summary information
+            self.push_screen(
+                BacktestResultScreen(
+                    df,
+                    self.args,
+                    symbol=symbol,
+                    start_date=form["from"],
+                    end_date=form["to"],
+                    start_value=starting_cash,
+                    end_value=result["final_value"],
+                    num_buys=num_buys,
+                    num_sells=num_sells,
+                )
+            )
 
         except Exception as exc:
             self.query_one("#overlay-text", TopOverlay).flash_message(
                 f"Back-test error: {exc}", style="bold red"
             )
             log.error("Back-test error: %s", traceback.format_exc())
-            self.is_backtest = False
-
-            # Turn is_backtest off for every graph shown.
-            self.symbol_view.graph.is_backtest = False
-            self.symbol_view.macd.is_backtest = False
-            self.update_status_bar()
 
     def _exit_backtest(self) -> None:
         """Return to live data when the user presses 0-9."""

@@ -215,3 +215,22 @@ PortfolioScreen {
     height: 1;
 }
 
+
+BacktestResultScreen {
+    align: center middle;
+}
+
+#backtest-result-container {
+    width: 80%;
+    height: 80%;
+    background: #1a1a1a;
+    border: solid green;
+    padding: 1 2;
+    content-align-horizontal: center;
+    content-align-vertical: top;
+}
+
+#backtest-report {
+    padding: 1;
+    text-align: left;
+}
