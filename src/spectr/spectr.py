@@ -666,22 +666,14 @@ class SpectrApp(App):
         if self.screen_stack and isinstance(self.screen_stack[-1], PortfolioScreen):
             self.pop_screen()
         else:
-            # pass your broker instance; adjust if you keep it elsewhere
-            balance_info = BROKER_API.get_balance()
-            if not balance_info:
-                self.flash_message("ERROR ACCESSING BROKER ACCOUNT!")
-
-            cash = balance_info.get("cash") if balance_info else 0.00
-            buying_power = balance_info.get("buying_power") if balance_info else 0.00
-            portfolio_value = balance_info.get("portfolio_value") if balance_info else 0.00
-            positions = BROKER_API.get_positions()
-
+            # Open the portfolio screen immediately with placeholder values.
+            # Data will be loaded in the background once the screen mounts.
             self.push_screen(
                 PortfolioScreen(
-                    cash,
-                    buying_power,
-                    portfolio_value,
-                    positions,
+                    0.0,
+                    0.0,
+                    0.0,
+                    [],
                     BROKER_API.get_all_orders,
                     self.args.real_trades,
                     self.set_real_trades,
