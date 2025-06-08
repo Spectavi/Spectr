@@ -1,5 +1,7 @@
 import logging
 
+from typing import Optional
+
 from textual.screen import Screen
 from textual.widgets import Static, DataTable, Switch
 from textual.containers import Vertical, Container
@@ -28,10 +30,11 @@ class PortfolioScreen(Screen):
 
     def __init__(
         self,
-        cash: float,
-        buying_power: float,
-        portfolio_value: float,
-        positions: list,
+        cash: Optional[float],
+        buying_power: Optional[float],
+        portfolio_value: Optional[float],
+        positions: Optional[list],
+        orders: Optional[list],
         orders_callback,
         real_trades: bool,
         set_real_trades_cb=None,
@@ -39,11 +42,15 @@ class PortfolioScreen(Screen):
         positions_callback=None,
     ) -> None:
         super().__init__()
-        self.cash = cash
-        self.buying_power = buying_power
-        self.portfolio_value = portfolio_value
-        self.positions = positions
+        self.cash = cash or 0.0
+        self.buying_power = buying_power or 0.0
+        self.portfolio_value = portfolio_value or 0.0
+        self.positions = positions or []
+        self.cached_orders = orders or []
         self.real_trades = real_trades
+        self._has_cached_balance = cash is not None
+        self._has_cached_positions = positions is not None
+        self._has_cached_orders = orders is not None
         self._set_real_trades_cb = set_real_trades_cb
         self.top_title = Static(id="portfolio-title") # gets filled in on_mount
         # Holdings Table
@@ -58,6 +65,65 @@ class PortfolioScreen(Screen):
         self.balance_callback = balance_callback
         self.positions_callback = positions_callback
         self._refresh_job = None  # handle for cancel
+
+        # Initial placeholder content
+        acct = "LIVE" if self.real_trades else "PAPER"
+        if self._has_cached_balance:
+            self.top_title.update(
+                f"** [b]{acct} ACCOUNT[/b] **\n"
+                f"Cash: [green]${self.cash:,.2f}[/]\n"
+                f"Buying Power: [cyan]${self.buying_power:,.2f}[/]\n"
+                f"Portfolio Value: [cyan]${self.portfolio_value:,.2f}[/]",
+            )
+        else:
+            self.top_title.update(
+                f"** [b]{acct} ACCOUNT[/b] **\n"
+                "Cash: Loading...\n"
+                "Buying Power: Loading...\n"
+                "Portfolio Value: Loading...",
+            )
+
+        if self._has_cached_positions:
+            for pos in self.positions:
+                cost = getattr(pos, "cost_basis", None)
+                if cost is None:
+                    try:
+                        cost = float(pos.qty) * float(pos.avg_entry_price)
+                    except Exception:
+                        cost = 0.0
+                profit = float(pos.market_value) - float(cost) if cost else 0.0
+                self.holdings_table.add_row(
+                    pos.symbol,
+                    pos.qty,
+                    pos.market_value,
+                    cost,
+                    profit,
+                )
+        else:
+            self.holdings_table.add_row("Loading...", "", "", "", "")
+
+        if self._has_cached_orders:
+            for order in self.cached_orders:
+                price = (
+                    getattr(order, "filled_avg_price", None)
+                    or getattr(order, "limit_price", None)
+                    or getattr(order, "price", None)
+                    or 0.0
+                )
+                try:
+                    value = float(order.qty) * float(price)
+                except Exception:
+                    value = 0.0
+                self.order_table.add_row(
+                    order.symbol,
+                    order.side,
+                    order.qty,
+                    value,
+                    order.order_type,
+                    order.status,
+                )
+        else:
+            self.order_table.add_row("Loading...", "", "", "", "", "")
 
 
 
@@ -80,6 +146,7 @@ class PortfolioScreen(Screen):
     async def on_mount(self, event: events.Mount) -> None:
         # Fetch account data in the background so the dialog appears immediately
         asyncio.create_task(self._reload_account_data())
+        asyncio.create_task(self._refresh_orders())
 
         # schedule auto-refresh of the orders
         self._refresh_job = self.set_interval(
@@ -100,10 +167,14 @@ class PortfolioScreen(Screen):
                 self.cash = info.get("cash", 0.0)
                 self.buying_power = info.get("buying_power", 0.0)
                 self.portfolio_value = info.get("portfolio_value", 0.0)
+                self.app._portfolio_balance_cache = info
+                self._has_cached_balance = True
 
         if callable(self.positions_callback):
             try:
                 self.positions = await asyncio.to_thread(self.positions_callback) or []
+                self.app._portfolio_positions_cache = self.positions
+                self._has_cached_positions = True
             except Exception:
                 log.warning("Failed to fetch positions")
                 self.positions = []
@@ -177,6 +248,8 @@ class PortfolioScreen(Screen):
                     order.status,
                 )
             table.scroll_home()
+            self.app._portfolio_orders_cache = orders
+            self._has_cached_orders = True
 
     async def on_switch_changed(self, event: Switch.Changed) -> None:
         if event.switch.id == "trade-mode-switch":

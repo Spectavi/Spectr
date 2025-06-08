@@ -169,6 +169,11 @@ class SpectrApp(App):
         self._scan_pool: ThreadPoolExecutor | None = None
         self._scanner_thread = threading.Thread()
 
+        # Cache for portfolio data so reopening the portfolio screen is instant
+        self._portfolio_balance_cache: dict | None = None
+        self._portfolio_positions_cache: list | None = None
+        self._portfolio_orders_cache: list | None = None
+
     def compose(self) -> ComposeResult:
         yield TopOverlay(id="overlay-text")
         yield SymbolView(id="symbol-view")
@@ -666,14 +671,25 @@ class SpectrApp(App):
         if self.screen_stack and isinstance(self.screen_stack[-1], PortfolioScreen):
             self.pop_screen()
         else:
-            # Open the portfolio screen immediately with placeholder values.
-            # Data will be loaded in the background once the screen mounts.
+            # Pull any cached portfolio data so the screen shows it immediately.
+            balance = self._portfolio_balance_cache or {}
+            cash = balance.get("cash") if balance else None
+            buying_power = balance.get("buying_power") if balance else None
+            portfolio_value = balance.get("portfolio_value") if balance else None
+
+            positions = self._portfolio_positions_cache
+            orders = self._portfolio_orders_cache
+
+            # Open the portfolio screen immediately. If cached data exists it
+            # will be displayed right away; otherwise placeholders are shown
+            # while background tasks load the data.
             self.push_screen(
                 PortfolioScreen(
-                    0.0,
-                    0.0,
-                    0.0,
-                    [],
+                    cash,
+                    buying_power,
+                    portfolio_value,
+                    positions,
+                    orders,
                     BROKER_API.get_all_orders,
                     self.args.real_trades,
                     self.set_real_trades,
