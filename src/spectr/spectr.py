@@ -16,7 +16,6 @@ from datetime import datetime, timedelta
 
 import backtrader as bt
 import pandas as pd
-import playsound
 from dotenv import load_dotenv
 from textual.app import App, ComposeResult
 from textual.reactive import reactive
@@ -27,7 +26,7 @@ import metrics
 import utils
 from CustomStrategy import CustomStrategy
 from fetch.broker_interface import BrokerInterface, OrderSide, OrderType
-from utils import load_cache, save_cache
+from utils import load_cache, save_cache, play_sound
 from views.backtest_input_dialog import BacktestInputDialog
 from views.backtest_result_screen import BacktestResultScreen
 from views.order_dialog import OrderDialog
@@ -292,11 +291,11 @@ class SpectrApp(App):
                 if signal == "buy":
                     log.debug("Buy signal detected!")
                     self.signal_detected.append((symbol, curr_price, signal))
-                    playsound.playsound(BUY_SOUND_PATH)
+                    play_sound(BUY_SOUND_PATH)
                 elif signal == "sell":
                     log.debug("Sell signal detected!")
                     self.signal_detected.append((symbol, curr_price, signal))
-                    playsound.playsound(SELL_SOUND_PATH)
+                    play_sound(SELL_SOUND_PATH)
 
             # Notify UI thread
             self.df_cache[symbol] = df
@@ -370,7 +369,7 @@ class SpectrApp(App):
                             msg = f"REAL {msg}"
                         self.signal_detected.remove(signal)
                         BROKER_API.submit_order(symbol, side, OrderType.MARKET, self.args.real_trades)
-                        playsound.playsound(BUY_SOUND_PATH if sig == "buy" else SELL_SOUND_PATH)
+                        play_sound(BUY_SOUND_PATH if sig == "buy" else SELL_SOUND_PATH)
             elif symbol == self.ticker_symbols[self.active_symbol_index]:
                 if not self.is_backtest:
                     df = self.df_cache.get(symbol)
@@ -481,7 +480,7 @@ class SpectrApp(App):
                 self._save_scanner_cache(results)
                 if results:
                     try:
-                        playsound.playsound(BUY_SOUND_PATH, block=False)
+                        play_sound(BUY_SOUND_PATH)
                     except Exception as exc:
                         log.debug(f"scan-sound failed: {exc}")
             except Exception as exc:

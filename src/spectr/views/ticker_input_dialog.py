@@ -5,7 +5,7 @@ from textual import events
 from textual.widgets import Input, Label, Button, DataTable
 from textual.containers import Vertical, Horizontal, Container
 from textual.screen import ModalScreen
-import playsound
+from utils import play_sound
 import utils
 
 log = logging.getLogger(__name__)
@@ -257,7 +257,7 @@ class TickerInputDialog(ModalScreen):
                     utils.human_format(row.get("float", 0)),
                 )
             try:
-                playsound.playsound(SCAN_SOUND_PATH, block=False)
+                play_sound(SCAN_SOUND_PATH)
             except Exception as exc:
                 log.debug(f"scan-sound failed: {exc}")
 
