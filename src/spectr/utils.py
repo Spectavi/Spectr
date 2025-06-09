@@ -7,6 +7,8 @@ from tzlocal import get_localzone
 
 import pandas as pd
 import pytz
+import threading
+import playsound
 
 
 LOG_FILE = 'signal_log.csv'
@@ -50,6 +52,16 @@ def human_format(num: float) -> str:
             return f"{num:.0f}"
         num /= 1000.0
     return f"{num:.1f}P"
+
+
+def play_sound(path: str) -> None:
+    """Play a sound in a daemon thread to avoid blocking app exit."""
+
+    threading.Thread(
+        target=playsound.playsound,
+        args=(path,),
+        daemon=True,
+    ).start()
 
 def inject_quote_into_df(
     df: pd.DataFrame,
