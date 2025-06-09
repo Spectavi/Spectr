@@ -21,19 +21,30 @@ class TickerInputDialog(ModalScreen):
     ]
 
 
-    def __init__(self, callback, top_movers_cb, quote_cb=None, profile_cb=None,
-                 scanner_results=None, scanner_results_cb=None):
+    def __init__(
+            self,
+            callback,
+            top_movers_cb,
+            quote_cb=None,
+            profile_cb=None,
+            scanner_results=None,
+            scanner_results_cb=None,
+            gainers_results=None,
+            gainers_results_cb=None,
+    ):
         super().__init__()
         self.callback = callback
         self.top_gainers_cb = top_movers_cb  # one quick client
         self.quote_cb = quote_cb
         self.profile_cb = profile_cb
-        self.gainers_list: list[dict] = []
+        self.gainers_list: list[dict] = gainers_results or []
         self.gainers_table_columns = None
         self.scanner_list: list[dict] = scanner_results or []
         self.scanner_table_columns = None
         self.scanner_results_cb = scanner_results_cb
         self._scanner_refresh_job = None
+        self.gainers_results_cb = gainers_results_cb
+        self._gainers_refresh_job = None
 
     def compose(self):
         yield Vertical(
@@ -51,7 +62,7 @@ class TickerInputDialog(ModalScreen):
                 DataTable(id="scanner-table"),
                 id="scanner-container",
             ),
-            Label("Top 20 gainers today:", id="gainers-title"),
+            Label("Top 50 gainers today:", id="gainers-title"),
             Container(
                 DataTable(id="gainers-table"),
                 id="gainers-container",
@@ -76,7 +87,10 @@ class TickerInputDialog(ModalScreen):
         scanner_table.cursor_type = "row"
         scanner_table.show_cursor = True
 
-        asyncio.create_task(self.refresh_top_movers())
+        if self.gainers_list:
+            asyncio.create_task(self.refresh_top_movers(rows=self.gainers_list))
+        else:
+            asyncio.create_task(self.refresh_top_movers())
 
         if self.scanner_list:
             self._populate_scanner_table(self.scanner_list)
@@ -87,6 +101,10 @@ class TickerInputDialog(ModalScreen):
             self._scanner_refresh_job = self.set_interval(
                 1.0, self._check_scanner_results
             )
+        if self.gainers_results_cb:
+            self._gainers_refresh_job = self.set_interval(
+                1.0, self._check_gainers_results
+            )
 
 
 
@@ -94,6 +112,9 @@ class TickerInputDialog(ModalScreen):
         if self._scanner_refresh_job:
             self._scanner_refresh_job.stop()
             self._scanner_refresh_job = None
+        if self._gainers_refresh_job:
+            self._gainers_refresh_job.stop()
+            self._gainers_refresh_job = None
 
     def on_data_table_row_selected(
             self,
@@ -157,9 +178,10 @@ class TickerInputDialog(ModalScreen):
         top10 = ",".join(row["symbol"] for row in self.scanner_list)
         self.query_one("#ticker-input", Input).value = top10
 
-    async def refresh_top_movers(self):
-        rows = await asyncio.to_thread(self.top_gainers_cb, limit=20)
-        log.debug(f"Top 20 gainers today: {rows}")
+    async def refresh_top_movers(self, rows=None):
+        if rows is None:
+            rows = await asyncio.to_thread(self.top_gainers_cb, limit=50)
+        log.debug(f"Top 50 gainers today: {rows}")
 
         async def fetch(symbol: str) -> tuple[dict, dict]:
             quote = {}
@@ -251,3 +273,11 @@ class TickerInputDialog(ModalScreen):
             if self._scanner_refresh_job:
                 self._scanner_refresh_job.stop()
                 self._scanner_refresh_job = None
+
+    async def _check_gainers_results(self):
+        if not self.gainers_results_cb:
+            return
+        results = self.gainers_results_cb()
+        if results and results != self.gainers_list:
+            self.gainers_list = results
+            await self.refresh_top_movers(rows=results)

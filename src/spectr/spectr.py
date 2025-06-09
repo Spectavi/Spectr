@@ -166,6 +166,8 @@ class SpectrApp(App):
 
         self._scanner_cache_file = pathlib.Path.home() / ".spectr_scanner_cache.json"
         self.scanner_results: list[dict] = self._load_scanner_cache()
+        self._gainers_cache_file = pathlib.Path.home() / ".spectr_gainers_cache.json"
+        self.top_gainers: list[dict] = self._load_gainers_cache()
         self._scan_pool: ThreadPoolExecutor | None = None
         self._scanner_thread = threading.Thread()
 
@@ -392,9 +394,24 @@ class SpectrApp(App):
         except Exception as exc:
             log.debug(f"cache write failed: {exc}")
 
+    def _save_gainers_cache(self, rows: list[dict]) -> None:
+        try:
+            self._gainers_cache_file.write_text(json.dumps({"t": time.time(), "rows": rows}, indent=0))
+        except Exception as exc:
+            log.debug(f"gainers cache write failed: {exc}")
+
     def _load_scanner_cache(self) -> list[dict]:
         try:
             blob = json.loads(self._scanner_cache_file.read_text())
+            if time.time() - blob.get("t", 0) > 900:
+                return []
+            return blob.get("rows", [])
+        except Exception:
+            return []
+
+    def _load_gainers_cache(self) -> list[dict]:
+        try:
+            blob = json.loads(self._gainers_cache_file.read_text())
             if time.time() - blob.get("t", 0) > 900:
                 return []
             return blob.get("rows", [])
@@ -447,12 +464,15 @@ class SpectrApp(App):
 
     def _run_scanner(self) -> list[dict]:
         gainers = DATA_API.fetch_top_movers(limit=50)
+        self.top_gainers = gainers
+        self._save_gainers_cache(gainers)
         futures = [self._scan_pool.submit(self._check_scan_symbol, row) for row in gainers]
         results = [f.result() for f in as_completed(futures) if f.result()]
         return [r for r in results if r.get("passed")]
 
     def _scanner_loop(self) -> None:
         self.scanner_results = self._load_scanner_cache()
+        self.top_gainers = self._load_gainers_cache()
         while not self._stop_event.is_set() and not self._shutting_down:
             try:
                 results = self._run_scanner()
@@ -596,6 +616,8 @@ class SpectrApp(App):
                 profile_cb=getattr(DATA_API, "fetch_company_profile", None),
                 scanner_results=self.scanner_results,
                 scanner_results_cb=lambda: self.scanner_results,
+                gainers_results=self.top_gainers,
+                gainers_results_cb=lambda: self.top_gainers,
             )
         )
 
