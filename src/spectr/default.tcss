@@ -183,7 +183,7 @@ PortfolioScreen {
 
 #portfolio-screen {
     width: 50%;
-    height: 70%;
+    height: 42;
     text-align: center;
     content-align-horizontal: center;
     content-align-vertical: top;
@@ -194,19 +194,19 @@ PortfolioScreen {
 #portfolio-title {
     padding: 0 1;
     text-align: center;
+    height: 5
 }
 
-#trade-mode-container {
-    width: 100%;
+#mode-switch-container, #trade-switch-container {
+    width: 25%;
+    height: 5;
+}
+
+#auto-label, #trade-label {
+    width: 50%;
+    height: 5;
     text-align: center;
-}
-
-#trade-mode-switch {
-    padding: 0 1;
-}
-
-#auto-trade-switch {
-    padding: 0 1;
+    padding: 1 1;
 }
 
 #orders-table, #holdings-table {

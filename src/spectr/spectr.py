@@ -41,7 +41,7 @@ from views.trades_screen import TradesScreen
 
 # Notes for scanner filter:
 # - Already up 5%.
-# - 3x relative volume
+# - 4x relative volume
 # - News catalyst within the last 48 hrs.
 # - < 10mill float?
 # - Between $1.00 and $50.00?
@@ -57,8 +57,8 @@ from views.trades_screen import TradesScreen
 BUY_SOUND_PATH = 'src/spectr/res/buy.mp3'
 SELL_SOUND_PATH = 'src/spectr/res/sell.mp3'
 
-REFRESH_INTERVAL = 30  # seconds
-SCANNER_INTERVAL = 60  # seconds
+REFRESH_INTERVAL = 60  # seconds
+SCANNER_INTERVAL = REFRESH_INTERVAL
 
 # Setup logging to file
 log_path = "debug.log"
@@ -213,6 +213,7 @@ class SpectrApp(App):
             daemon=True,
         )
         self._scanner_thread.start()
+
         self.update_status_bar()
         self._consumer_task = asyncio.create_task(self._process_updates())
 

@@ -99,11 +99,11 @@ class TickerInputDialog(ModalScreen):
 
         if self.scanner_results_cb:
             self._scanner_refresh_job = self.set_interval(
-                1.0, self._check_scanner_results
+                10.0, self._check_scanner_results
             )
         if self.gainers_results_cb:
             self._gainers_refresh_job = self.set_interval(
-                1.0, self._check_gainers_results
+                10.0, self._check_gainers_results
             )
 
 

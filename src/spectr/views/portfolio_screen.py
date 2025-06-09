@@ -136,10 +136,14 @@ class PortfolioScreen(Screen):
         yield Vertical(
             self.top_title,
             Horizontal(
-                Static("Live Trading", id="mode-label"),
-                self.mode_switch,
-                Static("Auto Trades", id="auto-label"),
-                self.auto_switch,
+                Container(
+                    Static("Live Trading"),
+                    self.mode_switch,
+                    id="mode-switch-container"),
+                Container(
+                    Static("Auto Trades"),
+                    self.auto_switch,
+                    id="trade-switch-container"),
                 id="trade-mode-container",
             ),
 
