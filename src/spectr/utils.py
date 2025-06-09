@@ -8,7 +8,7 @@ from tzlocal import get_localzone
 import pandas as pd
 import pytz
 import threading
-import playsound
+import pygame
 
 
 LOG_FILE = 'signal_log.csv'
@@ -54,12 +54,27 @@ def human_format(num: float) -> str:
     return f"{num:.1f}P"
 
 
+_mixer_initialized = False
+_mixer_lock = threading.Lock()
+
+
+def _ensure_mixer() -> None:
+    """Initialize ``pygame``'s mixer if it hasn't been already."""
+    global _mixer_initialized
+    with _mixer_lock:
+        if not _mixer_initialized:
+            try:
+                pygame.mixer.init()
+                _mixer_initialized = True
+            except Exception as exc:  # pragma: no cover - just in case
+                log.debug("pygame mixer init failed: %s", exc)
+
+
 def play_sound(path: str) -> None:
     """Play a sound in a daemon thread to avoid blocking app exit.
 
-    Any exception raised by ``playsound`` is caught and logged so that
-    missing audio devices or other playback issues don't spam the
-    terminal with stack traces.
+    ``playsound`` caused Windows MCI errors; ``pygame`` provides a more
+    reliable cross-platform backend.
     """
 
     if not os.path.exists(path):
@@ -67,8 +82,11 @@ def play_sound(path: str) -> None:
         return
 
     def _play() -> None:
+        _ensure_mixer()
+        if not _mixer_initialized:
+            return
         try:
-            playsound.playsound(path)
+            pygame.mixer.Sound(path).play()
         except Exception as exc:  # pragma: no cover - just in case
             log.debug("play_sound failed: %s", exc)
 
