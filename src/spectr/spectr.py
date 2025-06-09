@@ -203,6 +203,7 @@ class SpectrApp(App):
             name="data-poller",
             daemon=True,
         )
+        log.debug("starting poll_thread")
         self._poll_thread.start()
 
         self._scan_pool = DaemonThreadPoolExecutor(max_workers=20, thread_name_prefix="scan")
@@ -211,9 +212,11 @@ class SpectrApp(App):
             name="scanner",
             daemon=True,
         )
+        log.debug("starting scanner_thread")
         self._scanner_thread.start()
 
         self.update_status_bar()
+        log.debug("starting consumer task")
         self._consumer_task = asyncio.create_task(self._process_updates())
 
     def get_live_data(self, symbol):
@@ -315,6 +318,8 @@ class SpectrApp(App):
         if self.is_backtest:
             return
 
+        log.debug("_polling_loop start")
+
         while not self._stop_event.is_set() and not self._shutting_down:
             futures = []
             for sym in self.ticker_symbols:
@@ -332,13 +337,18 @@ class SpectrApp(App):
                     log.error(f"Worker crashed: {exc}")
 
             if self._stop_event.wait(REFRESH_INTERVAL):
+                log.debug("_polling_loop stop event set")
                 break
+
+        log.debug("_polling_loop exit")
 
     async def _process_updates(self) -> None:
         """Runs in Textual’s event loop; applies any fresh data to the UI."""
+        log.debug("_process_updates start")
         while True:
             symbol: str = await asyncio.to_thread(self._update_queue.get)
             if symbol is None:
+                log.debug("_process_updates exit")
                 return
             # If the update is for the symbol the user is currently looking at,
             # push it straight into the Graph/MACD views.
@@ -471,6 +481,7 @@ class SpectrApp(App):
         return [r for r in results if r.get("passed")]
 
     def _scanner_loop(self) -> None:
+        log.debug("_scanner_loop start")
         self.scanner_results = self._load_scanner_cache()
         self.top_gainers = self._load_gainers_cache()
         while not self._stop_event.is_set() and not self._shutting_down:
@@ -487,9 +498,13 @@ class SpectrApp(App):
                 log.error(f"[scanner] {exc}")
 
             if self._stop_event.wait(SCANNER_INTERVAL):
+                log.debug("_scanner_loop stop event set")
                 break
 
+        log.debug("_scanner_loop exit")
+
     async def on_shutdown(self, event):
+        log.debug("on_shutdown start")
         # tell every background task we are quitting
         self._exit_backtest()
         self._shutting_down = True
@@ -497,21 +512,26 @@ class SpectrApp(App):
 
         # Stop worker pools and threads
         if self._poll_pool:
+            log.debug("shutting down poll_pool")
             self._poll_pool.shutdown(wait=True, cancel_futures=True)
             self._poll_pool = None
 
         if self._poll_thread and self._poll_thread.is_alive():
+            log.debug("joining poll_thread")
             self._poll_thread.join(timeout=5)
 
         if self._scan_pool:
+            log.debug("shutting down scan_pool")
             self._scan_pool.shutdown(wait=True, cancel_futures=True)
             self._scan_pool = None
 
         if self._scanner_thread and self._scanner_thread.is_alive():
+            log.debug("joining scanner_thread")
             self._scanner_thread.join(timeout=5)
 
 
         if self._consumer_task:
+            log.debug("cancelling consumer task")
             self._update_queue.put_nowait(None)
             self._consumer_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -519,6 +539,7 @@ class SpectrApp(App):
 
         loop = asyncio.get_running_loop()
         await loop.shutdown_default_executor()
+        log.debug("on_shutdown complete")
 
 
 
