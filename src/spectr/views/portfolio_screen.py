@@ -4,7 +4,7 @@ from typing import Optional
 
 from textual.screen import Screen
 from textual.widgets import Static, DataTable, Switch
-from textual.containers import Vertical, Container
+from textual.containers import Vertical, Container, Horizontal
 from textual.reactive import reactive
 from textual import events
 import asyncio
@@ -38,6 +38,8 @@ class PortfolioScreen(Screen):
         orders_callback,
         real_trades: bool,
         set_real_trades_cb=None,
+        auto_trading: bool = False,
+        set_auto_trading_cb=None,
         balance_callback=None,
         positions_callback=None,
     ) -> None:
@@ -52,6 +54,8 @@ class PortfolioScreen(Screen):
         self._has_cached_positions = positions is not None
         self._has_cached_orders = orders is not None
         self._set_real_trades_cb = set_real_trades_cb
+        self.auto_trading_enabled = auto_trading
+        self._set_auto_trading_cb = set_auto_trading_cb
         self.top_title = Static(id="portfolio-title") # gets filled in on_mount
         # Holdings Table
         self.holdings_table = DataTable(zebra_stripes=True, id="holdings-table")
@@ -61,6 +65,7 @@ class PortfolioScreen(Screen):
         self.order_table = DataTable(zebra_stripes=True, id="orders-table")
         self.order_table.add_columns("Symbol", "Side", "Qty", "Value", "Type", "Status")
         self.mode_switch = Switch(value=self.real_trades, id="trade-mode-switch")
+        self.auto_switch = Switch(value=self.auto_trading_enabled, id="auto-trade-switch")
         self.orders_callback = orders_callback
         self.balance_callback = balance_callback
         self.positions_callback = positions_callback
@@ -130,9 +135,11 @@ class PortfolioScreen(Screen):
     def compose(self):
         yield Vertical(
             self.top_title,
-            Container(
+            Horizontal(
                 Static("Live Trading", id="mode-label"),
                 self.mode_switch,
+                Static("Auto Trades", id="auto-label"),
+                self.auto_switch,
                 id="trade-mode-container",
             ),
 
@@ -258,3 +265,8 @@ class PortfolioScreen(Screen):
                 self._set_real_trades_cb(event.value)
             await self._reload_account_data()
             await self._refresh_orders()
+        elif event.switch.id == "auto-trade-switch":
+            self.auto_trading_enabled = event.value
+            if callable(self._set_auto_trading_cb):
+                self._set_auto_trading_cb(event.value)
+
