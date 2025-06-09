@@ -55,13 +55,24 @@ def human_format(num: float) -> str:
 
 
 def play_sound(path: str) -> None:
-    """Play a sound in a daemon thread to avoid blocking app exit."""
+    """Play a sound in a daemon thread to avoid blocking app exit.
 
-    threading.Thread(
-        target=playsound.playsound,
-        args=(path,),
-        daemon=True,
-    ).start()
+    Any exception raised by ``playsound`` is caught and logged so that
+    missing audio devices or other playback issues don't spam the
+    terminal with stack traces.
+    """
+
+    if not os.path.exists(path):
+        log.debug("Sound file does not exist: %s", path)
+        return
+
+    def _play() -> None:
+        try:
+            playsound.playsound(path)
+        except Exception as exc:  # pragma: no cover - just in case
+            log.debug("play_sound failed: %s", exc)
+
+    threading.Thread(target=_play, daemon=True).start()
 
 def inject_quote_into_df(
     df: pd.DataFrame,
