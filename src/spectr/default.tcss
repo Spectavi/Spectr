@@ -205,6 +205,10 @@ PortfolioScreen {
     padding: 0 1;
 }
 
+#auto-trade-switch {
+    padding: 0 1;
+}
+
 #orders-table, #holdings-table {
     width: 100%;
     height: 11;

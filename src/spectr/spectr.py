@@ -715,6 +715,8 @@ class SpectrApp(App):
                     BROKER_API.get_all_orders,
                     self.args.real_trades,
                     self.set_real_trades,
+                    self.auto_trading_enabled,
+                    self.set_auto_trading,
                     BROKER_API.get_balance,
                     BROKER_API.get_positions,
                 )
@@ -756,6 +758,11 @@ class SpectrApp(App):
         self.args.real_trades = enabled
         if hasattr(BROKER_API, "_real_trades"):
             setattr(BROKER_API, "_real_trades", enabled)
+
+    def set_auto_trading(self, enabled: bool) -> None:
+        """Enable or disable auto trading mode."""
+        self.auto_trading_enabled = enabled
+        self.update_status_bar()
 
     # ---------- Back-test workflow ----------
 
