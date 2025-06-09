@@ -11,7 +11,6 @@ import sys
 import threading
 import traceback
 from concurrent.futures._base import wait
-from concurrent.futures.thread import ThreadPoolExecutor
 from concurrent.futures import as_completed
 from datetime import datetime, timedelta
 
@@ -38,6 +37,7 @@ from views.symbol_view import SymbolView
 from views.ticker_input_dialog import TickerInputDialog
 from views.top_overlay import TopOverlay
 from views.trades_screen import TradesScreen
+from .daemon_thread_pool import DaemonThreadPoolExecutor
 
 # Notes for scanner filter:
 # - Already up 5%.
@@ -148,7 +148,7 @@ class SpectrApp(App):
         super().__init__()
         self._consumer_task = None
         self.args = args  # Store CLI arguments
-        self._poll_pool: ThreadPoolExecutor | None = None
+        self._poll_pool: DaemonThreadPoolExecutor | None = None
         # self._sig_lock = threading.Lock()  # protects self.signal_detected
         # self._poll_now = asyncio.Event()
         self._poll_thread = threading.Thread()
@@ -168,7 +168,7 @@ class SpectrApp(App):
         self.scanner_results: list[dict] = self._load_scanner_cache()
         self._gainers_cache_file = pathlib.Path.home() / ".spectr_gainers_cache.json"
         self.top_gainers: list[dict] = self._load_gainers_cache()
-        self._scan_pool: ThreadPoolExecutor | None = None
+        self._scan_pool: DaemonThreadPoolExecutor | None = None
         self._scanner_thread = threading.Thread()
 
         # Cache for portfolio data so reopening the portfolio screen is instant
@@ -194,7 +194,7 @@ class SpectrApp(App):
         log.debug("App mounted.")
 
         # Kick off producer & consumer
-        self._poll_pool = ThreadPoolExecutor(
+        self._poll_pool = DaemonThreadPoolExecutor(
             max_workers=min(8, len(self.ticker_symbols)),  # tweak as you wish
             thread_name_prefix="poll",
         )
@@ -206,7 +206,7 @@ class SpectrApp(App):
         )
         self._poll_thread.start()
 
-        self._scan_pool = ThreadPoolExecutor(max_workers=20, thread_name_prefix="scan")
+        self._scan_pool = DaemonThreadPoolExecutor(max_workers=20, thread_name_prefix="scan")
         self._scanner_thread = threading.Thread(
             target=self._scanner_loop,
             name="scanner",
@@ -496,20 +496,20 @@ class SpectrApp(App):
         self._shutting_down = True
         self._stop_event.set()
 
-        # Wait for polling thread to finish before closing the worker pool
-        if self._poll_thread and self._poll_thread.is_alive():
-            self._poll_thread.join()
-
+        # Stop worker pools and threads
         if self._poll_pool:
             self._poll_pool.shutdown(wait=True, cancel_futures=True)
             self._poll_pool = None
 
-        if self._scanner_thread and self._scanner_thread.is_alive():
-            self._scanner_thread.join()
+        if self._poll_thread and self._poll_thread.is_alive():
+            self._poll_thread.join(timeout=5)
 
         if self._scan_pool:
             self._scan_pool.shutdown(wait=True, cancel_futures=True)
             self._scan_pool = None
+
+        if self._scanner_thread and self._scanner_thread.is_alive():
+            self._scanner_thread.join(timeout=5)
 
 
         if self._consumer_task:
