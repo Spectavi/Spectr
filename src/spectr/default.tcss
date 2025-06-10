@@ -183,7 +183,7 @@ PortfolioScreen {
 
 #portfolio-screen {
     width: 50%;
-    height: 42;
+    height: 52;
     text-align: center;
     content-align-horizontal: center;
     content-align-vertical: top;
@@ -215,6 +215,17 @@ PortfolioScreen {
     padding: 1 1;
 }
 #orders-title, #assets-title {
+    margin: 1 1;
+    height: 1;
+}
+
+#equity-curve {
+    width: 100%;
+    height: 10;
+    padding: 1 1;
+}
+
+#equity-title {
     margin: 1 1;
     height: 1;
 }
