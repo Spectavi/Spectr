@@ -154,7 +154,6 @@ class PortfolioScreen(Screen):
                 id="trade-mode-container",
             ),
 
-            Static("Equity Curve:", id="equity-title"),
             self.equity_view,
 
             Static("Portfolio assets:", id="assets-title"),

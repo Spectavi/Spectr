@@ -59,6 +59,5 @@ class EquityCurveView(Static):
         width = max(self.size.width - 3, 20)
         height = max(self.size.height, 10)
         plt.plotsize(width, height)
-        plt.title("Equity Curve")
 
         return Text.from_ansi(plt.build())

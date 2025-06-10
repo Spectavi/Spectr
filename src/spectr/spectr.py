@@ -36,7 +36,7 @@ from views.symbol_view import SymbolView
 from views.ticker_input_dialog import TickerInputDialog
 from views.top_overlay import TopOverlay
 from views.trades_screen import TradesScreen
-from .daemon_thread_pool import DaemonThreadPoolExecutor
+from daemon_thread_pool import DaemonThreadPoolExecutor
 
 # Notes for scanner filter:
 # - Already up 5%.
@@ -504,6 +504,7 @@ class SpectrApp(App):
         log.debug("_scanner_loop exit")
 
     async def on_shutdown(self, event):
+        sys.exit(0)  # Exit immediately if we are shutting down
         log.debug("on_shutdown start")
         # tell every background task we are quitting
         self._exit_backtest()
@@ -511,35 +512,35 @@ class SpectrApp(App):
         self._stop_event.set()
 
         # Stop worker pools and threads
-        if self._poll_pool:
-            log.debug("shutting down poll_pool")
-            self._poll_pool.shutdown(wait=True, cancel_futures=True)
-            self._poll_pool = None
-
-        if self._poll_thread and self._poll_thread.is_alive():
-            log.debug("joining poll_thread")
-            self._poll_thread.join(timeout=5)
-
-        if self._scan_pool:
-            log.debug("shutting down scan_pool")
-            self._scan_pool.shutdown(wait=True, cancel_futures=True)
-            self._scan_pool = None
-
-        if self._scanner_thread and self._scanner_thread.is_alive():
-            log.debug("joining scanner_thread")
-            self._scanner_thread.join(timeout=5)
-
-
-        if self._consumer_task:
-            log.debug("cancelling consumer task")
-            self._update_queue.put_nowait(None)
-            self._consumer_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._consumer_task
-
-        loop = asyncio.get_running_loop()
-        await loop.shutdown_default_executor()
-        log.debug("on_shutdown complete")
+        # if self._poll_pool:
+        #     log.debug("shutting down poll_pool")
+        #     self._poll_pool.shutdown(wait=True, cancel_futures=True)
+        #     self._poll_pool = None
+        #
+        # if self._poll_thread and self._poll_thread.is_alive():
+        #     log.debug("joining poll_thread")
+        #     self._poll_thread.join(timeout=5)
+        #
+        # if self._scan_pool:
+        #     log.debug("shutting down scan_pool")
+        #     self._scan_pool.shutdown(wait=True, cancel_futures=True)
+        #     self._scan_pool = None
+        #
+        # if self._scanner_thread and self._scanner_thread.is_alive():
+        #     log.debug("joining scanner_thread")
+        #     self._scanner_thread.join(timeout=5)
+        #
+        #
+        # if self._consumer_task:
+        #     log.debug("cancelling consumer task")
+        #     self._update_queue.put_nowait(None)
+        #     self._consumer_task.cancel()
+        #     with contextlib.suppress(asyncio.CancelledError):
+        #         await self._consumer_task
+        #
+        # loop = asyncio.get_running_loop()
+        # await loop.shutdown_default_executor()
+        # log.debug("on_shutdown complete")
 
 
 
