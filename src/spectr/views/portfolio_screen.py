@@ -9,6 +9,8 @@ from textual.reactive import reactive
 from textual import events
 import asyncio
 
+from .equity_curve_view import EquityCurveView
+
 log = logging.getLogger(__name__)
 
 class PortfolioScreen(Screen):
@@ -61,6 +63,9 @@ class PortfolioScreen(Screen):
         self.holdings_table = DataTable(zebra_stripes=True, id="holdings-table")
         self.holdings_table.add_columns("Symbol", "Qty", "Value", "Avg Cost", "Profit")
 
+        # Equity curve graph
+        self.equity_view = EquityCurveView(id="equity-curve")
+
         #Orders Table
         self.order_table = DataTable(zebra_stripes=True, id="orders-table")
         self.order_table.add_columns("Symbol", "Side", "Qty", "Value", "Type", "Status")
@@ -70,6 +75,7 @@ class PortfolioScreen(Screen):
         self.balance_callback = balance_callback
         self.positions_callback = positions_callback
         self._refresh_job = None  # handle for cancel
+        self._balance_job = None  # periodic balance refresher
 
         # Initial placeholder content
         acct = "LIVE" if self.real_trades else "PAPER"
@@ -80,6 +86,7 @@ class PortfolioScreen(Screen):
                 f"Buying Power: [cyan]${self.buying_power:,.2f}[/]\n"
                 f"Portfolio Value: [cyan]${self.portfolio_value:,.2f}[/]",
             )
+            self.equity_view.add_point(self.cash, self.portfolio_value)
         else:
             self.top_title.update(
                 f"** [b]{acct} ACCOUNT[/b] **\n"
@@ -147,6 +154,9 @@ class PortfolioScreen(Screen):
                 id="trade-mode-container",
             ),
 
+            Static("Equity Curve:", id="equity-title"),
+            self.equity_view,
+
             Static("Portfolio assets:", id="assets-title"),
             self.holdings_table,
             Static("Order History:", id="orders-title"),
@@ -163,12 +173,19 @@ class PortfolioScreen(Screen):
         self._refresh_job = self.set_interval(
             self.REFRESH_SECS, self._refresh_orders, pause=False
         )
+        # periodic balance updates for equity graph
+        self._balance_job = self.set_interval(
+            self.REFRESH_SECS, self._reload_account_data, pause=False
+        )
 
     async def on_unmount(self, event: events.Unmount) -> None:
         # cancel the refresher when the dialog closes
         if self._refresh_job:
             self._refresh_job.stop()
             self._refresh_job = None
+        if self._balance_job:
+            self._balance_job.stop()
+            self._balance_job = None
 
     async def _reload_account_data(self):
         """Refresh balance metrics and positions using callbacks."""
@@ -199,6 +216,7 @@ class PortfolioScreen(Screen):
             f"Buying Power: [cyan]${self.buying_power:,.2f}[/]\n"
             f"Portfolio Value: [cyan]${self.portfolio_value:,.2f}[/]",
         )
+        self.equity_view.add_point(self.cash, self.portfolio_value)
 
         # refresh holdings table
         self.holdings_table.clear()
