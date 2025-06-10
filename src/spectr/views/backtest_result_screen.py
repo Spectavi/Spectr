@@ -26,7 +26,7 @@ class BacktestResultScreen(Screen):
         num_sells: int,
     ) -> None:
         super().__init__()
-        self._graph = GraphView(df=df, args=args)
+        self._graph = GraphView(df=df, args=args, id="backtest-graph")
         self._graph.is_backtest = True
         self.report = Static(id="backtest-report")
         self.symbol = symbol

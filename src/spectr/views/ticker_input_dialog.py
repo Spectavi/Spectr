@@ -249,7 +249,7 @@ class TickerInputDialog(ModalScreen):
                 pct = f"{row.get('volume_pct', 0):.0f}%" if row.get('avg_volume') else ""
                 table.add_row(
                     row["symbol"],
-                    row["changesPercentage"],
+                    str(row.get("changesPercentage", ""))[:7],
                     f"${row['price']:.2f}",
                     f"${row['open_price']:.2f}",
                     pct,

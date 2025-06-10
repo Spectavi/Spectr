@@ -51,6 +51,8 @@ class PortfolioScreen(Screen):
         self.portfolio_value = portfolio_value or 0.0
         self.positions = positions or []
         self.cached_orders = orders or []
+        if self.cached_orders:
+            self.cached_orders.sort(key=self._order_date, reverse=True)
         self.real_trades = real_trades
         self._has_cached_balance = cash is not None
         self._has_cached_positions = positions is not None
@@ -68,7 +70,15 @@ class PortfolioScreen(Screen):
 
         #Orders Table
         self.order_table = DataTable(zebra_stripes=True, id="orders-table")
-        self.order_table.add_columns("Symbol", "Side", "Qty", "Value", "Type", "Status")
+        self.order_table.add_columns(
+            "Date/Time",
+            "Symbol",
+            "Side",
+            "Qty",
+            "Value",
+            "Type",
+            "Status",
+        )
         self.mode_switch = Switch(value=self.real_trades, id="trade-mode-switch")
         self.auto_switch = Switch(value=self.auto_trading_enabled, id="auto-trade-switch")
         self.orders_callback = orders_callback
@@ -115,6 +125,7 @@ class PortfolioScreen(Screen):
             self.holdings_table.add_row("Loading...", "", "", "", "")
 
         if self._has_cached_orders:
+            self.cached_orders.sort(key=self._order_date, reverse=True)
             for order in self.cached_orders:
                 price = (
                     getattr(order, "filled_avg_price", None)
@@ -126,7 +137,19 @@ class PortfolioScreen(Screen):
                     value = float(order.qty) * float(price)
                 except Exception:
                     value = 0.0
+
+                dt = (
+                        getattr(order, "submitted_at", None)
+                        or getattr(order, "created_at", None)
+                        or getattr(order, "filled_at", None)
+                )
+                if hasattr(dt, "strftime"):
+                    dt_str = dt.strftime("%Y-%m-%d %H:%M")
+                else:
+                    dt_str = str(dt) if dt else ""
+
                 self.order_table.add_row(
+                    dt_str,
                     order.symbol,
                     order.side,
                     order.qty,
@@ -135,7 +158,7 @@ class PortfolioScreen(Screen):
                     order.status,
                 )
         else:
-            self.order_table.add_row("Loading...", "", "", "", "", "")
+            self.order_table.add_row("Loading...", "", "", "", "", "", "")
 
 
 
@@ -253,6 +276,7 @@ class PortfolioScreen(Screen):
 
         if orders:
             log.debug(f"Order History: {orders}")
+            orders.sort(key=self._order_date, reverse=True)
             table = self.query_one("#orders-table", DataTable)
             table.clear()
             for order in orders:
@@ -267,7 +291,20 @@ class PortfolioScreen(Screen):
                     value = float(order.qty) * float(price)
                 except Exception:
                     value = 0.0
+
+                # Determine a readable timestamp
+                dt = (
+                        getattr(order, "submitted_at", None)
+                        or getattr(order, "created_at", None)
+                        or getattr(order, "filled_at", None)
+                )
+                if hasattr(dt, "strftime"):
+                    dt_str = dt.strftime("%Y-%m-%d %H:%M")
+                else:
+                    dt_str = str(dt) if dt else ""
+
                 table.add_row(
+                        dt_str,
                     order.symbol,
                     order.side,
                     order.qty,
@@ -293,3 +330,13 @@ class PortfolioScreen(Screen):
             if callable(self._set_auto_trading_cb):
                 self._set_auto_trading_cb(event.value)
 
+    @staticmethod
+    def _order_date(order):
+        """Return the best available timestamp for sorting orders."""
+        return (
+            getattr(order, "created_at", None)
+            or getattr(order, "submitted_at", None)
+            or getattr(order, "updated_at", None)
+            or getattr(order, "filled_at", None)
+            or getattr(order, "canceled_at", None)
+        )

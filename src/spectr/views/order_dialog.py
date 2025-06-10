@@ -199,8 +199,9 @@ class OrderDialog(ModalScreen):
             self.pos_value = 0.0
         self.query_one("#dlg_pos", Static).update(self._pos_fmt())
 
-        new_price = self._get_price(self.symbol).get("price", 0)
+        new_price = self._get_price(self.symbol)
         if new_price:
+            new_price = new_price.get("price", 0)
             self.price = new_price
             self.query_one("#dlg_price", Static).update(self._price_fmt())
             self._update_total()

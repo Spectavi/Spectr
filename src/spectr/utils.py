@@ -67,7 +67,7 @@ def _ensure_mixer() -> None:
                 pygame.mixer.init()
                 _mixer_initialized = True
             except Exception as exc:  # pragma: no cover - just in case
-                log.debug("pygame mixer init failed: %s", exc)
+                log.error("pygame mixer init failed: %s", exc)
 
 
 def play_sound(path: str) -> None:
@@ -78,7 +78,7 @@ def play_sound(path: str) -> None:
     """
 
     if not os.path.exists(path):
-        log.debug("Sound file does not exist: %s", path)
+        log.error("Sound file does not exist: %s", path)
         return
 
     def _play() -> None:
@@ -88,7 +88,7 @@ def play_sound(path: str) -> None:
         try:
             pygame.mixer.Sound(path).play()
         except Exception as exc:  # pragma: no cover - just in case
-            log.debug("play_sound failed: %s", exc)
+            log.error("play_sound failed: %s", exc)
 
     threading.Thread(target=_play, daemon=True).start()
 

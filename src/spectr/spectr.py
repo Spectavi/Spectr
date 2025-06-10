@@ -402,13 +402,13 @@ class SpectrApp(App):
         try:
             self._scanner_cache_file.write_text(json.dumps({"t": time.time(), "rows": rows}, indent=0))
         except Exception as exc:
-            log.debug(f"cache write failed: {exc}")
+            log.error(f"cache write failed: {exc}")
 
     def _save_gainers_cache(self, rows: list[dict]) -> None:
         try:
             self._gainers_cache_file.write_text(json.dumps({"t": time.time(), "rows": rows}, indent=0))
         except Exception as exc:
-            log.debug(f"gainers cache write failed: {exc}")
+            log.error(f"gainers cache write failed: {exc}")
 
     def _load_scanner_cache(self) -> list[dict]:
         try:
@@ -493,12 +493,12 @@ class SpectrApp(App):
                     try:
                         play_sound(BUY_SOUND_PATH)
                     except Exception as exc:
-                        log.debug(f"scan-sound failed: {exc}")
+                        log.error(f"scan-sound failed: {exc}")
             except Exception as exc:
                 log.error(f"[scanner] {exc}")
 
             if self._stop_event.wait(SCANNER_INTERVAL):
-                log.debug("_scanner_loop stop event set")
+                log.error("_scanner_loop stop event set")
                 break
 
         log.debug("_scanner_loop exit")
@@ -679,7 +679,7 @@ class SpectrApp(App):
         try:
             BROKER_API.submit_order(
                 symbol=msg.symbol,
-                side=OrderSide.SELL if msg.side == "SELL" else OrderSide.BUY,
+                side=msg.side,
                 type=msg.order_type,
                 quantity=msg.qty,
             )
@@ -689,16 +689,15 @@ class SpectrApp(App):
 
         # mark the last bar so GraphView can plot the trade immediately
         symbol = msg.symbol.upper()
-        side = msg.side.lower()  # "buy" / "sell"
         df = self.df_cache.get(symbol)
         if df is not None and not df.empty:
             last_ts = df.index[-1]
 
             # add / update the helper columns used by GraphView
-            if side == "buy":
+            if msg.side == OrderSide.BUY:
                 if "buy_signals" not in df.columns: df["buy_signals"] = None
                 df.at[last_ts, "buy_signals"] = True
-            elif side == "sell":
+            elif msg.side == OrderSide.SELL:
                 if "sell_signals" not in df.columns: df["sell_signals"] = None
                 df.at[last_ts, "sell_signals"] = True
 

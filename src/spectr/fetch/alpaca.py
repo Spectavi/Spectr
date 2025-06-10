@@ -43,7 +43,7 @@ class AlpacaInterface(BrokerInterface):
                 "portfolio_value": float(acct.portfolio_value) if acct.portfolio_value else 0.00,
             }
         except Exception as exc:
-            log.debug(f"Failed to fetch account balance: {exc}")
+            log.error(f"Failed to fetch account balance: {exc}")
             return {}
 
     # ------------------------------------------------------------------ #
@@ -59,7 +59,7 @@ class AlpacaInterface(BrokerInterface):
             open_orders = tc.get_orders(req)
             return len(open_orders) > 0
         except Exception as exc:
-            log.debug(f"has_pending_order error: {exc}")
+            log.error(f"has_pending_order error: {exc}")
             return False
 
     # ------------------------------------------------------------------ #
@@ -96,7 +96,7 @@ class AlpacaInterface(BrokerInterface):
             return tc.get_orders(req)
 
         except Exception as exc:
-            log.debug(f"get_pending_orders error: {exc}")
+            log.error(f"get_pending_orders error: {exc}")
             return []
 
     # ------------------------------------------------------------------ #
@@ -141,7 +141,7 @@ class AlpacaInterface(BrokerInterface):
             return df
 
         except Exception as exc:
-            log.debug(f"get_closed_orders error: {exc}")
+            log.error(f"get_closed_orders error: {exc}")
             return pd.DataFrame()
 
     # ------------------------------------------------------------------ #
@@ -171,28 +171,8 @@ class AlpacaInterface(BrokerInterface):
 
             # Empty request object => no filters → returns every order
             return  api.get_orders(GetOrdersRequest(status=QueryOrderStatus.ALL))
-        #     log.debug("get_orders finished")
-        #
-        #     if not orders:
-        #         log.warning(f"get_all_orders returned nothing!")
-        #         return pd.DataFrame()
-        #
-        #     df = pd.DataFrame([o.model_dump() for o in orders])
-        #     log.info(f"get_all_orders returned {len(df)} orders: {df}")
-        #     # Parse ISO strings to real datetimes so callers can sort / filter
-        #     for col in (
-        #             "created_at",
-        #             "submitted_at",
-        #             "filled_at",
-        #             "updated_at",
-        #             "canceled_at",
-        #     ):
-        #         if col in df.columns:
-        #             df[col] = pd.to_datetime(df[col], utc=True, errors="ignore")
-        #     return df
-        #
         except Exception as exc:
-            log.debug(f"get_all_orders error: {exc}")
+            log.error(f"get_all_orders error: {exc}")
             return pd.DataFrame()
 
     # ------------------------------------------------------------------ #
@@ -281,7 +261,7 @@ class AlpacaInterface(BrokerInterface):
     def submit_order(
         self,
         symbol: str,
-        side: str,
+        side: OrderSide,
         type: str,
         quantity: int = 1,
         real_trades: bool = False,
@@ -291,11 +271,11 @@ class AlpacaInterface(BrokerInterface):
             order_req = MarketOrderRequest(
                 symbol=symbol.upper(),
                 qty=quantity,
-                side=OrderSide.BUY if side.lower() == "buy" else OrderSide.SELL,
+                side=side.name.lower(),
                 time_in_force=TimeInForce.GTC,
             )
             tc.submit_order(order_req)
-            log.debug(f"ORDER PLACED: {side.upper()} {quantity} shares of {symbol.upper()}")
+            log.debug(f"ORDER PLACED: {side.name.upper()} {quantity} shares of {symbol.upper()}")
         except Exception as exc:
             log.error(f"ORDER FAILED: {exc}")
             raise

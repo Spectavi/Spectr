@@ -64,7 +64,7 @@ class FMPInterface(DataInterface):
             log.debug(f"Fetched quote for {symbol}: {data[0]}")
             return data[0]  # return the first (and only) quote object
         except Exception as e:
-            log.warning(f"Failed to fetch quote for {symbol}: {e}")
+            log.error(f"Failed to fetch quote for {symbol}: {e}")
             return None
 
     def fetch_chart_data_for_backtest(self, symbol: str, from_date: str, to_date: str, interval="1min") -> pd.DataFrame:
@@ -101,13 +101,13 @@ class FMPInterface(DataInterface):
         url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={FMP_API_KEY}"
         try:
             data = requests.get(url, timeout=10).json()
-            log.debug(f"Fetched {len(data)} gainers: {data}")
+            log.debug(f"Fetched {len(data)} gainers.")
             # sort numerically just in case
             data = sorted(data, key=lambda d: float(d["changesPercentage"]), reverse=True)
-            log.debug(f"fetched {len(data)} gainers: {data}")
+            log.debug(f"fetched {len(data)} gainers.")
             return data[:limit]
         except Exception as exc:
-            log.warning(f"Failed to fetch top movers: {exc}")
+            log.error(f"Failed to fetch top movers: {exc}")
             return []
 
     def has_recent_positive_news(self, symbol: str, hours: int = 12) -> bool:
@@ -124,7 +124,7 @@ class FMPInterface(DataInterface):
 
         try:
             news = requests.get(url, timeout=10).json()
-            log.debug(f"Fetched {len(news)} news: {news}")
+            log.debug(f"Fetched {len(news)} news articles for {symbol} since {since}")
             if len(news) > 0:
                 return True
 
@@ -132,7 +132,7 @@ class FMPInterface(DataInterface):
 
             return False
         except Exception as exc:
-            log.debug(f"news lookup failed for {symbol}: {exc}")
+            log.error(f"news lookup failed for {symbol}: {exc}")
             return False
 
     def fetch_company_profile(self, symbol: str) -> dict:
@@ -140,9 +140,10 @@ class FMPInterface(DataInterface):
         url = f"https://financialmodelingprep.com/api/v3/profile/{symbol}?apikey={FMP_API_KEY}"
         try:
             data = requests.get(url, timeout=10).json()
+            log.debug(f"Fetched {len(data)} profiles for {symbol}")
             if isinstance(data, list) and data:
                 return data[0]
             return {}
         except Exception as exc:
-            log.debug(f"Failed to fetch profile for {symbol}: {exc}")
+            log.error(f"Failed to fetch profile for {symbol}: {exc}")
             return {}

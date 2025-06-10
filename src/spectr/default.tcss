@@ -182,7 +182,7 @@ PortfolioScreen {
 }
 
 #portfolio-screen {
-    width: 50%;
+    width: 75%;
     height: 52;
     text-align: center;
     content-align-horizontal: center;
@@ -215,7 +215,8 @@ PortfolioScreen {
     padding: 1 1;
 }
 #orders-title, #assets-title {
-    height: 1;
+    height: 3;
+    padding: 1 0;
 }
 
 #equity-curve {
@@ -230,7 +231,7 @@ BacktestResultScreen {
 
 #backtest-result-container {
     width: 80%;
-    height: 80%;
+    height: 42;
     background: #1a1a1a;
     border: solid green;
     padding: 1 2;
@@ -241,4 +242,10 @@ BacktestResultScreen {
 #backtest-report {
     padding: 1;
     text-align: left;
+}
+
+#backtest-graph {
+    width: 100%;
+    height: 30;
+    background: black;
 }

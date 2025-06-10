@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from robin_stocks import robinhood as r
 from dotenv import load_dotenv
 
-from src.spectr.fetch.broker_interface import BrokerInterface
+from src.spectr.fetch.broker_interface import BrokerInterface, OrderSide
 from src.spectr.fetch.data_interface import DataInterface
 
 log = logging.getLogger(__name__)
@@ -144,10 +144,9 @@ class RobinhoodInterface(BrokerInterface, DataInterface):
         holdings = r.account.build_holdings()
         return holdings.get(symbol.upper(), None)
 
-    def submit_order(self, symbol, signal, qty=1, real_trades=False):
-        side = 'buy' if signal == 'buy' else 'sell'
+    def submit_order(self, symbol, side: OrderSide, qty=1, real_trades=False):
         try:
-            r.orders.order_buy_market(symbol, qty) if side == 'buy' else r.orders.order_sell_market(symbol, qty)
-            log.debug(f"ORDER PLACED: {side.upper()} {qty} shares of {symbol}")
+            r.orders.order_buy_market(symbol, qty) if side == OrderSide.BUY else r.orders.order_sell_market(symbol, qty)
+            log.debug(f"ORDER PLACED: {side.name.upper()} {qty} shares of {symbol}")
         except Exception as e:
             log.error(f"ORDER FAILED: {e}")
