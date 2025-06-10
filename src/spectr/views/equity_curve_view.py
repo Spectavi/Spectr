@@ -26,9 +26,16 @@ class EquityCurveView(Static):
         if not self.data:
             return "No equity data…"
 
-        times = [d[0].strftime("%Y-%m-%d %H:%M:%S") for d in self.data]
+        # Plotext's date handling can raise errors on some platforms when
+        # timestamps are converted to dates (e.g. Windows pre‑1970 support).
+        # To avoid this we plot using numeric X values and manually label
+        # a subset of ticks with formatted times.
+
+        raw_times = [d[0] for d in self.data]
         cash_vals = [d[1] for d in self.data]
         total_vals = [d[2] for d in self.data]
+
+        x_vals = list(range(len(raw_times)))
 
         plt.clear_data()
         plt.clear_figure()
@@ -36,10 +43,14 @@ class EquityCurveView(Static):
         plt.axes_color("default")
         plt.ticks_color("default")
 
-        plt.date_form(input_form="Y-m-d H:M:S", output_form="H:M:S")
+        plt.plot(x_vals, cash_vals, color="blue", marker="hd", label="Cash", yside="right")
+        plt.plot(x_vals, total_vals, color="red", marker="hd", label="Total", yside="right")
 
-        plt.plot(times, cash_vals, color="blue", marker="hd", label="Cash", yside="right")
-        plt.plot(times, total_vals, color="red", marker="hd", label="Total", yside="right")
+        # Label a handful of ticks to avoid clutter
+        step = max(1, len(x_vals) // 10)
+        tick_positions = x_vals[::step]
+        tick_labels = [raw_times[i].strftime("%H:%M:%S") for i in tick_positions]
+        plt.xticks(tick_positions, tick_labels)
 
         ymin = min(min(cash_vals), min(total_vals)) * 0.95
         ymax = max(max(cash_vals), max(total_vals)) * 1.05
