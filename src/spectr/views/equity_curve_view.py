@@ -26,7 +26,7 @@ class EquityCurveView(Static):
         if not self.data:
             return "No equity data…"
 
-        times = [d[0].strftime("%H:%M:%S") for d in self.data]
+        times = [d[0].strftime("%Y-%m-%d %H:%M:%S") for d in self.data]
         cash_vals = [d[1] for d in self.data]
         total_vals = [d[2] for d in self.data]
 
@@ -35,6 +35,8 @@ class EquityCurveView(Static):
         plt.canvas_color("default")
         plt.axes_color("default")
         plt.ticks_color("default")
+
+        plt.date_form(input_form="Y-m-d H:M:S", output_form="H:M:S")
 
         plt.plot(times, cash_vals, color="blue", marker="hd", label="Cash", yside="right")
         plt.plot(times, total_vals, color="red", marker="hd", label="Total", yside="right")
