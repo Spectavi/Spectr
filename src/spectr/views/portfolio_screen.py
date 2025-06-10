@@ -284,6 +284,8 @@ class PortfolioScreen(Screen):
             self.real_trades = event.value
             if callable(self._set_real_trades_cb):
                 self._set_real_trades_cb(event.value)
+            # Switching accounts should start a fresh equity curve
+            self.equity_view.reset()
             await self._reload_account_data()
             await self._refresh_orders()
         elif event.switch.id == "auto-trade-switch":

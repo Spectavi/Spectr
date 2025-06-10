@@ -15,6 +15,11 @@ class EquityCurveView(Static):
         super().__init__(*args, **kwargs)
         self.data: list[tuple[datetime, float, float]] = []
 
+    def reset(self) -> None:
+        """Clear all recorded data points and refresh the view."""
+        self.data.clear()
+        self.refresh()
+
     def add_point(self, cash: float, total: float) -> None:
         """Append a new data point and trigger a refresh."""
         self.data.append((datetime.now(), cash, total))
