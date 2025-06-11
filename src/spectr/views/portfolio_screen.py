@@ -86,7 +86,7 @@ class PortfolioScreen(Screen):
             "Value",
             "Type",
             "Status",
-            "Action",
+            "Cancel?",
         )
         self._cancel_col = self.order_table_columns[-1]
         self.mode_switch = Switch(value=self.real_trades, id="trade-mode-switch")
@@ -169,7 +169,7 @@ class PortfolioScreen(Screen):
                     value,
                     order.order_type,
                     order.status,
-                    "Cancel" if str(order.status).lower() not in ("filled", "canceled") else "",
+                    "Cancel" if self._is_cancelable(order.status.name) else "",
                     key=getattr(order, "id", None),
                 )
         else:
@@ -326,7 +326,7 @@ class PortfolioScreen(Screen):
                     value,
                     order.order_type,
                     order.status,
-                    "Cancel" if str(order.status).lower() not in ("filled", "canceled") else "",
+                    "Cancel" if self._is_cancelable(order.status.name) else "",
                     key=getattr(order, "id", None),
                 )
             table.scroll_home()
@@ -389,3 +389,17 @@ class PortfolioScreen(Screen):
             or getattr(order, "filled_at", None)
             or getattr(order, "canceled_at", None)
         )
+
+    @staticmethod
+    def _is_cancelable(status: str) -> bool:
+        """Return True if an order with this status can be cancelled."""
+        status = str(status).lower()
+        not_cancelable = {
+            "filled",
+            "canceled",
+            "replaced",
+            "expired",
+            "rejected",
+            "done_for_day",
+        }
+        return status not in not_cancelable
