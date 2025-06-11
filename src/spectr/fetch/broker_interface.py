@@ -75,4 +75,9 @@ class BrokerInterface(ABC):
     def submit_order(self, symbol: str, side: OrderSide, type: OrderType, quantity: float = 1.0):
         """Submit a buy/sell order."""
         pass
+
+    @abstractmethod
+    def cancel_order(self, order_id: str) -> bool:
+        """Cancel an open order by its unique id. Returns True on success."""
+        pass
     

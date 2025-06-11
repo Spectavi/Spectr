@@ -858,6 +858,7 @@ class SpectrApp(App):
                     positions,
                     orders,
                     BROKER_API.get_all_orders,
+                    BROKER_API.cancel_order,
                     self.args.real_trades,
                     self.set_real_trades,
                     self.auto_trading_enabled,
