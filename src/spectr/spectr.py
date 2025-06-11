@@ -119,6 +119,10 @@ class SpectrApp(App):
 
     symbol_view: reactive[SymbolView] = reactive(None)
 
+    def _is_splash_active(self) -> bool:
+        """Return ``True`` if the splash screen is currently visible."""
+        return bool(self.screen_stack and isinstance(self.screen_stack[-1], SplashScreen))
+
     def _prepend_open_positions(self) -> None:
         """Ensure open position symbols are at the start of ``ticker_symbols``."""
         try:
@@ -592,29 +596,45 @@ class SpectrApp(App):
     # ------------- Order Dialog -------------
 
     def action_buy_current_symbol(self):
+        if self._is_splash_active():
+            return
         self._exit_backtest()
         symbol = self.ticker_symbols[self.active_symbol_index]
         self.open_order_dialog(OrderSide.BUY, 0.00, symbol)
 
     def action_sell_current_symbol(self):
+        if self._is_splash_active():
+            return
         self._exit_backtest()
         symbol = self.ticker_symbols[self.active_symbol_index]
         self.open_order_dialog(OrderSide.SELL, 100.0, symbol)
 
     def action_sell_half_current_symbol(self):
+        if self._is_splash_active():
+            return
         self._exit_backtest()
         symbol = self.ticker_symbols[self.active_symbol_index]
         self.open_order_dialog(OrderSide.SELL, 50.0, symbol)
 
     def action_sell_quarter_current_symbol(self):
+        if self._is_splash_active():
+            return
         self._exit_backtest()
         symbol = self.ticker_symbols[self.active_symbol_index]
         self.open_order_dialog(OrderSide.SELL, 25.0, symbol)
 
     def open_order_dialog(self, side: OrderSide, pos_pct: float, symbol: str):
-        self.push_screen(OrderDialog(side=side, symbol=symbol, pos_pct=pos_pct,
-                                     get_pos_cb=BROKER_API.get_position,
-                                     get_price_cb=DATA_API.fetch_quote))
+        if self._is_splash_active():
+            return
+        self.push_screen(
+            OrderDialog(
+                side=side,
+                symbol=symbol,
+                pos_pct=pos_pct,
+                get_pos_cb=BROKER_API.get_position,
+                get_price_cb=DATA_API.fetch_quote,
+            )
+        )
 
 
 
@@ -629,6 +649,8 @@ class SpectrApp(App):
     # ------------ Select Ticker -------------
 
     def action_prompt_symbol(self):
+        if self._is_splash_active():
+            return
         self.auto_trading_enabled = False
         self.push_screen(
             TickerInputDialog(
@@ -660,6 +682,8 @@ class SpectrApp(App):
             self.update_view(symbol)
 
     def action_toggle_trades(self) -> None:
+        if self._is_splash_active():
+            return
         # Only meaningful after a back-test has just finished
         if getattr(self, "_last_backtest_trades", None):
             if self.screen_stack and isinstance(self.screen_stack[-1], TradesScreen):
@@ -711,6 +735,8 @@ class SpectrApp(App):
     # --------------
 
     def action_toggle_portfolio(self) -> None:
+        if self._is_splash_active():
+            return
         if self.screen_stack and isinstance(self.screen_stack[-1], PortfolioScreen):
             self.pop_screen()
         else:
@@ -789,6 +815,8 @@ class SpectrApp(App):
 
     def action_prompt_backtest(self) -> None:
         """Open the back-test input dialog (bound to the ‘b’ key)."""
+        if self._is_splash_active():
+            return
         current_symbol = self.ticker_symbols[self.active_symbol_index]
         self.push_screen(
             BacktestInputDialog(
