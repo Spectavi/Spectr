@@ -41,6 +41,7 @@ class PortfolioScreen(Screen):
         positions: Optional[list],
         orders: Optional[list],
         orders_callback,
+        cancel_order_callback,
         real_trades: bool,
         set_real_trades_cb=None,
         auto_trading: bool = False,
@@ -64,6 +65,7 @@ class PortfolioScreen(Screen):
         self._set_real_trades_cb = set_real_trades_cb
         self.auto_trading_enabled = auto_trading
         self._set_auto_trading_cb = set_auto_trading_cb
+        self._cancel_order_cb = cancel_order_callback
         self.top_title = Static(id="portfolio-title") # gets filled in on_mount
         # Holdings Table
         self.holdings_table = DataTable(zebra_stripes=True, id="holdings-table")
@@ -76,7 +78,7 @@ class PortfolioScreen(Screen):
 
         #Orders Table
         self.order_table = DataTable(zebra_stripes=True, id="orders-table")
-        self.order_table.add_columns(
+        self.order_table_columns = self.order_table.add_columns(
             "Date/Time",
             "Symbol",
             "Side",
@@ -84,7 +86,9 @@ class PortfolioScreen(Screen):
             "Value",
             "Type",
             "Status",
+            "Action",
         )
+        self._cancel_col = self.order_table_columns[-1]
         self.mode_switch = Switch(value=self.real_trades, id="trade-mode-switch")
         self.auto_switch = Switch(value=self.auto_trading_enabled, id="auto-trade-switch")
         self.orders_callback = orders_callback
@@ -165,9 +169,11 @@ class PortfolioScreen(Screen):
                     value,
                     order.order_type,
                     order.status,
+                    "Cancel" if str(order.status).lower() not in ("filled", "canceled") else "",
+                    key=getattr(order, "id", None),
                 )
         else:
-            self.order_table.add_row("Loading...", "", "", "", "", "", "")
+            self.order_table.add_row("Loading...", "", "", "", "", "", "", "")
 
 
 
@@ -320,6 +326,8 @@ class PortfolioScreen(Screen):
                     value,
                     order.order_type,
                     order.status,
+                    "Cancel" if str(order.status).lower() not in ("filled", "canceled") else "",
+                    key=getattr(order, "id", None),
                 )
             table.scroll_home()
             self.app._portfolio_orders_cache = orders
@@ -354,6 +362,22 @@ class PortfolioScreen(Screen):
             return
 
         self.app.open_order_dialog(OrderSide.SELL, 100.0, symbol)
+
+    async def on_data_table_cell_selected(self, event: DataTable.CellSelected) -> None:
+        """Handle cancel button clicks in the orders table."""
+        if event.data_table.id != "orders-table":
+            return
+        if event.column_key != self._cancel_col:
+            return
+
+        order_id = event.row_key
+        cell_val = event.value
+        if str(cell_val).lower() != "cancel" or not order_id:
+            return
+
+        if callable(self._cancel_order_cb):
+            await asyncio.to_thread(self._cancel_order_cb, order_id)
+            await self._refresh_orders()
 
     @staticmethod
     def _order_date(order):

@@ -279,3 +279,16 @@ class AlpacaInterface(BrokerInterface):
         except Exception as exc:
             log.error(f"ORDER FAILED: {exc}")
             raise
+
+    # ------------------------------------------------------------------ #
+    #  Cancel an existing open order.
+    # ------------------------------------------------------------------ #
+    def cancel_order(self, order_id: str) -> bool:
+        try:
+            api = self.get_api()
+            api.cancel_order_by_id(order_id)
+            log.debug(f"Order cancelled: {order_id}")
+            return True
+        except Exception as exc:
+            log.error(f"Failed to cancel order {order_id}: {exc}")
+            return False

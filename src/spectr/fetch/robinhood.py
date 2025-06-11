@@ -150,3 +150,12 @@ class RobinhoodInterface(BrokerInterface, DataInterface):
             log.debug(f"ORDER PLACED: {side.name.upper()} {qty} shares of {symbol}")
         except Exception as e:
             log.error(f"ORDER FAILED: {e}")
+
+    def cancel_order(self, order_id: str) -> bool:
+        try:
+            r.orders.cancel_stock_order(order_id)
+            log.debug(f"Cancelled order {order_id}")
+            return True
+        except Exception as exc:
+            log.error(f"Failed to cancel order {order_id}: {exc}")
+            return False
