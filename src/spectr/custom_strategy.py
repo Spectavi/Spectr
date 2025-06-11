@@ -1,88 +1,96 @@
 import pandas as pd
 import backtrader as bt
 
-from metrics import analyze_indicators
+class CustomStrategy(bt.Strategy):
+    """Simple strategy used for both live signals and backtesting."""
 
-
-class SignalStrategy(bt.Strategy):
     params = (
-        ('symbol', ''),
-        ('macd_thresh', 0.005),
-        ('bb_period', 100),
-        ('bb_dev', 2.0),
-        ('stop_loss_pct', 0.01),
-        ('take_profit_pct', 0.05),
+        ("symbol", ""),
+        ("macd_thresh", 0.005),
+        ("bb_period", 100),
+        ("bb_dev", 2.0),
+        ("stop_loss_pct", 0.01),
+        ("take_profit_pct", 0.05),
     )
 
     def __init__(self):
         self.buy_signals = []
         self.sell_signals = []
-        self.macd = bt.indicators.MACD(self.data)
-        self.bb = bt.indicators.BollingerBands(self.data.close, period=self.p.bb_period, devfactor=self.p.bb_dev)
 
     @staticmethod
-    def detect_signals(df, symbol, position=None, stop_loss_pct=0.01, take_profit_pct=0.05, bb_period=20, bb_dev=2.0,
-                       macd_thresh=0.005):
-        if len(df) < 1:
+    def detect_signals(df: pd.DataFrame, symbol: str, position=None,
+                       stop_loss_pct: float = 0.01, take_profit_pct: float = 0.05,
+                       bb_period: int = 20, bb_dev: float = 2.0,
+                       macd_thresh: float = 0.005):
+        """Return a signal dictionary when conditions trigger."""
+        if df.empty:
             return None
 
         curr = df.iloc[-1]
-        price = curr['close']
-
-        bb_angle = curr.get('bb_angle')
-        bb_lower = curr.get('bb_lower')
-        bb_mid = curr.get('bb_mid')
-        bb_upper = curr.get('bb_upper')
-        macd_angle = curr.get('macd_angle')
-        macd_close = curr.get('macd_close')
-        macd_signal = curr.get('macd_signal')
-        is_macd_crossover = True if curr.get('macd_crossover') == 'buy' else False
-        is_macd_crossunder = True if curr.get('macd_crossover') == 'sell' else False
-
+        price = float(curr.get("close", 0))
+        reason = None
         signal = None
-        if not position:
-            ### ------- Insert buy logic here ------- ###
-            signal = 'buy'
-            # Delete this line after implementing!
-            raise NotImplementedError("CustomStrategy is NOT implemented! You must implement it.")
+
+        macd_cross = curr.get("macd_crossover")
+        above_bb = curr.get("close", 0) > curr.get("bb_upper", 0)
+        below_bb = curr.get("close", 0) < curr.get("bb_mid", 0)
+
+        if position is None or float(getattr(position, "qty", 0)) == 0:
+            if macd_cross == "buy":
+                signal = "buy"
+                reason = "MACD crossover"
+            elif above_bb:
+                signal = "buy"
+                reason = "Price above BB"
         else:
-            ### ------- Insert sell logic here ------- ###
-            signal = 'sell'
-            # Delete this line after implementing!
-            raise NotImplementedError("CustomStrategy is NOT implemented! You must implement it.")
+            if macd_cross == "sell":
+                signal = "sell"
+                reason = "MACD crossunder"
+            elif below_bb:
+                signal = "sell"
+                reason = "Price below BB mid"
 
-        return {
-            'signal': signal,
-            'price': price,
-        }
+        if signal:
+            return {
+                "signal": signal,
+                "price": price,
+                "symbol": symbol,
+                "reason": reason,
+            }
+        return None
 
-    # Only used for backtesting.
+    # ----- Backtesting -----
     def next(self):
-        if self.data.close[0] == 0.0:
-            return  # Skip dummy bar
+        if len(self.data) < 2:
+            return
 
-        # Build a DataFrame from the most recent N bars
-        N = 200  # Enough for MACD and BB
+        N = 200
         data = {
-            'close': [self.datas[0].close[-i] for i in reversed(range(N))],
-            'open': [self.datas[0].open[-i] for i in reversed(range(N))],
-            'high': [self.datas[0].high[-i] for i in reversed(range(N))],
-            'low': [self.datas[0].low[-i] for i in reversed(range(N))],
-            'volume': [self.datas[0].volume[-i] for i in reversed(range(N))],
+            "close": [self.datas[0].close[-i] for i in reversed(range(N))],
         }
         df = pd.DataFrame(data)
-
-        # Use shared signal logic
-        signal = self.detect_signals(df, self.p.symbol, self.position, stop_loss_pct=self.p.stop_loss_pct,
-                                     take_profit_pct=self.p.take_profit_pct, bb_period=self.p.bb_period,
-                                     bb_dev=self.p.bb_dev, macd_thresh=self.p.macd_thresh)
-
-        if signal == 'buy' and not self.position:
+        res = self.detect_signals(
+            df,
+            self.p.symbol,
+            position=self.position,
+            stop_loss_pct=self.p.stop_loss_pct,
+            take_profit_pct=self.p.take_profit_pct,
+            bb_period=self.p.bb_period,
+            bb_dev=self.p.bb_dev,
+            macd_thresh=self.p.macd_thresh,
+        )
+        if res and res["signal"] == "buy" and not self.position:
             self.buy()
-        elif signal == 'sell' and self.position:
-            self.sell()
             self.buy_signals.append({
-                'type': 'buy',
-                'time': self.datas[0].datetime.datetime(0),
-                'price': self.datas[0].close[0],
+                "type": "buy",
+                "time": self.datas[0].datetime.datetime(0),
+                "price": self.datas[0].close[0],
             })
+        elif res and res["signal"] == "sell" and self.position:
+            self.sell()
+            self.sell_signals.append({
+                "type": "sell",
+                "time": self.datas[0].datetime.datetime(0),
+                "price": self.datas[0].close[0],
+            })
+

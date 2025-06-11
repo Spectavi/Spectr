@@ -24,7 +24,7 @@ from textual.widgets import Static
 
 import metrics
 import utils
-from CustomStrategy import CustomStrategy
+from custom_strategy import CustomStrategy
 from fetch.broker_interface import BrokerInterface, OrderSide, OrderType
 from utils import load_cache, save_cache, play_sound
 from views.backtest_input_dialog import BacktestInputDialog
@@ -36,6 +36,7 @@ from views.symbol_view import SymbolView
 from views.ticker_input_dialog import TickerInputDialog
 from views.top_overlay import TopOverlay
 from views.trades_screen import TradesScreen
+from views.strategy_screen import StrategyScreen
 from daemon_thread_pool import DaemonThreadPoolExecutor
 
 # Notes for scanner filter:
@@ -111,6 +112,7 @@ class SpectrApp(App):
         ("b", "prompt_backtest", "Back-test"),
         ("tab", "toggle_trades", "Trades Table"),
         ("p", "toggle_portfolio", "Portfolio"),
+        ("s", "toggle_strategy_signals", "Strategy Signals"),
     ]
 
     ticker_symbols = reactive([])
@@ -166,6 +168,7 @@ class SpectrApp(App):
         self._update_queue: queue.Queue[str] = queue.Queue()
         self._stop_event = threading.Event()
         self.signal_detected = []
+        self.strategy_signals: list[dict] = []
         self._shutting_down = False
 
         self._scanner_cache_file = pathlib.Path.home() / ".spectr_scanner_cache.json"
@@ -311,16 +314,31 @@ class SpectrApp(App):
             if signal_dict and not self._is_splash_active():
                 signal = signal_dict.get("signal")
                 curr_price = quote.get("price")
-                log.debug(f"Signal detected for {symbol}.")
+                reason = signal_dict.get("reason")
+                log.debug(f"Signal detected for {symbol}. Reason: {reason}")
                 df.at[df.index[-1], 'trade'] = signal  # mark bar for plotting
                 # self.update_view(symbol)
                 if signal == "buy":
                     log.debug("Buy signal detected!")
                     self.signal_detected.append((symbol, curr_price, signal))
+                    self.strategy_signals.append({
+                        "time": datetime.now(),
+                        "symbol": symbol,
+                        "side": "buy",
+                        "price": curr_price,
+                        "reason": reason,
+                    })
                     play_sound(BUY_SOUND_PATH)
                 elif signal == "sell":
                     log.debug("Sell signal detected!")
                     self.signal_detected.append((symbol, curr_price, signal))
+                    self.strategy_signals.append({
+                        "time": datetime.now(),
+                        "symbol": symbol,
+                        "side": "sell",
+                        "price": curr_price,
+                        "reason": reason,
+                    })
                     play_sound(SELL_SOUND_PATH)
 
             # Notify UI thread
@@ -789,6 +807,14 @@ class SpectrApp(App):
             else:
                 self.push_screen(TradesScreen(self._last_backtest_trades))
 
+    def action_toggle_strategy_signals(self) -> None:
+        if self._is_splash_active():
+            return
+        if self.screen_stack and isinstance(self.screen_stack[-1], StrategyScreen):
+            self.pop_screen()
+        else:
+            self.push_screen(StrategyScreen(list(self.strategy_signals)))
+
 
     # ------------ Order Dialog Submit Logic -------------
 
@@ -1024,8 +1050,13 @@ class SpectrApp(App):
 
     def run_backtest(self, df, symbol, args, starting_cash=1000):
         cerebro = bt.Cerebro()
-        cerebro.addstrategy(CustomStrategy, symbol=symbol, bb_period=args.bb_period, bb_dev=args.bb_dev,
-                            macd_thresh=args.macd_thresh, is_backtest=True)
+        cerebro.addstrategy(
+            CustomStrategy,
+            symbol=symbol,
+            bb_period=args.bb_period,
+            bb_dev=args.bb_dev,
+            macd_thresh=args.macd_thresh,
+        )
 
         data = bt.feeds.PandasData(dataname=df)
         cerebro.adddata(data)
