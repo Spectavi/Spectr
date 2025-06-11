@@ -47,6 +47,7 @@ class PortfolioScreen(Screen):
         set_auto_trading_cb=None,
         balance_callback=None,
         positions_callback=None,
+        equity_data: Optional[list] = None,
     ) -> None:
         super().__init__()
         self.cash = cash or 0.0
@@ -91,6 +92,9 @@ class PortfolioScreen(Screen):
         self.positions_callback = positions_callback
         self._refresh_job = None  # handle for cancel
         self._balance_job = None  # periodic balance refresher
+
+        if equity_data:
+            self.equity_view.data = list(equity_data)
 
         # Initial placeholder content
         acct = "LIVE" if self.real_trades else "PAPER"
