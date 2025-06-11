@@ -7,6 +7,8 @@ from textual.widgets import Static, DataTable, Switch
 from textual.containers import Vertical, Container, Horizontal
 from textual.reactive import reactive
 from textual import events
+from textual.widgets._data_table import CellDoesNotExist
+
 from fetch.broker_interface import OrderSide
 import asyncio
 
@@ -64,7 +66,7 @@ class PortfolioScreen(Screen):
         self.top_title = Static(id="portfolio-title") # gets filled in on_mount
         # Holdings Table
         self.holdings_table = DataTable(zebra_stripes=True, id="holdings-table")
-        self.holdings_table.add_columns("Symbol", "Qty", "Value", "Avg Cost", "Profit")
+        self.holdings_table_columns = self.holdings_table.add_columns("Symbol", "Qty", "Value", "Avg Cost", "Profit")
         self.holdings_table.cursor_type = "row"
         self.holdings_table.show_cursor = True
 
@@ -182,7 +184,7 @@ class PortfolioScreen(Screen):
 
             self.equity_view,
 
-            Static("Portfolio assets:", id="assets-title"),
+            Static("Holdings:", id="holdings-title"),
             self.holdings_table,
             Static("Order History:", id="orders-title"),
             self.order_table,
@@ -338,8 +340,13 @@ class PortfolioScreen(Screen):
         if event.data_table.id != "holdings-table":
             return
 
-        symbol = str(event.data_table.get_cell(event.row_key, 0)).strip().upper()
+        try:
+            symbol = str(event.data_table.get_cell(event.row_key, self.holdings_table_columns[0])).strip().upper()
+        except CellDoesNotExist:
+            log.debug("Selected row no longer exists")
+            return
         if not symbol or symbol.upper() == "LOADING...":
+            log.debug("No valid symbol selected, ignoring...")
             return
 
         self.app.open_order_dialog(OrderSide.SELL, 100.0, symbol)
