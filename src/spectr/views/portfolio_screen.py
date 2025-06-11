@@ -7,6 +7,7 @@ from textual.widgets import Static, DataTable, Switch
 from textual.containers import Vertical, Container, Horizontal
 from textual.reactive import reactive
 from textual import events
+from fetch.broker_interface import OrderSide
 import asyncio
 
 from .equity_curve_view import EquityCurveView
@@ -64,6 +65,8 @@ class PortfolioScreen(Screen):
         # Holdings Table
         self.holdings_table = DataTable(zebra_stripes=True, id="holdings-table")
         self.holdings_table.add_columns("Symbol", "Qty", "Value", "Avg Cost", "Profit")
+        self.holdings_table.cursor_type = "row"
+        self.holdings_table.show_cursor = True
 
         # Equity curve graph
         self.equity_view = EquityCurveView(id="equity-curve")
@@ -329,6 +332,17 @@ class PortfolioScreen(Screen):
             self.auto_trading_enabled = event.value
             if callable(self._set_auto_trading_cb):
                 self._set_auto_trading_cb(event.value)
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        """Open an order dialog to sell when a holdings row is clicked."""
+        if event.data_table.id != "holdings-table":
+            return
+
+        symbol = str(event.data_table.get_cell(event.row_key, 0)).strip().upper()
+        if not symbol or symbol.upper() == "LOADING...":
+            return
+
+        self.app.open_order_dialog(OrderSide.SELL, 100.0, symbol)
 
     @staticmethod
     def _order_date(order):
