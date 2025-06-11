@@ -53,8 +53,8 @@ from daemon_thread_pool import DaemonThreadPoolExecutor
 
 
 # --- SOUND PATHS ---
-BUY_SOUND_PATH = 'src/spectr/res/buy.mp3'
-SELL_SOUND_PATH = 'src/spectr/res/sell.mp3'
+BUY_SOUND_PATH = 'res/buy.mp3'
+SELL_SOUND_PATH = 'res/sell.mp3'
 
 REFRESH_INTERVAL = 60  # seconds
 SCANNER_INTERVAL = REFRESH_INTERVAL
