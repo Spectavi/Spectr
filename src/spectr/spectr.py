@@ -58,6 +58,7 @@ SELL_SOUND_PATH = 'res/sell.mp3'
 
 REFRESH_INTERVAL = 60  # seconds
 SCANNER_INTERVAL = REFRESH_INTERVAL
+EQUITY_INTERVAL = 30  # portfolio equity update frequency
 
 # Setup logging to file
 log_path = "debug.log"
@@ -174,6 +175,11 @@ class SpectrApp(App):
         self._scan_pool: DaemonThreadPoolExecutor | None = None
         self._scanner_thread = threading.Thread()
 
+        # Track latest quotes and equity curve
+        self._latest_quotes: dict[str, float] = {}
+        self._equity_curve_data: list[tuple[datetime, float, float]] = []
+        self._equity_thread = threading.Thread()
+
         # Cache for portfolio data so reopening the portfolio screen is instant
         self._portfolio_balance_cache: dict | None = None
         self._portfolio_positions_cache: list | None = None
@@ -218,6 +224,15 @@ class SpectrApp(App):
         )
         log.debug("starting scanner_thread")
         self._scanner_thread.start()
+
+        # Start equity updater
+        self._equity_thread = threading.Thread(
+            target=self._equity_loop,
+            name="equity-updater",
+            daemon=True,
+        )
+        log.debug("starting equity_thread")
+        self._equity_thread.start()
 
         self.update_status_bar()
         log.debug("starting consumer task")
@@ -270,6 +285,10 @@ class SpectrApp(App):
             df, quote = self.get_live_data(symbol)
             if df.empty or quote is None:
                 return
+
+            price = quote.get("price")
+            if price is not None:
+                self._latest_quotes[symbol.upper()] = float(price)
 
             log.debug(f"Injecting quote for {symbol}")
             df = utils.inject_quote_into_df(df, quote)
@@ -507,6 +526,80 @@ class SpectrApp(App):
 
         log.debug("_scanner_loop exit")
 
+    def _equity_loop(self) -> None:
+        """Periodically update portfolio equity using cached quotes."""
+        log.debug("_equity_loop start")
+        while not self._stop_event.is_set() and not self._shutting_down:
+            try:
+                self._update_portfolio_equity()
+            except Exception as exc:
+                log.error(f"[equity] {exc}")
+
+            if self._stop_event.wait(EQUITY_INTERVAL):
+                log.debug("_equity_loop stop event set")
+                break
+
+        log.debug("_equity_loop exit")
+
+    def _update_portfolio_equity(self) -> None:
+        """Calculate portfolio value using cached quotes and record a point."""
+        try:
+            balance = BROKER_API.get_balance() or {}
+            cash = balance.get("cash", 0.0)
+        except Exception as exc:
+            log.warning(f"Failed to fetch balance: {exc}")
+            cash = 0.0
+            balance = {}
+
+        try:
+            positions = BROKER_API.get_positions() or []
+        except Exception as exc:
+            log.warning(f"Failed to fetch positions: {exc}")
+            positions = []
+
+        total = cash
+        for pos in positions:
+            sym = getattr(pos, "symbol", "").upper()
+            qty = float(getattr(pos, "qty", 0))
+            price = self._latest_quotes.get(sym)
+            if price is None:
+                try:
+                    q = DATA_API.fetch_quote(sym)
+                    price = q.get("price") if q else None
+                    if price is not None:
+                        self._latest_quotes[sym] = float(price)
+                except Exception:
+                    price = None
+
+            if price is not None:
+                total += qty * float(price)
+            else:
+                mv = getattr(pos, "market_value", None)
+                if mv is not None:
+                    total += float(mv)
+
+        self._portfolio_balance_cache = {
+            "cash": cash,
+            "buying_power": balance.get("buying_power", 0.0),
+            "portfolio_value": total,
+        }
+
+        self._record_equity_point(cash, total)
+
+    def _record_equity_point(self, cash: float, total: float) -> None:
+        now = datetime.now()
+        cutoff = now - timedelta(hours=4)
+        self._equity_curve_data.append((now, cash, total))
+        self._equity_curve_data = [d for d in self._equity_curve_data if d[0] >= cutoff]
+
+        # Update any open portfolio screen
+        if self.screen_stack and isinstance(self.screen_stack[-1], PortfolioScreen):
+            screen = self.screen_stack[-1]
+            screen.cash = cash
+            screen.portfolio_value = total
+            screen.equity_view.data = list(self._equity_curve_data)
+            screen.equity_view.refresh()
+
     def on_shutdown(self, event):
         log.debug("on_shutdown start")
         # tell every background task we are quitting
@@ -529,6 +622,11 @@ class SpectrApp(App):
             log.debug("joining scanner_thread")
             self._scanner_thread.join(timeout=5)
             self._scanner_thread = None
+
+        if self._equity_thread and self._equity_thread.is_alive():
+            log.debug("joining equity_thread")
+            self._equity_thread.join(timeout=5)
+            self._equity_thread = None
 
         if self._poll_thread and self._poll_thread.is_alive():
             log.debug("joining poll_thread")
@@ -766,6 +864,7 @@ class SpectrApp(App):
                     self.set_auto_trading,
                     BROKER_API.get_balance,
                     BROKER_API.get_positions,
+                    equity_data=self._equity_curve_data,
                 )
             )
 

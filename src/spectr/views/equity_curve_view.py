@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import plotext as plt
 from rich.text import Text
@@ -15,6 +15,9 @@ class EquityCurveView(Static):
         super().__init__(*args, **kwargs)
         self.data: list[tuple[datetime, float, float]] = []
 
+        # Limit history to the last 4 hours
+        self.history_window = timedelta(hours=4)
+
     def reset(self) -> None:
         """Clear all recorded data points and refresh the view."""
         self.data.clear()
@@ -22,7 +25,10 @@ class EquityCurveView(Static):
 
     def add_point(self, cash: float, total: float) -> None:
         """Append a new data point and trigger a refresh."""
-        self.data.append((datetime.now(), cash, total))
+        now = datetime.now()
+        self.data.append((now, cash, total))
+        cutoff = now - self.history_window
+        self.data = [d for d in self.data if d[0] >= cutoff]
         if len(self.data) > 1000:
             self.data = self.data[-1000:]
         self.refresh()
