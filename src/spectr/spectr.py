@@ -148,6 +148,8 @@ class SpectrApp(App):
 
     def __init__(self, args):
         super().__init__()
+        if not hasattr(self, "exit_event"):
+            self.exit_event = asyncio.Event()
         self._consumer_task = None
         self.args = args  # Store CLI arguments
         self._sig_lock = threading.Lock()  # protects self.signal_detected
