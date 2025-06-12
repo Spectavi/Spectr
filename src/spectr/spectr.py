@@ -324,7 +324,7 @@ class SpectrApp(App):
 
         log.debug("_polling_loop start")
 
-        while not self._stop_event.is_set() and not self._shutting_down:
+        while not self._stop_event.is_set() or not self._shutting_down:
             futures = []
             for sym in self.ticker_symbols:
                 f = self._safe_submit(self._poll_one_symbol, sym)
@@ -477,15 +477,22 @@ class SpectrApp(App):
         }
 
     def _run_scanner(self) -> list[dict]:
+        if self._stop_event.is_set() or self._shutting_down:
+            return []
+
         gainers = DATA_API.fetch_top_movers(limit=50)
+        if self._stop_event.is_set() or self._shutting_down:
+            return []
+
         futures = [self._scan_pool.submit(self._check_scan_symbol, row) for row in gainers]
         results = []
         for f in as_completed(futures):
+            if self._stop_event.is_set() or self._shutting_down:
+                break
             data = f.result()
             if data is not None:
                 results.append(data)
 
-        results = [f.result() for f in as_completed(futures) if f.result()]
         self.top_gainers = results
         self._save_gainers_cache(results)
         return [r for r in results if r.get("passed")]
@@ -494,7 +501,7 @@ class SpectrApp(App):
         log.debug("_scanner_loop start")
         self.scanner_results = self._load_scanner_cache()
         self.top_gainers = self._load_gainers_cache()
-        while not self._stop_event.is_set() and not self._shutting_down:
+        while not self._stop_event.is_set() or not self._shutting_down:
             try:
                 results = self._run_scanner()
                 self.scanner_results = results
@@ -516,7 +523,7 @@ class SpectrApp(App):
     def _equity_loop(self) -> None:
         """Periodically update portfolio equity using cached quotes."""
         log.debug("_equity_loop start")
-        while not self._stop_event.is_set() and not self._shutting_down:
+        while not self._stop_event.is_set() or not self._shutting_down:
             try:
                 self._update_portfolio_equity()
             except Exception as exc:
@@ -587,7 +594,7 @@ class SpectrApp(App):
             screen.equity_view.data = list(self._equity_curve_data)
             screen.equity_view.refresh()
 
-    def on_shutdown(self, event):
+    async def on_shutdown(self, event):
         log.debug("on_shutdown start")
         # tell every background task we are quitting
         self._exit_backtest()
@@ -595,20 +602,20 @@ class SpectrApp(App):
         self._stop_event.set()
 
         # Stop worker pools and threads
-        if self._poll_pool:
-            log.debug("shutting down poll_pool")
-            self._poll_pool.shutdown(wait=True, cancel_futures=True)
-            self._poll_pool = None
-
-        if self._scan_pool:
-            log.debug("shutting down scan_pool")
-            self._scan_pool.shutdown(wait=True, cancel_futures=True)
-            self._scan_pool = None
-
         if self._scanner_thread and self._scanner_thread.is_alive():
             log.debug("joining scanner_thread")
             self._scanner_thread.join(timeout=5)
             self._scanner_thread = None
+
+        if self._scan_pool:
+            log.debug("shutting down scan_pool")
+            self._scan_pool.shutdown(wait=False, cancel_futures=True)
+            self._scan_pool = None
+
+        if self._poll_pool:
+            log.debug("shutting down poll_pool")
+            self._poll_pool.shutdown(wait=False, cancel_futures=True)
+            self._poll_pool = None
 
         if self._equity_thread and self._equity_thread.is_alive():
             log.debug("joining equity_thread")
@@ -628,7 +635,7 @@ class SpectrApp(App):
                 self._consumer_task = None
 
         loop = asyncio.get_running_loop()
-        loop.shutdown_default_executor()
+        await loop.shutdown_default_executor()
         log.debug("on_shutdown complete")
 
 
