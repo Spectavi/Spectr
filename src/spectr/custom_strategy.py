@@ -1,5 +1,10 @@
+import logging
+
 import pandas as pd
 import backtrader as bt
+
+log = logging.getLogger(__name__)
+
 
 class CustomStrategy(bt.Strategy):
     """Simple strategy used for both live signals and backtesting."""
@@ -61,15 +66,18 @@ class CustomStrategy(bt.Strategy):
 
     # ----- Backtesting -----
     def next(self):
-        if len(self.data) < 2:
-            return
-
-        N = 200
+        # Build a DataFrame from the most recent N bars
+        N = 200  # Enough for MACD and BB
         data = {
-            "close": [self.datas[0].close[-i] for i in reversed(range(N))],
+            'close': [self.datas[0].close[-i] for i in reversed(range(N))],
+            'open': [self.datas[0].open[-i] for i in reversed(range(N))],
+            'high': [self.datas[0].high[-i] for i in reversed(range(N))],
+            'low': [self.datas[0].low[-i] for i in reversed(range(N))],
+            'volume': [self.datas[0].volume[-i] for i in reversed(range(N))],
         }
         df = pd.DataFrame(data)
-        res = self.detect_signals(
+
+        signal = self.detect_signals(
             df,
             self.p.symbol,
             position=self.position,
@@ -79,18 +87,26 @@ class CustomStrategy(bt.Strategy):
             bb_dev=self.p.bb_dev,
             macd_thresh=self.p.macd_thresh,
         )
-        if res and res["signal"] == "buy" and not self.position:
+        if not signal:
+            log.debug("No signal detected, skipping this bar.")
+            return
+        else:
+            log.debug(f"Signal detected: {signal}")
+
+        if signal.get('signal') == 'buy' and not self.position.get(self.symbol):
+            log.debug(f"BACKTEST: Buy signal detected: {signal['reason']}")
             self.buy()
             self.buy_signals.append({
-                "type": "buy",
-                "time": self.datas[0].datetime.datetime(0),
-                "price": self.datas[0].close[0],
+                'type': 'buy',
+                'time': self.datas[0].datetime.datetime(0),
+                'price': self.datas[0].close[0],
             })
-        elif res and res["signal"] == "sell" and self.position:
+        elif signal.get('signal') == 'sell' and self.position.get(self.symbol):
+            log.debug(f"BACKTEST: Sell signal detected: {signal['reason']}")
             self.sell()
             self.sell_signals.append({
-                "type": "sell",
-                "time": self.datas[0].datetime.datetime(0),
-                "price": self.datas[0].close[0],
+                'type': 'sell',
+                'time': self.datas[0].datetime.datetime(0),
+                'price': self.datas[0].close[0],
             })
 

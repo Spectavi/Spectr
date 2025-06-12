@@ -25,6 +25,7 @@ from textual.widgets import Static
 import metrics
 import utils
 from custom_strategy import CustomStrategy
+#from CustomStrategy import CustomStrategy
 from fetch.broker_interface import BrokerInterface, OrderSide, OrderType
 from utils import load_cache, save_cache, play_sound
 from views.backtest_input_dialog import BacktestInputDialog
@@ -1020,10 +1021,8 @@ class SpectrApp(App):
             # left-join adds open/high/low/volume from the original df
             df = df.join(price_df[["buy_signals", "sell_signals"]])
 
-
-
             # Show results screen with summary information
-            self.push_screen(
+            await self.push_screen(
                 BacktestResultScreen(
                     df,
                     self.args,
@@ -1054,7 +1053,7 @@ class SpectrApp(App):
             current = self.ticker_symbols[self.active_symbol_index]
             self.update_view(current)
 
-    def run_backtest(self, df, symbol, args, starting_cash=1000):
+    def run_backtest(self, df, symbol, args, starting_cash=1000.00):
         cerebro = bt.Cerebro()
         cerebro.addstrategy(
             CustomStrategy,
@@ -1092,23 +1091,6 @@ class SpectrApp(App):
             'sell_signals': strat.sell_signals,
         }
 
-
-# def show_splash():
-#     # Clear the terminal window
-#     if sys.platform == 'win32':
-#         os.system('cls')
-#     else:
-#         os.system('clear')
-#
-#     # Center the ASCII art
-#     terminal_width = 80  # You might want to calculate this dynamically
-#     spaces = ' ' * ((terminal_width - len(max(GHOST.split('\n'), key=len))) // 2)
-#
-#     print(spaces + "Loading... Please wait")
-#     print()
-#     for line in GHOST.split('\n'):
-#         if line.strip() != '':
-#             print(spaces + line)
 
 if __name__ == "__main__":
     # Show splash screen in a separate thread

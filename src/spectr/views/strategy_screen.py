@@ -16,7 +16,7 @@ class StrategyScreen(Screen):
         self.signals = signals
 
     def compose(self):
-        table = DataTable(zebra_stripes=True, header_style="bold")
+        table = DataTable(zebra_stripes=True)
         table.add_columns("Date/Time", "Symbol", "Side", "Price", "Reason")
         for sig in sorted(self.signals, key=lambda r: r["time"]):
             dt = sig["time"].strftime("%Y-%m-%d %H:%M") if sig.get("time") else ""
