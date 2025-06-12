@@ -485,14 +485,17 @@ class SpectrApp(App):
 
         prev = quote.get("previousClose") or 0
 
-        avg_vol = quote.get("avgVolume") or profile.get("volAvg") or 0
-        volume = quote.get("volume") or 0
+        avg_vol = quote.get("avgVolume") or profile.get("volAvg")
+        volume = quote.get("volume")
         float_shares = (
             profile.get("float")
             or profile.get("floatShares")
             or quote.get("sharesOutstanding")
-            or 0
         )
+
+        if avg_vol is None or volume is None or float_shares is None:
+            # Incomplete data – keep previous values rather than inserting zeros
+            return None
 
         rel_vol_pct = 100 * volume / avg_vol if avg_vol else 0
 
@@ -518,7 +521,17 @@ class SpectrApp(App):
         self.top_gainers = gainers
         self._save_gainers_cache(gainers)
         futures = [self._scan_pool.submit(self._check_scan_symbol, row) for row in gainers]
-        results = [f.result() for f in as_completed(futures) if f.result()]
+        results = []
+        for f in as_completed(futures):
+            data = f.result()
+            if data is not None:
+                results.append(data)
+
+        # Only update when every row returned data to avoid zeroed fields
+        if len(results) != len(gainers):
+            log.debug("scanner refresh incomplete; using previous results")
+            return self.scanner_results
+
         return [r for r in results if r.get("passed")]
 
     def _scanner_loop(self) -> None:
