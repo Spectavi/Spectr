@@ -485,12 +485,13 @@ class SpectrApp(App):
 
         prev = quote.get("previousClose") or 0
 
-        avg_vol = quote.get("avgVolume") or profile.get("volAvg")
-        volume = quote.get("volume")
+        avg_vol = quote.get("avgVolume") or profile.get("volAvg") or 0
+        volume = quote.get("volume") or 0
         float_shares = (
             profile.get("float")
             or profile.get("floatShares")
             or quote.get("sharesOutstanding")
+            or 0
         )
 
         rel_vol_pct = 100 * volume / avg_vol if avg_vol else 0

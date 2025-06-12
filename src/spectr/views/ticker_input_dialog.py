@@ -180,66 +180,19 @@ class TickerInputDialog(ModalScreen):
 
     async def refresh_top_movers(self, rows=None):
         if rows is None:
-            rows = await asyncio.to_thread(self.top_gainers_cb, limit=50)
-        log.debug(f"Top 50 gainers today: {rows}")
+            rows = self.top_gainers_cb(limit=50)
 
-        async def fetch(symbol: str) -> tuple[dict, dict]:
-            quote = {}
-            profile = {}
-            if self.quote_cb:
-                try:
-                    quote = await asyncio.to_thread(self.quote_cb, symbol)
-                except Exception as exc:
-                    log.debug(f"quote fetch failed for {symbol}: {exc}")
-            if self.profile_cb:
-                try:
-                    profile = await asyncio.to_thread(self.profile_cb, symbol)
-                except Exception as exc:
-                    log.debug(f"profile fetch failed for {symbol}: {exc}")
-            return quote or {}, profile or {}
-
-        quotes_profiles = await asyncio.gather(*(fetch(row["symbol"]) for row in rows))
-
-        processed = []
-        for row, (quote, profile) in zip(rows, quotes_profiles):
-            avg_vol = quote.get("avgVolume") or profile.get("volAvg")
-            vol = quote.get("volume")
-            float_shares = (
-                profile.get("float")
-                or profile.get("floatShares")
-                or quote.get("sharesOutstanding")
-            )
-
-            if avg_vol is None or vol is None or float_shares is None:
-                # Skip update for this row if data is incomplete
-                prev = next((r for r in self.gainers_list if r["symbol"] == row["symbol"]), None)
-                if prev:
-                    processed.append(prev)
-                continue
-
-            processed.append(
-                {
-                    "symbol": row["symbol"],
-                    "changesPercentage": row["changesPercentage"],
-                    "price": row["price"],
-                    "open_price": row["price"] - row.get("change", 0),
-                    "pct": f"{vol / avg_vol * 100:.0f}%" if avg_vol else "",
-                    "avg_vol": avg_vol,
-                    "float": float_shares,
-                }
-            )
-
-        self.gainers_list = processed
+        self.gainers_list = rows
         table = self.query_one("#gainers-table", DataTable)
         table.clear()
-        for row in processed:
+        for row in self.gainers_list:
             table.add_row(
                 row["symbol"],
                 row["changesPercentage"],
                 f"${row['price']:.2f}",
                 f"${row['open_price']:.2f}",
-                row["pct"],
-                utils.human_format(row["avg_vol"]),
+                row.get('volume_pct'),
+                utils.human_format(row["avg_volume"]),
                 utils.human_format(row["float"]),
                 key=row["symbol"],
             )
