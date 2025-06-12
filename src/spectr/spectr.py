@@ -237,6 +237,10 @@ class SpectrApp(App):
         self._equity_thread.start()
 
         self.update_status_bar()
+        if self.args.broker == "robinhood" and self.args.real_trades:
+            self.query_one("#overlay-text", TopOverlay).flash_message(
+                "Robinhood does NOT support PAPER TRADING!", style="bold red"
+            )
         log.debug("starting consumer task")
         self._consumer_task = asyncio.create_task(self._process_updates())
 
@@ -852,6 +856,7 @@ class SpectrApp(App):
                     BROKER_API.cancel_order,
                     self.args.real_trades,
                     self.set_real_trades,
+                    self.args.broker == "robinhood" and self.args.real_trades,
                     self.auto_trading_enabled,
                     self.set_auto_trading,
                     BROKER_API.get_balance,
