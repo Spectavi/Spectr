@@ -44,6 +44,7 @@ class PortfolioScreen(Screen):
         cancel_order_callback,
         real_trades: bool,
         set_real_trades_cb=None,
+        disable_live_switch: bool = False,
         auto_trading: bool = False,
         set_auto_trading_cb=None,
         balance_callback=None,
@@ -59,6 +60,7 @@ class PortfolioScreen(Screen):
         if self.cached_orders:
             self.cached_orders.sort(key=self._order_date, reverse=True)
         self.real_trades = real_trades
+        self.disable_live_switch = disable_live_switch
         self._has_cached_balance = cash is not None
         self._has_cached_positions = positions is not None
         self._has_cached_orders = orders is not None
@@ -90,6 +92,7 @@ class PortfolioScreen(Screen):
         )
         self._cancel_col = self.order_table_columns[-1]
         self.mode_switch = Switch(value=self.real_trades, id="trade-mode-switch")
+        self.mode_switch.disabled = self.disable_live_switch
         self.auto_switch = Switch(value=self.auto_trading_enabled, id="auto-trade-switch")
         self.orders_callback = orders_callback
         self.balance_callback = balance_callback
