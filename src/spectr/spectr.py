@@ -485,13 +485,12 @@ class SpectrApp(App):
 
         prev = quote.get("previousClose") or 0
 
-        avg_vol = quote.get("avgVolume") or profile.get("volAvg") or 0
-        volume = quote.get("volume") or 0
+        avg_vol = quote.get("avgVolume") or profile.get("volAvg")
+        volume = quote.get("volume")
         float_shares = (
             profile.get("float")
             or profile.get("floatShares")
             or quote.get("sharesOutstanding")
-            or 0
         )
 
         rel_vol_pct = 100 * volume / avg_vol if avg_vol else 0
@@ -516,6 +515,12 @@ class SpectrApp(App):
     def _run_scanner(self) -> list[dict]:
         gainers = DATA_API.fetch_top_movers(limit=50)
         futures = [self._scan_pool.submit(self._check_scan_symbol, row) for row in gainers]
+        results = []
+        for f in as_completed(futures):
+            data = f.result()
+            if data is not None:
+                results.append(data)
+
         results = [f.result() for f in as_completed(futures) if f.result()]
         self.top_gainers = results
         self._save_gainers_cache(results)
