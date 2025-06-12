@@ -270,9 +270,6 @@ class TickerInputDialog(ModalScreen):
         if results and results != self.scanner_list:
             self.scanner_list = results
             self._populate_scanner_table(results)
-            if self._scanner_refresh_job:
-                self._scanner_refresh_job.stop()
-                self._scanner_refresh_job = None
 
     async def _check_gainers_results(self):
         if not self.gainers_results_cb:

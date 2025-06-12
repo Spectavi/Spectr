@@ -515,10 +515,10 @@ class SpectrApp(App):
 
     def _run_scanner(self) -> list[dict]:
         gainers = DATA_API.fetch_top_movers(limit=50)
-        self.top_gainers = gainers
-        self._save_gainers_cache(gainers)
         futures = [self._scan_pool.submit(self._check_scan_symbol, row) for row in gainers]
         results = [f.result() for f in as_completed(futures) if f.result()]
+        self.top_gainers = results
+        self._save_gainers_cache(results)
         return [r for r in results if r.get("passed")]
 
     def _scanner_loop(self) -> None:
