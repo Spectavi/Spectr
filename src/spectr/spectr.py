@@ -542,7 +542,11 @@ class SpectrApp(App):
             screen.equity_view.data = list(self._equity_curve_data)
             screen.equity_view.refresh()
 
-    async def on_shutdown(self, event):
+    async def action_quit(self):
+        """Handle the Escape key to quit the app."""
+        log.debug("Escape key pressed, quitting app.")
+        self.exit_event.set()
+
         log.debug("on_shutdown start")
         # tell every background task we are quitting
         self._exit_backtest()
@@ -572,9 +576,8 @@ class SpectrApp(App):
             with contextlib.suppress(asyncio.CancelledError):
                 self._consumer_task = None
 
-        loop = asyncio.get_running_loop()
-        await loop.shutdown_default_executor()
         log.debug("on_shutdown complete")
+        self.exit()
 
 
 
