@@ -7,7 +7,6 @@ import json
 import pathlib
 import time
 import queue
-import sys
 import threading
 import traceback
 from concurrent.futures._base import wait
@@ -19,15 +18,13 @@ import pandas as pd
 from dotenv import load_dotenv
 from textual.app import App, ComposeResult
 from textual.reactive import reactive
-from textual.screen import Screen
-from textual.widgets import Static
 
 import metrics
 import utils
 from custom_strategy import CustomStrategy
 #from CustomStrategy import CustomStrategy
 from fetch.broker_interface import BrokerInterface, OrderSide, OrderType
-from utils import load_cache, save_cache, play_sound
+from utils import play_sound, get_historical_data, get_live_data
 from views.backtest_input_dialog import BacktestInputDialog
 from views.backtest_result_screen import BacktestResultScreen
 from views.order_dialog import OrderDialog
@@ -39,6 +36,7 @@ from views.top_overlay import TopOverlay
 from views.trades_screen import TradesScreen
 from views.strategy_screen import StrategyScreen
 from daemon_thread_pool import DaemonThreadPoolExecutor
+
 
 # Notes for scanner filter:
 # - Already up 5%.
@@ -197,13 +195,13 @@ class SpectrApp(App):
         await self.push_screen(SplashScreen())
         # Set symbols and active symbol
         self.ticker_symbols = self.args.symbols
+        # Ensure any open positions are at the start of the watchlist.
         self._prepend_open_positions()
         self.args.symbols = self.ticker_symbols
         self.active_symbol_index = 0
         symbol = self.ticker_symbols[0]
+
         log.debug(f"self.ticker_symbols: {self.ticker_symbols}")
-        log.debug(f"self.active_symbol_index: {self.active_symbol_index}")
-        log.debug(f"symbol: {symbol}")
         log.debug("App mounted.")
 
         # Kick off producer & consumer
@@ -242,51 +240,12 @@ class SpectrApp(App):
         log.debug("starting consumer task")
         self._consumer_task = asyncio.create_task(self._process_updates())
 
-    def get_live_data(self, symbol):
-        df = DATA_API.fetch_chart_data(symbol, from_date=datetime.now().date().strftime("%Y-%m-%d"),
-                                       to_date=datetime.now().date().strftime("%Y-%m-%d"))
-        quote = DATA_API.fetch_quote(symbol)
-        return df, quote
 
-    # Grabs 1-day more than requested, calculates indicators, then trims to requested range.
-    def get_historical_data(self, symbol: str, from_date: str, to_date: str):
-        """
-        Fetch OHLCV + quote for *symbol* in [from_date .. to_date] **inclusive**,
-        but ensure that indicators that need a look-back window are fully
-        initialised by pulling an extra day of data before `from_date`.
-        """
-        log.debug(f"Fetching historical data for {symbol}…")
-
-        # Extend the request one calendar day back
-        dt_from = datetime.strptime(from_date, "%Y-%m-%d").date()
-        extended_from = (dt_from - timedelta(days=1)).strftime("%Y-%m-%d")
-        log.debug(f"dt_from: {dt_from}")
-        log.debug(f"extended_from: {extended_from}")
-
-        # Pull the data and quote
-        df = DATA_API.fetch_chart_data_for_backtest(symbol, from_date=extended_from, to_date=to_date)
-
-        # Fallback to 5min data if 1min isn't present.
-        if df.empty:
-            df = DATA_API.fetch_chart_data_for_backtest(symbol, from_date=extended_from, to_date=to_date,
-                                                        interval="5min")
-        # Compute indicators on the *full* frame (needs the extra bar)
-        df = metrics.analyze_indicators(df, self.bb_period, self.bb_dev, self.macd_thresh)
-        quote = None
-        try:
-            quote = DATA_API.fetch_quote(symbol)
-        except Exception:
-            log.warning(f"Failed to fetch quote for {symbol}")
-
-        # Trim back to the exact range the caller requested
-        df = df.loc[from_date:to_date]  # string slice → inclusive
-
-        return df, quote
 
     def _poll_one_symbol(self, symbol: str):
         try:
             log.debug(f"Fetching live data for {symbol}...")
-            df, quote = self.get_live_data(symbol)
+            df, quote = get_live_data(DATA_API, symbol)
             if df.empty or quote is None:
                 return
 
@@ -318,7 +277,6 @@ class SpectrApp(App):
                 reason = signal_dict.get("reason")
                 log.debug(f"Signal detected for {symbol}. Reason: {reason}")
                 df.at[df.index[-1], 'trade'] = signal  # mark bar for plotting
-                # self.update_view(symbol)
                 if signal == "buy":
                     log.debug("Buy signal detected!")
                     self.signal_detected.append((symbol, curr_price, signal))
@@ -686,7 +644,7 @@ class SpectrApp(App):
                 self._safe_submit(self._poll_one_symbol, symbol)
             if hasattr(self, "_poll_now"):
                 self._poll_now.set()
-            # self.update_view(symbol)
+            self.update_view(symbol)
 
     def action_prev_symbol(self):
         self._exit_backtest()
@@ -699,7 +657,7 @@ class SpectrApp(App):
             self._safe_submit(self._poll_one_symbol, symbol)
         if hasattr(self, "_poll_now"):
             self._poll_now.set()
-        # self.update_view(symbol)
+        self.update_view(symbol)
 
     def action_next_symbol(self):
         self._exit_backtest()
@@ -712,7 +670,7 @@ class SpectrApp(App):
             self._safe_submit(self._poll_one_symbol, symbol)
         if hasattr(self, "_poll_now"):
             self._poll_now.set()
-        # self.update_view(symbol)
+        self.update_view(symbol)
 
 
 
@@ -972,7 +930,8 @@ class SpectrApp(App):
 
             # Fetch historical bars
             df, _ = await asyncio.to_thread(
-                self.get_historical_data,
+                get_historical_data,
+                DATA_API,
                 symbol,
                 from_date=form["from"],
                 to_date=form["to"],

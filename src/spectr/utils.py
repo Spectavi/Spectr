@@ -1,15 +1,15 @@
 
 import logging
 import os
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import datetime, timedelta
 from tzlocal import get_localzone
 
 import pandas as pd
-import pytz
 import threading
 import pygame
 
+import metrics
+from fetch import data_interface
 
 LOG_FILE = 'signal_log.csv'
 CACHE_DIR = 'cache'
@@ -142,3 +142,45 @@ def inject_quote_into_df(
 
     log.debug("Injected quote row:\n%s", out.tail(3))
     return out
+
+# Grabs 1-day more than requested, calculates indicators, then trims to requested range.
+def get_historical_data(data_api: data_interface, bb_period, bb_dev, macd_thresh, symbol: str, from_date: str, to_date: str):
+    """
+    Fetch OHLCV + quote for *symbol* in [from_date .. to_date] **inclusive**,
+    but ensure that indicators that need a look-back window are fully
+    initialised by pulling an extra day of data before `from_date`.
+    """
+    log.debug(f"Fetching historical data for {symbol}…")
+
+    # Extend the request one calendar day back
+    dt_from = datetime.strptime(from_date, "%Y-%m-%d").date()
+    extended_from = (dt_from - timedelta(days=1)).strftime("%Y-%m-%d")
+    log.debug(f"dt_from: {dt_from}")
+    log.debug(f"extended_from: {extended_from}")
+
+    # Pull the data and quote
+    df = data_api.fetch_chart_data_for_backtest(symbol, from_date=extended_from, to_date=to_date)
+
+    # Fallback to 5min data if 1min isn't present.
+    if df.empty:
+        df = data_api.fetch_chart_data_for_backtest(symbol, from_date=extended_from, to_date=to_date,
+                                                    interval="5min")
+    # Compute indicators on the *full* frame (needs the extra bar)
+    df = metrics.analyze_indicators(df, bb_period, bb_dev, macd_thresh)
+    quote = None
+    try:
+        quote = data_api.fetch_quote(symbol)
+    except Exception:
+        log.warning(f"Failed to fetch quote for {symbol}")
+
+    # Trim back to the exact range the caller requested
+    df = df.loc[from_date:to_date]  # string slice → inclusive
+
+    return df, quote
+
+
+def get_live_data(data_api: data_interface, symbol: str):
+    df = data_api.fetch_chart_data(symbol, from_date=datetime.now().date().strftime("%Y-%m-%d"),
+                                   to_date=datetime.now().date().strftime("%Y-%m-%d"))
+    quote = data_api.fetch_quote(symbol)
+    return df, quote
