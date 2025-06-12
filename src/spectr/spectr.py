@@ -9,8 +9,6 @@ import time
 import queue
 import threading
 import traceback
-from concurrent.futures._base import wait
-from concurrent.futures import as_completed
 from datetime import datetime, timedelta
 
 import backtrader as bt
@@ -35,7 +33,6 @@ from views.ticker_input_dialog import TickerInputDialog
 from views.top_overlay import TopOverlay
 from views.trades_screen import TradesScreen
 from views.strategy_screen import StrategyScreen
-from daemon_thread_pool import DaemonThreadPoolExecutor
 
 
 # Notes for scanner filter:
@@ -153,10 +150,10 @@ class SpectrApp(App):
         super().__init__()
         self._consumer_task = None
         self.args = args  # Store CLI arguments
-        self._poll_pool: DaemonThreadPoolExecutor | None = None
         self._sig_lock = threading.Lock()  # protects self.signal_detected
-        # self._poll_now = asyncio.Event()
-        self._poll_thread = threading.Thread()
+        self._poll_worker = None
+        self._scanner_worker = None
+        self._equity_worker = None
         self.macd_thresh = self.args.macd_thresh
         self.bb_period = self.args.bb_period
         self.bb_dev = self.args.bb_dev
@@ -165,7 +162,6 @@ class SpectrApp(App):
             os.mkdir(utils.CACHE_DIR)
 
         self._update_queue: queue.Queue[str] = queue.Queue()
-        self._stop_event = threading.Event()
         self.signal_detected = []
         self.strategy_signals: list[dict] = []
         self._shutting_down = False
@@ -174,12 +170,10 @@ class SpectrApp(App):
         self.scanner_results: list[dict] = self._load_scanner_cache()
         self._gainers_cache_file = pathlib.Path.home() / ".spectr_gainers_cache.json"
         self.top_gainers: list[dict] = self._load_gainers_cache()
-        self._scanner_thread = threading.Thread()
 
         # Track latest quotes and equity curve
         self._latest_quotes: dict[str, float] = {}
         self._equity_curve_data: list[tuple[datetime, float, float]] = []
-        self._equity_thread = threading.Thread()
 
         # Cache for portfolio data so reopening the portfolio screen is instant
         self._portfolio_balance_cache: dict | None = None
@@ -202,36 +196,10 @@ class SpectrApp(App):
         log.debug(f"self.ticker_symbols: {self.ticker_symbols}")
         log.debug("App mounted.")
 
-        # Kick off producer & consumer
-        self._poll_pool = DaemonThreadPoolExecutor(
-            max_workers=min(8, len(self.ticker_symbols)),  # tweak as you wish
-            thread_name_prefix="poll",
-        )
-
-        self._poll_thread = threading.Thread(
-            target=self._polling_loop,
-            name="data-poller",
-            daemon=True,
-        )
-        log.debug("starting poll_thread")
-        self._poll_thread.start()
-
-        self._scanner_thread = threading.Thread(
-            target=self._scanner_loop,
-            name="scanner",
-            daemon=True,
-        )
-        log.debug("starting scanner_thread")
-        self._scanner_thread.start()
-
-        # Start equity updater
-        self._equity_thread = threading.Thread(
-            target=self._equity_loop,
-            name="equity-updater",
-            daemon=True,
-        )
-        log.debug("starting equity_thread")
-        self._equity_thread.start()
+        # Kick off background workers
+        self._poll_worker = self.run_worker(self._polling_loop, thread=False)
+        self._scanner_worker = self.run_worker(self._scanner_loop, thread=False)
+        self._equity_worker = self.run_worker(self._equity_loop, thread=False)
 
         self.update_status_bar()
         if self.args.broker == "robinhood" and self.args.real_trades:
@@ -314,32 +282,22 @@ class SpectrApp(App):
         except Exception as exc:
             log.error(f"[poll] {symbol}: {traceback.format_exc()}")
 
-    def _polling_loop(self) -> None:
-        """Runs in *one* native thread; spins a pool for the symbols."""
+    async def _polling_loop(self) -> None:
+        """Poll all symbols at regular intervals."""
         if self.is_backtest:
             return
 
         log.debug("_polling_loop start")
 
-        while not self._stop_event.is_set() or not self._shutting_down:
-            futures = []
-            for sym in self.ticker_symbols:
-                f = self._safe_submit(self._poll_one_symbol, sym)
-                if f:
-                    futures.append(f)
+        while not self.exit_event.is_set():
+            tasks = [asyncio.to_thread(self._poll_one_symbol, sym) for sym in self.ticker_symbols]
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
 
-            if futures:
-                # Fan-in – wait until ALL symbols finish
-                wait(futures, return_when="ALL_COMPLETED")
-
-            # (optional) bail early if any worker raised
-            for f in futures:
-                if exc := f.exception():
-                    log.error(f"Worker crashed: {exc}")
-
-            if self._stop_event.wait(REFRESH_INTERVAL):
-                log.debug("_polling_loop stop event set")
-                break
+            try:
+                await asyncio.wait_for(self.exit_event.wait(), timeout=REFRESH_INTERVAL)
+            except asyncio.TimeoutError:
+                pass
 
         log.debug("_polling_loop exit")
 
@@ -387,17 +345,6 @@ class SpectrApp(App):
                     if df is not None:
                         self.update_view(symbol)
 
-    def _safe_submit(self, fn, *args, **kw):
-        if (
-                self._shutting_down
-                or self._poll_pool is None
-                or self._poll_pool._shutdown
-        ):
-            return None
-        try:
-            return self._poll_pool.submit(fn, *args, **kw)
-        except RuntimeError:
-            return None
 
     def _save_scanner_cache(self, rows: list[dict]) -> None:
         try:
@@ -473,20 +420,20 @@ class SpectrApp(App):
             "passed": passed,
         }
 
-    def _run_scanner(self) -> list[dict]:
-        if self._stop_event.is_set() or self._shutting_down:
+    async def _run_scanner(self) -> list[dict]:
+        if self.exit_event.is_set():
             return []
 
         gainers = DATA_API.fetch_top_movers(limit=50)
-        if self._stop_event.is_set() or self._shutting_down:
+        if self.exit_event.is_set():
             return []
 
-        futures = [self._poll_pool.submit(self._check_scan_symbol, row) for row in gainers]
+        tasks = [asyncio.to_thread(self._check_scan_symbol, row) for row in gainers]
         results = []
-        for f in as_completed(futures):
-            if self._stop_event.is_set() or self._shutting_down:
+        for coro in asyncio.as_completed(tasks):
+            if self.exit_event.is_set():
                 break
-            data = f.result()
+            data = await coro
             if data is not None:
                 results.append(data)
 
@@ -494,13 +441,13 @@ class SpectrApp(App):
         self._save_gainers_cache(results)
         return [r for r in results if r.get("passed")]
 
-    def _scanner_loop(self) -> None:
+    async def _scanner_loop(self) -> None:
         log.debug("_scanner_loop start")
         self.scanner_results = self._load_scanner_cache()
         self.top_gainers = self._load_gainers_cache()
-        while not self._stop_event.is_set() or not self._shutting_down:
+        while not self.exit_event.is_set():
             try:
-                results = self._run_scanner()
+                results = await self._run_scanner()
                 self.scanner_results = results
                 self._save_scanner_cache(results)
                 if results:
@@ -511,24 +458,26 @@ class SpectrApp(App):
             except Exception as exc:
                 log.error(f"[scanner] {exc}")
 
-            if self._stop_event.wait(SCANNER_INTERVAL):
-                log.error("_scanner_loop stop event set")
-                break
+            try:
+                await asyncio.wait_for(self.exit_event.wait(), timeout=SCANNER_INTERVAL)
+            except asyncio.TimeoutError:
+                pass
 
         log.debug("_scanner_loop exit")
 
-    def _equity_loop(self) -> None:
+    async def _equity_loop(self) -> None:
         """Periodically update portfolio equity using cached quotes."""
         log.debug("_equity_loop start")
-        while not self._stop_event.is_set() or not self._shutting_down:
+        while not self.exit_event.is_set():
             try:
                 self._update_portfolio_equity()
             except Exception as exc:
                 log.error(f"[equity] {exc}")
 
-            if self._stop_event.wait(EQUITY_INTERVAL):
-                log.debug("_equity_loop stop event set")
-                break
+            try:
+                await asyncio.wait_for(self.exit_event.wait(), timeout=EQUITY_INTERVAL)
+            except asyncio.TimeoutError:
+                pass
 
         log.debug("_equity_loop exit")
 
@@ -592,38 +541,27 @@ class SpectrApp(App):
             screen.equity_view.refresh()
 
     async def on_shutdown(self, event):
-        self._stop_event.set()
         log.debug("on_shutdown start")
         # tell every background task we are quitting
         self._exit_backtest()
         self.auto_trading_enabled = False
         self._shutting_down = True
 
-        # Stop worker pools and threads
-        if self._scanner_thread and self._scanner_thread.is_alive():
-            log.debug("joining scanner_thread")
-            self._scanner_thread.join(timeout=5)
-            self._scanner_thread = None
+        # Cancel workers
+        if self._scanner_worker:
+            log.debug("cancelling scanner worker")
+            self._scanner_worker.cancel()
+            self._scanner_worker = None
 
-        if self._scan_pool:
-            log.debug("shutting down scan_pool")
-            self._scan_pool.shutdown(wait=False, cancel_futures=True)
-            self._scan_pool = None
+        if self._poll_worker:
+            log.debug("cancelling poll worker")
+            self._poll_worker.cancel()
+            self._poll_worker = None
 
-        if self._poll_pool:
-            log.debug("shutting down poll_pool")
-            self._poll_pool.shutdown(wait=False, cancel_futures=True)
-            self._poll_pool = None
-
-        if self._equity_thread and self._equity_thread.is_alive():
-            log.debug("joining equity_thread")
-            self._equity_thread.join(timeout=5)
-            self._equity_thread = None
-
-        if self._poll_thread and self._poll_thread.is_alive():
-            log.debug("joining poll_thread")
-            self._poll_thread.join(timeout=5)
-            self._poll_thread = None
+        if self._equity_worker:
+            log.debug("cancelling equity worker")
+            self._equity_worker.cancel()
+            self._equity_worker = None
 
         if self._consumer_task:
             log.debug("cancelling consumer task")
@@ -649,8 +587,7 @@ class SpectrApp(App):
             symbol = self.ticker_symbols[index]
             log.debug(f"action selected symbol: {symbol}")
             symbol = self.ticker_symbols[index]
-            if self._poll_pool:
-                self._safe_submit(self._poll_one_symbol, symbol)
+            self.run_worker(self._poll_one_symbol, symbol)
             if hasattr(self, "_poll_now"):
                 self._poll_now.set()
             self.update_view(symbol)
@@ -662,8 +599,7 @@ class SpectrApp(App):
             new_index = len(self.ticker_symbols) - 1
         self.active_symbol_index = new_index
         symbol = self.ticker_symbols[new_index]
-        if self._poll_pool:
-            self._safe_submit(self._poll_one_symbol, symbol)
+        self.run_worker(self._poll_one_symbol, symbol)
         if hasattr(self, "_poll_now"):
             self._poll_now.set()
         self.update_view(symbol)
@@ -675,8 +611,7 @@ class SpectrApp(App):
             new_index = 0
         self.active_symbol_index = new_index
         symbol = self.ticker_symbols[new_index]
-        if self._poll_pool:
-            self._safe_submit(self._poll_one_symbol, symbol)
+        self.run_worker(self._poll_one_symbol, symbol)
         if hasattr(self, "_poll_now"):
             self._poll_now.set()
         self.update_view(symbol)
@@ -765,8 +700,7 @@ class SpectrApp(App):
             self.active_symbol_index = 0
             symbol = self.ticker_symbols[self.active_symbol_index]
 
-            if self._poll_pool:
-                self._safe_submit(self._poll_one_symbol, symbol)
+            self.run_worker(self._poll_one_symbol, symbol)
             if hasattr(self, "_poll_now"):
                 self._poll_now.set()
             self.update_view(symbol)
