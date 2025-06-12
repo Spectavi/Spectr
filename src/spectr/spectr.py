@@ -154,7 +154,7 @@ class SpectrApp(App):
         self._consumer_task = None
         self.args = args  # Store CLI arguments
         self._poll_pool: DaemonThreadPoolExecutor | None = None
-        # self._sig_lock = threading.Lock()  # protects self.signal_detected
+        self._sig_lock = threading.Lock()  # protects self.signal_detected
         # self._poll_now = asyncio.Event()
         self._poll_thread = threading.Thread()
         self.macd_thresh = self.args.macd_thresh
@@ -174,7 +174,6 @@ class SpectrApp(App):
         self.scanner_results: list[dict] = self._load_scanner_cache()
         self._gainers_cache_file = pathlib.Path.home() / ".spectr_gainers_cache.json"
         self.top_gainers: list[dict] = self._load_gainers_cache()
-        self._scan_pool: DaemonThreadPoolExecutor | None = None
         self._scanner_thread = threading.Thread()
 
         # Track latest quotes and equity curve
@@ -199,7 +198,6 @@ class SpectrApp(App):
         self._prepend_open_positions()
         self.args.symbols = self.ticker_symbols
         self.active_symbol_index = 0
-        symbol = self.ticker_symbols[0]
 
         log.debug(f"self.ticker_symbols: {self.ticker_symbols}")
         log.debug("App mounted.")
@@ -218,7 +216,6 @@ class SpectrApp(App):
         log.debug("starting poll_thread")
         self._poll_thread.start()
 
-        self._scan_pool = DaemonThreadPoolExecutor(max_workers=20, thread_name_prefix="scan")
         self._scanner_thread = threading.Thread(
             target=self._scanner_loop,
             name="scanner",
@@ -484,7 +481,7 @@ class SpectrApp(App):
         if self._stop_event.is_set() or self._shutting_down:
             return []
 
-        futures = [self._scan_pool.submit(self._check_scan_symbol, row) for row in gainers]
+        futures = [self._poll_pool.submit(self._check_scan_symbol, row) for row in gainers]
         results = []
         for f in as_completed(futures):
             if self._stop_event.is_set() or self._shutting_down:
@@ -595,11 +592,12 @@ class SpectrApp(App):
             screen.equity_view.refresh()
 
     async def on_shutdown(self, event):
+        self._stop_event.set()
         log.debug("on_shutdown start")
         # tell every background task we are quitting
         self._exit_backtest()
+        self.auto_trading_enabled = False
         self._shutting_down = True
-        self._stop_event.set()
 
         # Stop worker pools and threads
         if self._scanner_thread and self._scanner_thread.is_alive():
