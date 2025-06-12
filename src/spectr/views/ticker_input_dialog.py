@@ -202,8 +202,21 @@ class TickerInputDialog(ModalScreen):
 
         processed = []
         for row, (quote, profile) in zip(rows, quotes_profiles):
-            avg_vol = quote.get("avgVolume") or profile.get("volAvg") or 0
-            vol = quote.get("volume") or 0
+            avg_vol = quote.get("avgVolume") or profile.get("volAvg")
+            vol = quote.get("volume")
+            float_shares = (
+                profile.get("float")
+                or profile.get("floatShares")
+                or quote.get("sharesOutstanding")
+            )
+
+            if avg_vol is None or vol is None or float_shares is None:
+                # Skip update for this row if data is incomplete
+                prev = next((r for r in self.gainers_list if r["symbol"] == row["symbol"]), None)
+                if prev:
+                    processed.append(prev)
+                continue
+
             processed.append(
                 {
                     "symbol": row["symbol"],
@@ -212,12 +225,7 @@ class TickerInputDialog(ModalScreen):
                     "open_price": row["price"] - row.get("change", 0),
                     "pct": f"{vol / avg_vol * 100:.0f}%" if avg_vol else "",
                     "avg_vol": avg_vol,
-                    "float": (
-                        profile.get("float")
-                        or profile.get("floatShares")
-                        or quote.get("sharesOutstanding")
-                        or 0
-                    ),
+                    "float": float_shares,
                 }
             )
 
