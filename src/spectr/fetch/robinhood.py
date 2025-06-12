@@ -1,7 +1,8 @@
 import os
 import logging
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+import types
 from robin_stocks import robinhood as r
 from dotenv import load_dotenv
 
@@ -20,9 +21,14 @@ ROBIN_PASS = os.getenv("ROBINHOOD_PASSWORD")
 ## I recommend using FMP for data and Alpaca for broker. It's the most affordable way to get decent intraday 1min data.
 
 class RobinhoodInterface(BrokerInterface, DataInterface):
-    def __init__(self):
+    def __init__(self, real_trades: bool = True):
+        self._real_trades = real_trades
         self.logged_in = False
         self._login()
+
+    @property
+    def real_trades(self) -> bool:
+        return self._real_trades
 
     def _login(self):
         if not self.logged_in:
@@ -129,27 +135,98 @@ class RobinhoodInterface(BrokerInterface, DataInterface):
 
     # ------------- BrokerInterface methods -------------
 
-    def has_pending_order(self, symbol, real_trades=False):
+    def get_balance(self):
+        """Return basic account metrics."""
+        try:
+            profile = r.profiles.load_account_profile()
+            return {
+                "cash": float(profile.get("cash", 0.0)),
+                "buying_power": float(profile.get("buying_power", 0.0)),
+                "portfolio_value": float(profile.get("equity", 0.0)),
+            }
+        except Exception as exc:
+            log.error(f"Failed to fetch account balance: {exc}")
+            return {}
+
+    def has_pending_order(self, symbol: str) -> bool:
         orders = r.orders.get_all_open_stock_orders()
         for order in orders:
             if order["instrument"].lower().endswith(symbol.lower()):
                 return True
         return False
 
-    def has_position(self, symbol, real_trades=False):
-        pos = self.get_position(symbol)
-        return pos is not None and float(pos.get("quantity", 0)) > 0
-
-    def get_position(self, symbol, real_trades=False):
-        holdings = r.account.build_holdings()
-        return holdings.get(symbol.upper(), None)
-
-    def submit_order(self, symbol, side: OrderSide, qty=1, real_trades=False):
+    def get_pending_orders(self, symbol: str) -> pd.DataFrame:
         try:
-            r.orders.order_buy_market(symbol, qty) if side == OrderSide.BUY else r.orders.order_sell_market(symbol, qty)
-            log.debug(f"ORDER PLACED: {side.name.upper()} {qty} shares of {symbol}")
-        except Exception as e:
-            log.error(f"ORDER FAILED: {e}")
+            orders = r.orders.get_all_open_stock_orders()
+            if symbol:
+                orders = [o for o in orders if o["instrument"].lower().endswith(symbol.lower())]
+            return pd.DataFrame(orders)
+        except Exception as exc:
+            log.error(f"Failed to fetch pending orders: {exc}")
+            return pd.DataFrame()
+
+    def get_closed_orders(self) -> pd.DataFrame:
+        try:
+            orders = r.orders.get_all_stock_orders()
+            closed = [o for o in orders if o.get("state") in ("filled", "cancelled", "rejected", "failed")]
+            return pd.DataFrame(closed)
+        except Exception as exc:
+            log.error(f"Failed to fetch closed orders: {exc}")
+            return pd.DataFrame()
+
+    def get_all_orders(self) -> list:
+        try:
+            return r.orders.get_all_stock_orders()
+        except Exception as exc:
+            log.error(f"Failed to fetch orders: {exc}")
+            return []
+
+    def get_orders_for_symbol(self, symbol: str) -> pd.DataFrame:
+        try:
+            orders = r.orders.get_all_stock_orders()
+            orders = [o for o in orders if o["instrument"].lower().endswith(symbol.lower())]
+            return pd.DataFrame(orders)
+        except Exception as exc:
+            log.error(f"Failed to fetch orders for {symbol}: {exc}")
+            return pd.DataFrame()
+
+    def has_position(self, symbol: str) -> bool:
+        pos = self.get_position(symbol)
+        if not pos:
+            return False
+        return float(getattr(pos, "qty", pos.get("quantity", 0))) > 0
+
+    def get_position(self, symbol: str):
+        for pos in self.get_positions():
+            if getattr(pos, "symbol", "").upper() == symbol.upper():
+                return pos
+        return None
+
+    def get_positions(self):
+        try:
+            holdings = r.account.build_holdings()
+            positions = []
+            for sym, data in holdings.items():
+                qty = float(data.get("quantity", 0))
+                pos = types.SimpleNamespace(symbol=sym.upper(), qty=qty, **data)
+                positions.append(pos)
+            return positions
+        except Exception as exc:
+            log.debug(f"Failed to fetch positions: {exc}")
+            return []
+
+    def submit_order(self, symbol: str, side: OrderSide, type: OrderType, quantity: float = 1.0):
+        try:
+            if type != OrderType.MARKET:
+                log.error("RobinhoodInterface only supports market orders")
+                return
+            if side == OrderSide.BUY:
+                r.orders.order_buy_market(symbol, quantity)
+            else:
+                r.orders.order_sell_market(symbol, quantity)
+            log.debug(f"ORDER PLACED: {side.name.upper()} {quantity} shares of {symbol}")
+        except Exception as exc:
+            log.error(f"ORDER FAILED: {exc}")
 
     def cancel_order(self, order_id: str) -> bool:
         try:
