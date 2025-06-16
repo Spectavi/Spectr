@@ -115,6 +115,7 @@ class SpectrApp(App):
     active_symbol_index = reactive(0)
     auto_trading_enabled: reactive[bool] = reactive(False)
     is_backtest: reactive[bool] = reactive(False)
+    trade_amount: reactive[float] = reactive(0.0)
 
     symbol_view: reactive[SymbolView] = reactive(None)
 
@@ -167,6 +168,8 @@ class SpectrApp(App):
         self.signal_detected = []
         self.strategy_signals: list[dict] = []
         self._shutting_down = False
+
+        self.trade_amount = 0.0
 
         self._scanner_cache_file = pathlib.Path.home() / ".spectr_scanner_cache.json"
         self.scanner_results: list[dict] = self._load_scanner_cache()
@@ -663,6 +666,7 @@ class SpectrApp(App):
                 pos_pct=pos_pct,
                 get_pos_cb=BROKER_API.get_position,
                 get_price_cb=DATA_API.fetch_quote,
+                trade_amount=self.trade_amount if side == OrderSide.BUY else 0.0,
             )
         )
 
@@ -806,6 +810,8 @@ class SpectrApp(App):
                     BROKER_API.get_balance,
                     BROKER_API.get_positions,
                     equity_data=self._equity_curve_data,
+                    trade_amount=self.trade_amount,
+                    set_trade_amount_cb=self.set_trade_amount,
                 )
             )
 
@@ -850,6 +856,13 @@ class SpectrApp(App):
         """Enable or disable auto trading mode."""
         self.auto_trading_enabled = enabled
         self.update_status_bar()
+
+    def set_trade_amount(self, amount: float) -> None:
+        """Persist the trade amount value used for BUY orders."""
+        try:
+            self.trade_amount = float(amount)
+        except ValueError:
+            self.trade_amount = 0.0
 
     # ---------- Back-test workflow ----------
 
