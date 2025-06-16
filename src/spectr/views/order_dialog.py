@@ -72,6 +72,7 @@ class OrderDialog(ModalScreen):
         pos_pct: float = 100.0,
         get_pos_cb: Callable,
         get_price_cb: Callable,
+        trade_amount: float = 0.0,
     ) -> None:
         super().__init__()
         self.side         = side
@@ -79,6 +80,7 @@ class OrderDialog(ModalScreen):
         self.pos_pct      = pos_pct
         self._get_pos      = get_pos_cb
         self._get_price   = get_price_cb
+        self.trade_amount = trade_amount
         self._refresh_job = None
 
         self.pos_qty   = None
@@ -204,6 +206,9 @@ class OrderDialog(ModalScreen):
             new_price = new_price.get("price", 0)
             self.price = new_price
             self.query_one("#dlg_price", Static).update(self._price_fmt())
+            if self.side == OrderSide.BUY and self.trade_amount > 0 and self.price > 0:
+                self.qty = self.trade_amount / self.price
+                self.query_one("#dlg_qty_in", Input).value = str(self.qty)
             self._update_total()
 
     async def on_select_changed(self, event: Select.Changed):
