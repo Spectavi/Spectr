@@ -28,6 +28,7 @@ BYOS - Bring Your Own Strategy. You must implement your own trading strategy in 
 - 🔄 Click symbols in Top Gainers list to add to watchlist.
 - 🔄 Scanner that filters top 50 gainers for favorable conditions.
 - 💵 See portfolio info + open / pending orders with `P`.
+- 💵 Specify a default Trade Amount from the portfolio screen to pre-fill buy orders.
 - 🧠 Supports MACD, Bollinger Bands, and Volume / VWAP.
 - 💵 Live trading based on your custom strategy.
 - 💵 Paper trading based on your custom strategy. (Alpaca-only)

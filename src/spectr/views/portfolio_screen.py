@@ -3,7 +3,7 @@ import logging
 from typing import Optional
 
 from textual.screen import Screen
-from textual.widgets import Static, DataTable, Switch
+from textual.widgets import Static, DataTable, Switch, Input
 from textual.containers import Vertical, Container, Horizontal
 from textual.reactive import reactive
 from textual import events
@@ -32,6 +32,7 @@ class PortfolioScreen(Screen):
     buying_power = reactive(0.0)
     portfolio_value = reactive(0.0)
     real_trades  = reactive(False)
+    trade_amount = reactive(0.0)
 
     def __init__(
         self,
@@ -50,6 +51,8 @@ class PortfolioScreen(Screen):
         balance_callback=None,
         positions_callback=None,
         equity_data: Optional[list] = None,
+        trade_amount: float = 0.0,
+        set_trade_amount_cb=None,
     ) -> None:
         super().__init__()
         self.cash = cash or 0.0
@@ -68,6 +71,8 @@ class PortfolioScreen(Screen):
         self.auto_trading_enabled = auto_trading
         self._set_auto_trading_cb = set_auto_trading_cb
         self._cancel_order_cb = cancel_order_callback
+        self.trade_amount = trade_amount
+        self._set_trade_amount_cb = set_trade_amount_cb
         self.top_title = Static(id="portfolio-title") # gets filled in on_mount
         # Holdings Table
         self.holdings_table = DataTable(zebra_stripes=True, id="holdings-table")
@@ -194,6 +199,11 @@ class PortfolioScreen(Screen):
                     id="trade-switch-container"),
                 id="trade-mode-container",
             ),
+            Horizontal(
+                Static("Trade Amount $"),
+                Input(id="trade-amount-input", placeholder="0.00"),
+                id="trade-amount-row",
+            ),
 
             self.equity_view,
 
@@ -208,6 +218,10 @@ class PortfolioScreen(Screen):
         # Fetch account data in the background so the dialog appears immediately
         asyncio.create_task(self._reload_account_data())
         asyncio.create_task(self._refresh_orders())
+
+        self.query_one("#trade-amount-input", Input).value = (
+            f"{self.trade_amount}" if self.trade_amount else ""
+        )
 
         # schedule auto-refresh of the orders
         self._refresh_job = self.set_interval(
@@ -349,6 +363,15 @@ class PortfolioScreen(Screen):
             self.auto_trading_enabled = event.value
             if callable(self._set_auto_trading_cb):
                 self._set_auto_trading_cb(event.value)
+
+    async def on_input_changed(self, event: Input.Changed) -> None:
+        if event.input.id == "trade-amount-input":
+            try:
+                self.trade_amount = float(event.value)
+            except ValueError:
+                self.trade_amount = 0.0
+            if callable(self._set_trade_amount_cb):
+                self._set_trade_amount_cb(self.trade_amount)
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         """Open an order dialog to sell when a holdings row is clicked."""
