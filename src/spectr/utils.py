@@ -6,6 +6,8 @@ from tzlocal import get_localzone
 
 import pandas as pd
 import threading
+
+os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 import pygame
 
 import metrics

@@ -183,7 +183,7 @@ PortfolioScreen {
 
 #portfolio-screen {
     width: 75%;
-    height: 48;
+    height: 57;
     text-align: center;
     content-align-horizontal: center;
     content-align-vertical: top;
@@ -210,13 +210,13 @@ PortfolioScreen {
 }
 
 #trade-amount-row {
-    width: 50%;
-    height: 3;
-    content-align-horizontal: center;
+    width: 100%;
+    height: 1;
 }
 
 #trade-amount-input {
-    width: 20%;
+    width: 30%;
+    height: 3;
 }
 
 #orders-table, #holdings-table {
@@ -258,4 +258,8 @@ BacktestResultScreen {
     width: 100%;
     height: 30;
     background: black;
+}
+
+StrategyScreen {
+    align: center middle;
 }

@@ -201,9 +201,9 @@ class PortfolioScreen(Screen):
             ),
             Horizontal(
                 Static("Trade Amount $"),
-                Input(id="trade-amount-input", placeholder="0.00"),
                 id="trade-amount-row",
             ),
+            Input(id="trade-amount-input", placeholder="0.00"),
 
             self.equity_view,
 

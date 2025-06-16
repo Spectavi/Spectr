@@ -30,4 +30,3 @@ class StrategyScreen(Screen):
             )
         yield Header(show_clock=False)
         yield table
-        yield Footer()

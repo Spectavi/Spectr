@@ -19,8 +19,8 @@ from textual.reactive import reactive
 
 import metrics
 import utils
-from custom_strategy import CustomStrategy
-#from CustomStrategy import CustomStrategy
+#from custom_strategy import CustomStrategy
+from CustomStrategy import CustomStrategy
 from fetch.broker_interface import BrokerInterface, OrderSide, OrderType
 from utils import play_sound, get_historical_data, get_live_data
 from views.backtest_input_dialog import BacktestInputDialog
@@ -35,18 +35,16 @@ from views.trades_screen import TradesScreen
 from views.strategy_screen import StrategyScreen
 
 
+
 # Notes for scanner filter:
-# - Already up 5%.
-# - 4x relative volume
+# - Already up 5%?
+# - 4x relative volume.
 # - News catalyst within the last 48 hrs.
 # - < 10mill float?
 # - Between $1.00 and $50.00?
 # - Volume > 50k?
 
-# Add float metric.
-
-# Multi-thread scanner calls.
-# Show how long it was since last scan.
+# Show how long it was since last scan. TTS
 
 
 # --- SOUND PATHS ---
