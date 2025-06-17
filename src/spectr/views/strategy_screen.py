@@ -2,6 +2,7 @@ from datetime import datetime
 
 from textual.screen import Screen
 from textual.widgets import DataTable, Header, Footer
+from textual.containers import Vertical
 from textual.reactive import reactive
 
 class StrategyScreen(Screen):
@@ -31,6 +32,10 @@ class StrategyScreen(Screen):
                 f"{price:.2f}" if price is not None else "",
                 sig.get("reason", ""),
             )
-        yield Header(show_clock=False)
-        yield table
-        yield Footer()
+
+        yield Vertical(
+            Header(show_clock=False),
+            table,
+            Footer(),
+            id="strategy-screen",
+        )

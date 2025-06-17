@@ -259,3 +259,17 @@ BacktestResultScreen {
     height: 30;
     background: black;
 }
+
+StrategyScreen {
+    align: center middle;
+}
+
+#strategy-screen {
+    width: 75%;
+    height: 42;
+    background: #1a1a1a;
+    border: solid green;
+    padding: 1 2;
+    content-align-horizontal: center;
+    content-align-vertical: top;
+}
