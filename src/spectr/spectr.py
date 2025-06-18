@@ -119,7 +119,7 @@ class SpectrApp(App):
 
     def _is_splash_active(self) -> bool:
         """Return ``True`` if the splash screen is currently visible."""
-        return self.query_one("#splash", SplashScreen, expect_none=True) is not None
+        return bool(self.screen_stack and isinstance(self.screen_stack[-1], SplashScreen))
 
     def _prepend_open_positions(self) -> None:
         """Ensure open position symbols are at the start of ``ticker_symbols``."""
@@ -186,7 +186,6 @@ class SpectrApp(App):
     def compose(self) -> ComposeResult:
         yield TopOverlay(id="overlay-text")
         yield SymbolView(id="symbol-view")
-        yield SplashScreen()
 
     async def on_mount(self):
         # Set symbols and active symbol
@@ -276,7 +275,7 @@ class SpectrApp(App):
             self._update_queue.put(symbol)
             if symbol == self.ticker_symbols[self.active_symbol_index]:
                 if self._is_splash_active():
-                    self.call_from_thread(self.remove_splash)
+                    self.call_from_thread(self.pop_screen)
                 # refresh the active view from the UI thread
                 self.call_from_thread(self.update_view, self.ticker_symbols[self.active_symbol_index])
 
@@ -319,6 +318,7 @@ class SpectrApp(App):
                     index = self.ticker_symbols.index(sym)
                     self.active_symbol_index = index
                     msg = f"{sym} @ {price} 🚀"
+                    side = None
                     if sig == 'buy':
                         msg = f"BUY {msg}"
                         side = OrderSide.BUY
@@ -326,7 +326,7 @@ class SpectrApp(App):
                         msg = f"SELL {msg}"
                         side = OrderSide.SELL
 
-                    if not self.auto_trading_enabled and sig:
+                    if not self.auto_trading_enabled and sig and side:
                         self.signal_detected.remove(signal)
                         if self.screen_stack and not isinstance(self.screen_stack[-1], OrderDialog):
                             self.open_order_dialog(side=side, pos_pct=100.0, symbol=sym, reason=reason)
@@ -338,7 +338,7 @@ class SpectrApp(App):
                         else:
                             msg = f"REAL {msg}"
                         self.signal_detected.remove(signal)
-                        BROKER_API.submit_order(symbol, side, OrderType.MARKET, self.args.real_trades)
+                        BROKER_API.submit_order(symbol, side, OrderType.MARKET, 100.0, self.auto_trading_enabled)
                         play_sound(BUY_SOUND_PATH if sig == "buy" else SELL_SOUND_PATH)
             elif symbol == self.ticker_symbols[self.active_symbol_index]:
                 if not self.is_backtest:
@@ -738,6 +738,7 @@ class SpectrApp(App):
                 side=msg.side,
                 type=msg.order_type,
                 quantity=msg.qty,
+                real_trades= self.auto_trading_enabled,
             )
         except Exception as e:
             log.error(e)
@@ -818,12 +819,8 @@ class SpectrApp(App):
 
         self.update_status_bar()
         if self.query("#splash") and df is not None and not df.empty:
-            self.remove_splash()
+            self.remove(self.query_one("#splash"))
 
-    def remove_splash(self) -> None:
-        splash = self.query_one("#splash", SplashScreen, expect_none=True)
-        if splash:
-            self.remove(splash)
 
     def update_status_bar(self):
         live_icon = "🤖" if self.auto_trading_enabled else "🚫"

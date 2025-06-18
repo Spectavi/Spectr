@@ -72,7 +72,7 @@ class BrokerInterface(ABC):
         pass
 
     @abstractmethod
-    def submit_order(self, symbol: str, side: OrderSide, type: OrderType, quantity: float = 1.0):
+    def submit_order(self, symbol: str, side: OrderSide, type: OrderType, quantity: float = 1.0, real_trades: bool = False):
         """Submit a buy/sell order."""
         pass
 
