@@ -145,7 +145,7 @@ OrderDialog {
     background: #1a1a1a;
 }
 
-#dlg_title, #dlg_pos {
+#dlg_title, #dlg_pos, #dlg_reason {
     text-align: center;
     padding: 1 1;
 }
