@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from textual.screen import Screen
-from textual.widgets import DataTable, Header, Footer
+from textual.widgets import DataTable, Header, Footer, Static
 from textual.containers import Vertical
 from textual.reactive import reactive
 
@@ -34,7 +34,7 @@ class StrategyScreen(Screen):
             )
 
         yield Vertical(
-            Header(show_clock=False),
+            Static("Strategy Info", id="strategy-title"),
             table,
             id="strategy-screen",
         )
