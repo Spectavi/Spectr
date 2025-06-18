@@ -119,7 +119,7 @@ class SpectrApp(App):
 
     def _is_splash_active(self) -> bool:
         """Return ``True`` if the splash screen is currently visible."""
-        return bool(self.screen_stack and isinstance(self.screen_stack[-1], SplashScreen))
+        return self.query_one("#splash", SplashScreen, expect_none=True) is not None
 
     def _prepend_open_positions(self) -> None:
         """Ensure open position symbols are at the start of ``ticker_symbols``."""
@@ -186,9 +186,9 @@ class SpectrApp(App):
     def compose(self) -> ComposeResult:
         yield TopOverlay(id="overlay-text")
         yield SymbolView(id="symbol-view")
+        yield SplashScreen()
 
-    def on_mount(self):
-        self.push_screen(SplashScreen())
+    async def on_mount(self):
         # Set symbols and active symbol
         self.ticker_symbols = self.args.symbols
         # Ensure any open positions are at the start of the watchlist.
@@ -275,9 +275,8 @@ class SpectrApp(App):
             self.df_cache[symbol] = df
             self._update_queue.put(symbol)
             if symbol == self.ticker_symbols[self.active_symbol_index]:
-                if self.screen_stack and isinstance(self.screen_stack[-1], SplashScreen):
-                    # schedule screen pop on the main thread – we are in an executor
-                    self.call_from_thread(self.pop_screen)
+                if self._is_splash_active():
+                    self.call_from_thread(self.remove_splash)
                 # refresh the active view from the UI thread
                 self.call_from_thread(self.update_view, self.ticker_symbols[self.active_symbol_index])
 
@@ -819,7 +818,12 @@ class SpectrApp(App):
 
         self.update_status_bar()
         if self.query("#splash") and df is not None and not df.empty:
-            self.remove(self.query_one("#splash"))
+            self.remove_splash()
+
+    def remove_splash(self) -> None:
+        splash = self.query_one("#splash", SplashScreen, expect_none=True)
+        if splash:
+            self.remove(splash)
 
     def update_status_bar(self):
         live_icon = "🤖" if self.auto_trading_enabled else "🚫"
