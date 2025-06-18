@@ -594,7 +594,7 @@ class SpectrApp(App):
             symbol = self.ticker_symbols[index]
             log.debug(f"action selected symbol: {symbol}")
             symbol = self.ticker_symbols[index]
-            self.run_worker(self._poll_one_symbol, symbol, thread=True)
+            self.run_worker(lambda: self._poll_one_symbol(symbol), thread=True)
             if hasattr(self, "_poll_now"):
                 self._poll_now.set()
             self.update_view(symbol)
@@ -606,7 +606,7 @@ class SpectrApp(App):
             new_index = len(self.ticker_symbols) - 1
         self.active_symbol_index = new_index
         symbol = self.ticker_symbols[new_index]
-        self.run_worker(self._poll_one_symbol, symbol, thread=True)
+        self.run_worker(lambda: self._poll_one_symbol(symbol), thread=True)
         if hasattr(self, "_poll_now"):
             self._poll_now.set()
         self.update_view(symbol)
@@ -618,7 +618,7 @@ class SpectrApp(App):
             new_index = 0
         self.active_symbol_index = new_index
         symbol = self.ticker_symbols[new_index]
-        self.run_worker(self._poll_one_symbol, symbol, thread=True)
+        self.run_worker(lambda: self._poll_one_symbol(symbol), thread=True)
         if hasattr(self, "_poll_now"):
             self._poll_now.set()
         self.update_view(symbol)
@@ -709,7 +709,7 @@ class SpectrApp(App):
             self.active_symbol_index = 0
             symbol = self.ticker_symbols[self.active_symbol_index]
 
-            self.run_worker(self._poll_one_symbol, symbol, thread=True)
+            self.run_worker(lambda: self._poll_one_symbol(symbol), thread=True)
             if hasattr(self, "_poll_now"):
                 self._poll_now.set()
             self.update_view(symbol)
