@@ -73,6 +73,7 @@ class OrderDialog(ModalScreen):
         get_pos_cb: Callable,
         get_price_cb: Callable,
         trade_amount: float = 0.0,
+        reason: str | None = None,
     ) -> None:
         super().__init__()
         self.side         = side
@@ -81,6 +82,7 @@ class OrderDialog(ModalScreen):
         self._get_pos      = get_pos_cb
         self._get_price   = get_price_cb
         self.trade_amount = trade_amount
+        self.reason       = reason
         self._refresh_job = None
 
         self.pos_qty   = None
@@ -88,11 +90,15 @@ class OrderDialog(ModalScreen):
 
     # ------------------------------------------------------------------
     def compose(self):
-        yield Vertical(
-            Static(f"[b]{self.side.name.upper()} {self.symbol}[/b]", id="dlg_title"),
+        components = [
+            Static(f"[b]{self.side.name.upper()} {self.symbol}[/b]", id="dlg_title")
+        ]
+        if self.reason:
+            components.append(Static(self.reason, id="dlg_reason"))
+        components += [
             Static(),
-            Static(self._price_fmt(),  id="dlg_price"),
-            Static(self._pos_fmt(),    id="dlg_pos"),
+            Static(self._price_fmt(), id="dlg_price"),
+            Static(self._pos_fmt(), id="dlg_pos"),
             Static(),
             Horizontal(
                 Label("Type:", id="dlg_ot_lbl"),
@@ -120,8 +126,9 @@ class OrderDialog(ModalScreen):
                 Button("Cancel", id="dlg_cancel", variant="error"),
                 id="dlg_buttons_row",
             ),
-            id="dlg_body",
-        )
+        ]
+
+        yield Vertical(*components, id="dlg_body")
 
     # ---------------- private helpers ---------------------------------
     def _price_fmt(self) -> str:

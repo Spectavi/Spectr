@@ -252,7 +252,7 @@ class SpectrApp(App):
                 df.at[df.index[-1], 'trade'] = signal  # mark bar for plotting
                 if signal == "buy":
                     log.debug("Buy signal detected!")
-                    self.signal_detected.append((symbol, curr_price, signal))
+                    self.signal_detected.append((symbol, curr_price, signal, reason))
                     self.strategy_signals.append({
                         "time": datetime.now(),
                         "symbol": symbol,
@@ -263,7 +263,7 @@ class SpectrApp(App):
                     play_sound(BUY_SOUND_PATH)
                 elif signal == "sell":
                     log.debug("Sell signal detected!")
-                    self.signal_detected.append((symbol, curr_price, signal))
+                    self.signal_detected.append((symbol, curr_price, signal, reason))
                     self.strategy_signals.append({
                         "time": datetime.now(),
                         "symbol": symbol,
@@ -318,7 +318,7 @@ class SpectrApp(App):
             # If a buy signal was triggered, switch to that symbol
             if len(self.signal_detected) > 0:
                 for signal in self.signal_detected:
-                    sym, price, sig = signal
+                    sym, price, sig, reason = signal
                     index = self.ticker_symbols.index(sym)
                     self.active_symbol_index = index
                     msg = f"{sym} @ {price} 🚀"
@@ -332,7 +332,7 @@ class SpectrApp(App):
                     if not self.auto_trading_enabled and sig:
                         self.signal_detected.remove(signal)
                         if (self.screen_stack and not isinstance(self.screen_stack[-1], OrderDialog)):
-                            self.open_order_dialog(side=side, pos_pct=100.0, symbol=sym)
+                            self.open_order_dialog(side=side, pos_pct=100.0, symbol=sym, reason=reason)
                         continue
                     else:
                         msg = f"ORDER SUBMITTED! {msg}"
@@ -655,7 +655,7 @@ class SpectrApp(App):
         symbol = self.ticker_symbols[self.active_symbol_index]
         self.open_order_dialog(OrderSide.SELL, 25.0, symbol)
 
-    def open_order_dialog(self, side: OrderSide, pos_pct: float, symbol: str):
+    def open_order_dialog(self, side: OrderSide, pos_pct: float, symbol: str, reason: str | None = None):
         if self._is_splash_active():
             return
         self.push_screen(
@@ -666,6 +666,7 @@ class SpectrApp(App):
                 get_pos_cb=BROKER_API.get_position,
                 get_price_cb=DATA_API.fetch_quote,
                 trade_amount=self.trade_amount if side == OrderSide.BUY else 0.0,
+                reason=reason,
             )
         )
 
