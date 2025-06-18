@@ -197,13 +197,14 @@ class PortfolioScreen(Screen):
                     Static("Auto Trades"),
                     self.auto_switch,
                     id="trade-switch-container"),
-                Container(
-                    Static("Trade Amount $"),
-                    Input(id="trade-amount-input", placeholder="0.00"),
-                    id="trade-amount-container"),
                 id="trade-mode-container",
             ),
-
+            Horizontal(
+                Static("Trade Amount $"),
+                id="trade-amount-row",
+            ),
+            Input(id="trade-amount-input", placeholder="0.00"),
+            Static("Equity Curve:", id="equity-curve-title"),
             self.equity_view,
 
             Static("Holdings:", id="holdings-title"),
