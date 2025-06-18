@@ -188,7 +188,8 @@ class SpectrApp(App):
         yield SymbolView(id="symbol-view")
 
     async def on_mount(self):
-        await self.push_screen(SplashScreen())
+        # Show splash screen without waiting for it to close
+        self.push_screen(SplashScreen())
         # Set symbols and active symbol
         self.ticker_symbols = self.args.symbols
         # Ensure any open positions are at the start of the watchlist.
