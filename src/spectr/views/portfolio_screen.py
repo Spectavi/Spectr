@@ -197,13 +197,12 @@ class PortfolioScreen(Screen):
                     Static("Auto Trades"),
                     self.auto_switch,
                     id="trade-switch-container"),
+                Container(
+                    Static("Trade Amount $"),
+                    Input(id="trade-amount-input", placeholder="0.00"),
+                    id="trade-amount-container"),
                 id="trade-mode-container",
             ),
-            Horizontal(
-                Static("Trade Amount $"),
-                id="trade-amount-row",
-            ),
-            Input(id="trade-amount-input", placeholder="0.00"),
 
             self.equity_view,
 
@@ -372,6 +371,10 @@ class PortfolioScreen(Screen):
                 self.trade_amount = 0.0
             if callable(self._set_trade_amount_cb):
                 self._set_trade_amount_cb(self.trade_amount)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id == "trade-amount-input":
+            event.input.blur()
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         """Open an order dialog to sell when a holdings row is clicked."""
