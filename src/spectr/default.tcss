@@ -65,7 +65,7 @@ TickerInputDialog {
     align: center middle;
 }
 #ticker_input_dlg_body {
-    width: 60%;
+    width: 75%;
     height: 46;
     border: solid green;
     padding: 1 2;

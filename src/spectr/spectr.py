@@ -19,8 +19,8 @@ from textual.reactive import reactive
 
 import metrics
 import utils
-from custom_strategy import CustomStrategy
-#from CustomStrategy import CustomStrategy
+#from custom_strategy import CustomStrategy
+from CustomStrategy import CustomStrategy
 from fetch.broker_interface import BrokerInterface, OrderSide, OrderType
 from utils import play_sound, get_historical_data, get_live_data
 from views.backtest_input_dialog import BacktestInputDialog
@@ -189,7 +189,7 @@ class SpectrApp(App):
 
     async def on_mount(self):
         # Show splash screen without waiting for it to close
-        self.push_screen(SplashScreen())
+        await self.push_screen(SplashScreen())
         # Set symbols and active symbol
         self.ticker_symbols = self.args.symbols
         # Ensure any open positions are at the start of the watchlist.
@@ -212,7 +212,6 @@ class SpectrApp(App):
             )
         log.debug("starting consumer task")
         self._consumer_task = asyncio.create_task(self._process_updates())
-
 
 
     def _poll_one_symbol(self, symbol: str):
@@ -252,26 +251,26 @@ class SpectrApp(App):
                 df.at[df.index[-1], 'trade'] = signal  # mark bar for plotting
                 if signal == "buy":
                     log.debug("Buy signal detected!")
-                    self.signal_detected.append((symbol, curr_price, signal, reason))
-                    self.strategy_signals.append({
+                    self.call_from_thread(self.signal_detected.append, (symbol, curr_price, signal, reason))
+                    self.call_from_thread(self.strategy_signals.append, {
                         "time": datetime.now(),
                         "symbol": symbol,
                         "side": "buy",
                         "price": curr_price,
                         "reason": reason,
                     })
-                    play_sound(BUY_SOUND_PATH)
+                    #play_sound(BUY_SOUND_PATH)
                 elif signal == "sell":
                     log.debug("Sell signal detected!")
-                    self.signal_detected.append((symbol, curr_price, signal, reason))
-                    self.strategy_signals.append({
+                    self.call_from_thread(self.signal_detected.append, (symbol, curr_price, signal, reason))
+                    self.call_from_thread(self.strategy_signals.append, {
                         "time": datetime.now(),
                         "symbol": symbol,
                         "side": "sell",
                         "price": curr_price,
                         "reason": reason,
                     })
-                    play_sound(SELL_SOUND_PATH)
+                    #play_sound(SELL_SOUND_PATH)
 
             # Notify UI thread
             self.df_cache[symbol] = df
@@ -331,7 +330,7 @@ class SpectrApp(App):
 
                     if not self.auto_trading_enabled and sig:
                         self.signal_detected.remove(signal)
-                        if (self.screen_stack and not isinstance(self.screen_stack[-1], OrderDialog)):
+                        if self.screen_stack and not isinstance(self.screen_stack[-1], OrderDialog):
                             self.open_order_dialog(side=side, pos_pct=100.0, symbol=sym, reason=reason)
                         continue
                     else:
