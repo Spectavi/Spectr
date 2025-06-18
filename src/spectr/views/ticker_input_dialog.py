@@ -10,7 +10,6 @@ import utils
 log = logging.getLogger(__name__)
 
 NO_RESULT_ROW = ("No results found.", "", "", "", "", "", "")    # table layout
-SCAN_SOUND_PATH = 'src/spectr/res/buy.mp3'
 
 
 class TickerInputDialog(ModalScreen):

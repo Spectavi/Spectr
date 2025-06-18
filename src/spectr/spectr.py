@@ -187,9 +187,8 @@ class SpectrApp(App):
         yield TopOverlay(id="overlay-text")
         yield SymbolView(id="symbol-view")
 
-    async def on_mount(self):
-        # Show splash screen without waiting for it to close
-        await self.push_screen(SplashScreen())
+    def on_mount(self):
+        self.push_screen(SplashScreen())
         # Set symbols and active symbol
         self.ticker_symbols = self.args.symbols
         # Ensure any open positions are at the start of the watchlist.
@@ -453,11 +452,6 @@ class SpectrApp(App):
                 results = await self._run_scanner()
                 self.scanner_results = results
                 self._save_scanner_cache(results)
-                if results:
-                    try:
-                        play_sound(BUY_SOUND_PATH)
-                    except Exception as exc:
-                        log.error(f"scan-sound failed: {exc}")
             except Exception as exc:
                 log.error(f"[scanner] {exc}")
 
@@ -684,7 +678,6 @@ class SpectrApp(App):
     def action_prompt_symbol(self):
         if self._is_splash_active():
             return
-        self.auto_trading_enabled = False
         self.push_screen(
             TickerInputDialog(
                 callback=self.on_ticker_submit,
