@@ -253,6 +253,10 @@ class OrderDialog(ModalScreen):
             self.app.pop_screen()
 
     def action_submit(self):
+        """Emit a :class:`Submit` message with the proper ``OrderType`` enum."""
+
+        order_type_enum = OrderType[self.order_type]
+
         self.post_message(
             self.Submit(
                 self,
@@ -261,8 +265,8 @@ class OrderDialog(ModalScreen):
                 price=self.price,
                 qty=self.qty,
                 total=self.total,
-                order_type=self.order_type,
-                limit_price=self.limit_price if self.order_type == OrderType.LIMIT.name else None,
+                order_type=order_type_enum,
+                limit_price=self.limit_price if order_type_enum == OrderType.LIMIT else None,
             )
         )
         self.app.pop_screen()
