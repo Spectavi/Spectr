@@ -187,7 +187,8 @@ class SpectrApp(App):
         yield TopOverlay(id="overlay-text")
         yield SymbolView(id="symbol-view")
 
-    async def on_mount(self):
+    def on_mount(self):
+        self.push_screen(SplashScreen(), wait_for_dismiss=False)
         # Set symbols and active symbol
         self.ticker_symbols = self.args.symbols
         # Ensure any open positions are at the start of the watchlist.
@@ -203,7 +204,7 @@ class SpectrApp(App):
         self._scanner_worker = self.run_worker(self._scanner_loop, thread=False)
         self._equity_worker = self.run_worker(self._equity_loop, thread=False)
 
-        self.update_status_bar()
+        #self.update_status_bar()
         if self.args.broker == "robinhood" and self.args.real_trades:
             self.query_one("#overlay-text", TopOverlay).flash_message(
                 "Robinhood does NOT support PAPER TRADING!", style="bold red"
