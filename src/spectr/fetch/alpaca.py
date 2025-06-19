@@ -2,10 +2,18 @@ import logging
 import os
 
 import pandas as pd
-from alpaca.trading import TradingClient, MarketOrderRequest, OrderSide, TimeInForce, GetOrdersRequest, QueryOrderStatus
+from alpaca.trading import (
+    TradingClient,
+    MarketOrderRequest,
+    LimitOrderRequest,
+    OrderSide,
+    TimeInForce,
+    GetOrdersRequest,
+    QueryOrderStatus,
+)
 from dotenv import load_dotenv
 
-from .broker_interface import BrokerInterface
+from .broker_interface import BrokerInterface, OrderType
 
 # Loading from .env file, you need to create one and define both ALPACA_API_KEY and ALPACA_SECRET_KEY
 load_dotenv()
@@ -262,20 +270,37 @@ class AlpacaInterface(BrokerInterface):
         self,
         symbol: str,
         side: OrderSide,
-        type: str,
-        quantity: int = 1,
+        type: OrderType,
+        quantity: int | None = None,
+        limit_price: float | None = None,
+        market_price: float | None = None,
         real_trades: bool = False,
     ):
         try:
             tc = self.get_api()
-            order_req = MarketOrderRequest(
-                symbol=symbol.upper(),
-                qty=quantity,
-                side=side.name.lower(),
-                time_in_force=TimeInForce.GTC,
-            )
+            if type == OrderType.MARKET:
+                order_req = MarketOrderRequest(
+                    symbol=symbol.upper(),
+                    qty=quantity or 1,
+                    side=side.name.lower(),
+                    time_in_force=TimeInForce.GTC,
+                )
+                price_used = market_price
+            else:
+                order_req = LimitOrderRequest(
+                    symbol=symbol.upper(),
+                    qty=quantity or 1,
+                    side=side.name.lower(),
+                    time_in_force=TimeInForce.GTC,
+                    limit_price=limit_price,
+                )
+                price_used = limit_price
+
             tc.submit_order(order_req)
-            log.debug(f"ORDER PLACED: {side.name.upper()} {quantity} shares of {symbol.upper()}")
+            price_disp = price_used if price_used is not None else "MKT"
+            log.debug(
+                f"ORDER PLACED: {side.name.upper()} {quantity or 1} shares of {symbol.upper()} @ {price_disp}"
+            )
         except Exception as exc:
             log.error(f"ORDER FAILED: {exc}")
             raise

@@ -22,7 +22,7 @@ import utils
 #from custom_strategy import CustomStrategy
 from CustomStrategy import CustomStrategy
 from fetch.broker_interface import BrokerInterface, OrderSide, OrderType
-from utils import play_sound, get_historical_data, get_live_data
+from utils import play_sound, get_historical_data, get_live_data, is_market_open_now
 from views.backtest_input_dialog import BacktestInputDialog
 from views.backtest_result_screen import BacktestResultScreen
 from views.order_dialog import OrderDialog
@@ -339,6 +339,34 @@ class SpectrApp(App):
                             msg = f"REAL {msg}"
                         self.signal_detected.remove(signal)
                         BROKER_API.submit_order(symbol, side, OrderType.MARKET, 100.0, self.auto_trading_enabled)
+                        order_type = OrderType.MARKET
+                        limit_price = None
+                        if not is_market_open_now():
+                            quote = DATA_API.fetch_quote(symbol)
+                            order_type = OrderType.LIMIT
+                            if side == OrderSide.BUY:
+                                limit_price = (
+                                    quote.get("ask")
+                                    or quote.get("ask_price")
+                                    or quote.get("askPrice")
+                                    or quote.get("price")
+                                )
+                            else:
+                                limit_price = (
+                                    quote.get("bid")
+                                    or quote.get("bid_price")
+                                    or quote.get("bidPrice")
+                                    or quote.get("price")
+                                )
+                        BROKER_API.submit_order(
+                            symbol=symbol,
+                            side=side,
+                            type=order_type,
+                            quantity=1,
+                            limit_price=limit_price,
+                            market_price=price,
+                            real_trades=self.auto_trading_enabled,
+                        )
                         play_sound(BUY_SOUND_PATH if sig == "buy" else SELL_SOUND_PATH)
             elif symbol == self.ticker_symbols[self.active_symbol_index]:
                 if not self.is_backtest:
@@ -650,6 +678,25 @@ class SpectrApp(App):
     def open_order_dialog(self, side: OrderSide, pos_pct: float, symbol: str, reason: str | None = None):
         if self._is_splash_active():
             return
+        order_type = OrderType.MARKET
+        limit_price = None
+        if not is_market_open_now():
+            quote = DATA_API.fetch_quote(symbol)
+            order_type = OrderType.LIMIT
+            if side == OrderSide.BUY:
+                limit_price = (
+                    quote.get("ask")
+                    or quote.get("ask_price")
+                    or quote.get("askPrice")
+                    or quote.get("price")
+                )
+            else:
+                limit_price = (
+                    quote.get("bid")
+                    or quote.get("bid_price")
+                    or quote.get("bidPrice")
+                    or quote.get("price")
+                )
         self.push_screen(
             OrderDialog(
                 side=side,
@@ -659,6 +706,8 @@ class SpectrApp(App):
                 get_price_cb=DATA_API.fetch_quote,
                 trade_amount=self.trade_amount if side == OrderSide.BUY else 0.0,
                 reason=reason,
+                default_order_type=order_type,
+                default_limit_price=limit_price,
             )
         )
 
@@ -738,7 +787,9 @@ class SpectrApp(App):
                 side=msg.side,
                 type=msg.order_type,
                 quantity=msg.qty,
-                real_trades= self.auto_trading_enabled,
+                limit_price=msg.limit_price,
+                market_price=msg.price,
+                real_trades=self.auto_trading_enabled,
             )
         except Exception as e:
             log.error(e)
