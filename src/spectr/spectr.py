@@ -3,8 +3,6 @@ import asyncio
 import contextlib
 import logging
 import os
-import json
-import pathlib
 import time
 import queue
 import threading
@@ -21,6 +19,7 @@ from textual import events
 
 import metrics
 import utils
+import cache
 from custom_strategy import CustomStrategy
 #from CustomStrategy import CustomStrategy
 from fetch.broker_interface import BrokerInterface, OrderSide, OrderType
@@ -59,8 +58,6 @@ from views.strategy_screen import StrategyScreen
 BUY_SOUND_PATH = 'res/buy.mp3'
 SELL_SOUND_PATH = 'res/sell.mp3'
 
-# File used to cache the last used ticker symbol list
-SYMBOLS_CACHE_PATH = pathlib.Path.home() / ".spectr_symbols_cache.json"
 
 REFRESH_INTERVAL = 60  # seconds
 SCANNER_INTERVAL = REFRESH_INTERVAL
@@ -182,22 +179,18 @@ class SpectrApp(App):
         self.bb_period = self.args.bb_period
         self.bb_dev = self.args.bb_dev
         self.df_cache = {symbol: pd.DataFrame() for symbol in self.ticker_symbols}
-        if not os.path.exists(utils.CACHE_DIR):
-            os.mkdir(utils.CACHE_DIR)
+        if not os.path.exists(cache.CACHE_DIR):
+            os.mkdir(cache.CACHE_DIR)
 
         self._update_queue: queue.Queue[str] = queue.Queue()
         self.signal_detected = []
-        self._strategy_cache_file = pathlib.Path.home() / ".spectr_strategy_cache.json"
-        self.strategy_signals: list[dict] = self._load_strategy_cache()
+        self.strategy_signals: list[dict] = cache.load_strategy_cache()
         self._shutting_down = False
 
         self.trade_amount = 0.0
 
-        self._scanner_cache_file = pathlib.Path.home() / ".spectr_scanner_cache.json"
-        self.scanner_results: list[dict] = self._load_scanner_cache()
-        self._gainers_cache_file = pathlib.Path.home() / ".spectr_gainers_cache.json"
-        self.top_gainers: list[dict] = self._load_gainers_cache()
-        self._symbols_cache_file = SYMBOLS_CACHE_PATH
+        self.scanner_results: list[dict] = cache.load_scanner_cache()
+        self.top_gainers: list[dict] = cache.load_gainers_cache()
 
         # Track latest quotes and equity curve
         self._latest_quotes: dict[str, float] = {}
@@ -278,7 +271,8 @@ class SpectrApp(App):
                     log.debug("Buy signal detected!")
                     self.call_from_thread(self.signal_detected.append, (symbol, curr_price, signal, reason))
                     self.call_from_thread(
-                        self._record_signal,
+                        cache.record_signal,
+                        self.strategy_signals,
                         {
                             "time": datetime.now(),
                             "symbol": symbol,
@@ -292,7 +286,8 @@ class SpectrApp(App):
                     log.debug("Sell signal detected!")
                     self.call_from_thread(self.signal_detected.append, (symbol, curr_price, signal, reason))
                     self.call_from_thread(
-                        self._record_signal,
+                        cache.record_signal,
+                        self.strategy_signals,
                         {
                             "time": datetime.now(),
                             "symbol": symbol,
@@ -408,81 +403,7 @@ class SpectrApp(App):
                         self.update_view(symbol)
 
 
-    def _save_scanner_cache(self, rows: list[dict]) -> None:
-        try:
-            self._scanner_cache_file.write_text(json.dumps({"t": time.time(), "rows": rows}, indent=0))
-        except Exception as exc:
-            log.error(f"cache write failed: {exc}")
 
-    def _save_gainers_cache(self, rows: list[dict]) -> None:
-        try:
-            self._gainers_cache_file.write_text(json.dumps({"t": time.time(), "rows": rows}, indent=0))
-        except Exception as exc:
-            log.error(f"gainers cache write failed: {exc}")
-
-    def _save_strategy_cache(self) -> None:
-        try:
-            rows = []
-            for rec in self.strategy_signals:
-                out = dict(rec)
-                ts = out.get("time")
-                if isinstance(ts, datetime):
-                    out["time"] = ts.isoformat()
-                rows.append(out)
-            self._strategy_cache_file.write_text(json.dumps(rows, indent=0))
-        except Exception as exc:
-            log.error(f"strategy cache write failed: {exc}")
-
-    def _load_scanner_cache(self) -> list[dict]:
-        try:
-            blob = json.loads(self._scanner_cache_file.read_text())
-            if time.time() - blob.get("t", 0) > 900:
-                return []
-            return blob.get("rows", [])
-        except Exception:
-            return []
-
-    def _load_gainers_cache(self) -> list[dict]:
-        try:
-            blob = json.loads(self._gainers_cache_file.read_text())
-            if time.time() - blob.get("t", 0) > 900:
-                return []
-            return blob.get("rows", [])
-        except Exception:
-            return []
-
-    def _save_symbols_cache(self) -> None:
-        try:
-            self._symbols_cache_file.write_text(json.dumps(self.ticker_symbols))
-        except Exception as exc:
-            log.error(f"symbols cache write failed: {exc}")
-
-    def _load_symbols_cache(self) -> list[str]:
-        try:
-            return json.loads(self._symbols_cache_file.read_text())
-        except Exception:
-            return []
-
-    def _load_strategy_cache(self) -> list[dict]:
-        try:
-            rows = json.loads(self._strategy_cache_file.read_text())
-        except Exception:
-            return []
-        out = []
-        for rec in rows:
-            if isinstance(rec, dict):
-                ts = rec.get("time")
-                if ts:
-                    try:
-                        rec["time"] = datetime.fromisoformat(ts)
-                    except Exception:
-                        rec["time"] = None
-                out.append(rec)
-        return out
-
-    def _record_signal(self, sig: dict) -> None:
-        self.strategy_signals.append(sig)
-        self._save_strategy_cache()
 
     def _check_scan_symbol(self, row):
         """Fetch extra metrics for *row* and flag if it passes the filter."""
@@ -546,18 +467,18 @@ class SpectrApp(App):
                 results.append(data)
 
         self.top_gainers = results
-        self._save_gainers_cache(results)
+        cache.save_gainers_cache(results)
         return [r for r in results if r.get("passed")]
 
     async def _scanner_loop(self) -> None:
         log.debug("_scanner_loop start")
-        self.scanner_results = self._load_scanner_cache()
-        self.top_gainers = self._load_gainers_cache()
+        self.scanner_results = cache.load_scanner_cache()
+        self.top_gainers = cache.load_gainers_cache()
         while not self.exit_event.is_set():
             try:
                 results = await self._run_scanner()
                 self.scanner_results = results
-                self._save_scanner_cache(results)
+                cache.save_scanner_cache(results)
             except Exception as exc:
                 log.error(f"[scanner] {exc}")
 
@@ -673,7 +594,7 @@ class SpectrApp(App):
             with contextlib.suppress(asyncio.CancelledError):
                 self._consumer_task = None
 
-        self._save_symbols_cache()
+        cache.save_symbols_cache(self.ticker_symbols)
 
         log.debug("on_shutdown complete")
         self.exit()
@@ -1175,12 +1096,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if "--symbols" not in sys.argv:
-        try:
-            cached = json.loads(SYMBOLS_CACHE_PATH.read_text())
-            if isinstance(cached, list) and cached:
-                args.symbols = ",".join(cached)
-        except Exception:
-            pass
+        cached = cache.load_symbols_cache()
+        if cached:
+            args.symbols = ",".join(cached)
 
     args.symbols = [s.strip().upper() for s in args.symbols.split(",")]
     args.symbol = args.symbols[0]  # set initial active symbol
