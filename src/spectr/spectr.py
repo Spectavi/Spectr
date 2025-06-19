@@ -19,8 +19,8 @@ from textual.reactive import reactive
 
 import metrics
 import utils
-#from custom_strategy import CustomStrategy
-from CustomStrategy import CustomStrategy
+from custom_strategy import CustomStrategy
+#from CustomStrategy import CustomStrategy
 from fetch.broker_interface import BrokerInterface, OrderSide, OrderType
 from utils import play_sound, get_historical_data, get_live_data, is_market_open_now
 from views.backtest_input_dialog import BacktestInputDialog
