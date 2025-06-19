@@ -215,16 +215,28 @@ class RobinhoodInterface(BrokerInterface, DataInterface):
             log.debug(f"Failed to fetch positions: {exc}")
             return []
 
-    def submit_order(self, symbol: str, side: OrderSide, type: OrderType, quantity: float = 1.0):
+    def submit_order(
+        self,
+        symbol: str,
+        side: OrderSide,
+        type: OrderType,
+        quantity: float | None = None,
+        limit_price: float | None = None,
+        market_price: float | None = None,
+        real_trades: bool = False,
+    ):
         try:
             if type != OrderType.MARKET:
                 log.error("RobinhoodInterface only supports market orders")
                 return
             if side == OrderSide.BUY:
-                r.orders.order_buy_market(symbol, quantity)
+                r.orders.order_buy_market(symbol, quantity or 1)
             else:
-                r.orders.order_sell_market(symbol, quantity)
-            log.debug(f"ORDER PLACED: {side.name.upper()} {quantity} shares of {symbol}")
+                r.orders.order_sell_market(symbol, quantity or 1)
+            price_disp = market_price if market_price is not None else "MKT"
+            log.debug(
+                f"ORDER PLACED: {side.name.upper()} {quantity or 1} shares of {symbol} @ {price_disp}"
+            )
         except Exception as exc:
             log.error(f"ORDER FAILED: {exc}")
 
