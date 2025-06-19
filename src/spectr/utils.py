@@ -1,7 +1,8 @@
 
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time as dtime
+from zoneinfo import ZoneInfo
 from tzlocal import get_localzone
 
 import pandas as pd
@@ -93,6 +94,17 @@ def play_sound(path: str) -> None:
             log.error("play_sound failed: %s", exc)
 
     threading.Thread(target=_play, daemon=True).start()
+
+
+def is_market_open_now(tz: ZoneInfo | None = None) -> bool:
+    """Return True if the current time is within regular US market hours (9:30am-4pm ET)."""
+    tz = tz or ZoneInfo("America/New_York")
+    now = datetime.now(tz)
+    if now.weekday() >= 5:  # Saturday/Sunday
+        return False
+    market_open = datetime.combine(now.date(), dtime(hour=9, minute=30), tzinfo=tz)
+    market_close = datetime.combine(now.date(), dtime(hour=16, minute=0), tzinfo=tz)
+    return market_open <= now <= market_close
 
 def inject_quote_into_df(
     df: pd.DataFrame,

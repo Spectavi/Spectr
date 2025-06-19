@@ -74,6 +74,8 @@ class OrderDialog(ModalScreen):
         get_price_cb: Callable,
         trade_amount: float = 0.0,
         reason: str | None = None,
+        default_order_type: OrderType = OrderType.MARKET,
+        default_limit_price: float | None = None,
     ) -> None:
         super().__init__()
         self.side         = side
@@ -84,6 +86,9 @@ class OrderDialog(ModalScreen):
         self.trade_amount = trade_amount
         self.reason       = reason
         self._refresh_job = None
+
+        self.order_type  = default_order_type.name
+        self.limit_price = default_limit_price or 0.0
 
         self.pos_qty   = None
         self.pos_value = None
@@ -166,8 +171,11 @@ class OrderDialog(ModalScreen):
         qty_in = self.query_one("#dlg_qty_in", Input)
         qty_in.focus()
 
-        # hide limit row initially
-        self.query_one("#lim_row").display = False
+        # show or hide limit price row based on default order type
+        limit_row = self.query_one("#lim_row")
+        limit_row.display = self.order_type != OrderType.MARKET.name
+        if self.order_type != OrderType.MARKET.name and self.limit_price:
+            self.query_one("#dlg_lim_in", Input).value = str(self.limit_price)
 
         # Start disabled until position updates with a position to sell.
         # TODO: Add check for funds and disable BUY button if insufficient funds.
