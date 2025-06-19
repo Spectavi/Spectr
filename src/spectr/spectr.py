@@ -206,8 +206,8 @@ class SpectrApp(App):
         yield TopOverlay(id="overlay-text")
         yield SymbolView(id="symbol-view")
 
-    def on_mount(self):
-        self.push_screen(SplashScreen(), wait_for_dismiss=False)
+    async def on_mount(self):
+        await self.push_screen(SplashScreen(id="splash"), wait_for_dismiss=False)
         self.refresh()
         # Set symbols and active symbol
         self.ticker_symbols = self.args.symbols

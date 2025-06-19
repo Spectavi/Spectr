@@ -9,7 +9,6 @@ Screen {
 /* ------- Splash Screen ------- */
 
 #splash {
-    layer: 100;
     content-align: center middle;
 }
 #logo-art {
