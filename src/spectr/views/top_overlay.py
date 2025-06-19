@@ -28,6 +28,20 @@ class TopOverlay(Static):
             self._timer.stop()
         self._timer = self.set_timer(duration, self._clear_flash)
 
+    def show_prompt(self, msg: str, style: str = "bold yellow"):
+        """Display *msg* without auto clearing."""
+        if self._timer:
+            self._timer.stop()
+            self._timer = None
+        self.alert_text = f"[{style}]{msg}[/{style}]"
+
+    def clear_prompt(self) -> None:
+        """Remove any prompt text immediately."""
+        if self._timer:
+            self._timer.stop()
+            self._timer = None
+        self.alert_text = ""
+
     def _clear_flash(self):
         self.alert_text = ""
 
