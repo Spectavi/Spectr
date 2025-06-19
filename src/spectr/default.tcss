@@ -182,7 +182,7 @@ PortfolioScreen {
 }
 
 #portfolio-screen {
-    width: 85%;
+    width: 90%;
     height: 60;
     text-align: center;
     content-align-horizontal: center;
