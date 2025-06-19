@@ -16,6 +16,7 @@ import pandas as pd
 from dotenv import load_dotenv
 from textual.app import App, ComposeResult
 from textual.reactive import reactive
+from textual import events
 
 import metrics
 import utils
@@ -120,8 +121,20 @@ class SpectrApp(App):
     auto_trading_enabled: reactive[bool] = reactive(False)
     is_backtest: reactive[bool] = reactive(False)
     trade_amount: reactive[float] = reactive(0.0)
+    confirm_quit: reactive[bool] = reactive(False)
 
     symbol_view: reactive[SymbolView] = reactive(None)
+
+    def on_key(self, event) -> None:
+        if self.confirm_quit and isinstance(event, events.Key):
+            if event.key.lower() == "y":
+                event.stop()
+                asyncio.create_task(self._shutdown())
+            elif event.key.lower() == "n":
+                event.stop()
+                self.confirm_quit = False
+                self.query_one("#overlay-text", TopOverlay).clear_prompt()
+                self.update_status_bar()
 
     def _is_splash_active(self) -> bool:
         """Return ``True`` if the splash screen is currently visible."""
@@ -572,18 +585,14 @@ class SpectrApp(App):
             screen.equity_view.data = list(self._equity_curve_data)
             screen.equity_view.refresh()
 
-    async def action_quit(self):
-        """Handle the Escape key to quit the app."""
-        log.debug("Escape key pressed, quitting app.")
-        self.exit_event.set()
-
+    async def _shutdown(self) -> None:
+        """Stop background tasks and exit the application."""
         log.debug("on_shutdown start")
-        # tell every background task we are quitting
+        self.exit_event.set()
         self._exit_backtest()
         self.auto_trading_enabled = False
         self._shutting_down = True
 
-        # Cancel workers
         if self._scanner_worker:
             log.debug("cancelling scanner worker")
             self._scanner_worker.cancel()
@@ -608,6 +617,18 @@ class SpectrApp(App):
 
         log.debug("on_shutdown complete")
         self.exit()
+
+    async def action_quit(self):
+        """Prompt the user for confirmation before quitting."""
+        if not self.confirm_quit:
+            self.confirm_quit = True
+            self.query_one("#overlay-text", TopOverlay).show_prompt("Quit Y/N?", style="bold red")
+            return
+
+        # Second ESC cancels the prompt
+        self.confirm_quit = False
+        self.query_one("#overlay-text", TopOverlay).clear_prompt()
+        self.update_status_bar()
 
 
 
