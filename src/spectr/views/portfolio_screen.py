@@ -74,28 +74,24 @@ class PortfolioScreen(Screen):
         self.trade_amount = trade_amount
         self._set_trade_amount_cb = set_trade_amount_cb
         self.top_title = Static(id="portfolio-title") # gets filled in on_mount
+
+        # Equity curve graph
+        self.equity_view = EquityCurveView(id="equity-curve")
+
         # Holdings Table
         self.holdings_table = DataTable(zebra_stripes=True, id="holdings-table")
         self.holdings_table_columns = self.holdings_table.add_columns("Symbol", "Qty", "Value", "Avg Cost", "Profit")
         self.holdings_table.cursor_type = "row"
         self.holdings_table.show_cursor = True
 
-        # Equity curve graph
-        self.equity_view = EquityCurveView(id="equity-curve")
-
         #Orders Table
         self.order_table = DataTable(zebra_stripes=True, id="orders-table")
-        self.order_table_columns = self.order_table.add_columns(
-            "Date/Time",
-            "Symbol",
-            "Side",
-            "Qty",
-            "Value",
-            "Type",
-            "Status",
-            "Cancel?",
-        )
-        self._cancel_col = self.order_table_columns[-1]
+        self.order_table_columns = self.order_table.add_columns("Date/Time", "Symbol", "Side", "Qty", "Value", "Type", "Status", "Cancel?", "Order ID")
+        self._cancel_col = self.order_table_columns[-2]
+        self._order_id_col = self.order_table_columns[-1]
+        self.order_table.cursor_type = "cell"
+        self.order_table.show_cursor = True
+
         self.mode_switch = Switch(value=self.real_trades, id="trade-mode-switch")
         self.mode_switch.disabled = self.disable_live_switch
         self.auto_switch = Switch(value=self.auto_trading_enabled, id="auto-trade-switch")
@@ -298,7 +294,6 @@ class PortfolioScreen(Screen):
         try:
             log.debug("Fetching orders...")
             orders = await asyncio.to_thread(self.orders_callback, self.real_trades)
-            log.debug(f"Account orders: {orders}")
         except Exception:
             log.warning("Account orders fetch failed! get_all_orders()")
             top_title_widget = self.query_one("#portfolio-title", Static)
@@ -307,7 +302,7 @@ class PortfolioScreen(Screen):
             )
 
         if orders:
-            log.debug(f"Order History: {orders}")
+            log.debug(f"Order History fetched.")
             orders.sort(key=self._order_date, reverse=True)
             table = self.query_one("#orders-table", DataTable)
             table.clear()
@@ -344,7 +339,7 @@ class PortfolioScreen(Screen):
                     order.order_type,
                     order.status,
                     "Cancel" if self._is_cancelable(order.status.name) else "",
-                    key=getattr(order, "id", None),
+                    order.id,
                 )
             table.scroll_home()
             self.app._portfolio_orders_cache = orders
@@ -377,13 +372,20 @@ class PortfolioScreen(Screen):
         if event.input.id == "trade-amount-input":
             event.input.blur()
 
-    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+    async def on_data_table_row_selected(
+            self,
+            event: DataTable.RowSelected,
+    ) -> None:
         """Open an order dialog to sell when a holdings row is clicked."""
-        if event.data_table.id != "holdings-table":
+        table_id = event.data_table.id
+        log.debug(f"Row selected in table {table_id}: {event.row_key}")
+        if event.data_table.id not in ["holdings-table"]:
             return
 
+        symbol = None
         try:
-            symbol = str(event.data_table.get_cell(event.row_key, self.holdings_table_columns[0])).strip().upper()
+            if table_id == "holdings-table":
+                symbol = str(event.data_table.get_cell(event.row_key, self.holdings_table_columns[0])).strip().upper()
         except CellDoesNotExist:
             log.debug("Selected row no longer exists")
             return
@@ -391,16 +393,16 @@ class PortfolioScreen(Screen):
             log.debug("No valid symbol selected, ignoring...")
             return
 
-        self.app.open_order_dialog(OrderSide.SELL, 100.0, symbol)
+        self.app.open_order_dialog(OrderSide.SELL, 100.0, symbol, None)
 
     async def on_data_table_cell_selected(self, event: DataTable.CellSelected) -> None:
         """Handle cancel button clicks in the orders table."""
         if event.data_table.id != "orders-table":
             return
-        if event.column_key != self._cancel_col:
+        if event.cell_key.column_key != self._cancel_col:
             return
 
-        order_id = event.row_key
+        order_id = str(event.data_table.get_cell(event.cell_key.row_key, self._order_id_col))
         cell_val = event.value
         if str(cell_val).lower() != "cancel" or not order_id:
             return
