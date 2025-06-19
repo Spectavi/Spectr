@@ -259,6 +259,10 @@ BacktestResultScreen {
     background: black;
 }
 
+
+
+# Strategy Screen ------- */
+
 StrategyScreen {
     align: center middle;
 }
@@ -271,4 +275,10 @@ StrategyScreen {
     padding: 1 2;
     content-align-horizontal: center;
     content-align-vertical: top;
+}
+
+#strategy-title {
+    padding: 0 1;
+    text-align: center;
+    height: 5;
 }

@@ -69,7 +69,10 @@ class TickerInputDialog(ModalScreen):
         )
 
     async def on_mount(self, event: events.Mount) -> None:
-        self.query_one("#ticker-input", Input).focus()
+        input_widget = self.query_one("#ticker-input", Input)
+        if hasattr(self.app, "ticker_symbols"):
+            input_widget.value = ",".join(self.app.ticker_symbols)
+        input_widget.focus()
         table = self.query_one("#gainers-table", DataTable)
         self.gainers_table_columns = table.add_columns(
             "Symbol", "% Δ", "Curr Price", "Open Price", "% Avg Vol", "Avg Vol", "Float"
