@@ -22,7 +22,13 @@ import utils
 from custom_strategy import CustomStrategy
 #from CustomStrategy import CustomStrategy
 from fetch.broker_interface import BrokerInterface, OrderSide, OrderType
-from utils import play_sound, get_historical_data, get_live_data, is_market_open_now
+from utils import (
+    play_sound,
+    get_historical_data,
+    get_live_data,
+    is_market_open_now,
+    is_crypto_symbol,
+)
 from views.backtest_input_dialog import BacktestInputDialog
 from views.backtest_result_screen import BacktestResultScreen
 from views.order_dialog import OrderDialog
@@ -343,7 +349,7 @@ class SpectrApp(App):
                         BROKER_API.submit_order(symbol, side, OrderType.MARKET, 100.0, self.auto_trading_enabled)
                         order_type = OrderType.MARKET
                         limit_price = None
-                        if not is_market_open_now():
+                        if not is_market_open_now() and not is_crypto_symbol(symbol):
                             quote = DATA_API.fetch_quote(symbol)
                             order_type = OrderType.LIMIT
                             if side == OrderSide.BUY:
@@ -682,7 +688,7 @@ class SpectrApp(App):
             return
         order_type = OrderType.MARKET
         limit_price = None
-        if not is_market_open_now():
+        if not is_market_open_now() and not is_crypto_symbol(symbol):
             quote = DATA_API.fetch_quote(symbol)
             order_type = OrderType.LIMIT
             if side == OrderSide.BUY:

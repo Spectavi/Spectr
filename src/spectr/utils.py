@@ -106,6 +106,15 @@ def is_market_open_now(tz: ZoneInfo | None = None) -> bool:
     market_close = datetime.combine(now.date(), dtime(hour=16, minute=0), tzinfo=tz)
     return market_open <= now <= market_close
 
+
+CRYPTO_SUFFIXES = ("USD", "USDT", "USDC")
+
+
+def is_crypto_symbol(symbol: str) -> bool:
+    """Return True if *symbol* looks like a cryptocurrency pair."""
+    sym = symbol.upper()
+    return any(sym.endswith(sfx) and len(sym) > len(sfx) for sfx in CRYPTO_SUFFIXES)
+
 def inject_quote_into_df(
     df: pd.DataFrame,
     quote: dict,
