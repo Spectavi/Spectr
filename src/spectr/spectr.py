@@ -8,6 +8,7 @@ import queue
 import threading
 import traceback
 import sys
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 import backtrader as bt
@@ -73,6 +74,18 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
+@dataclass
+class AppConfig:
+    """Configuration values for indicator analysis."""
+
+    macd_thresh: float = 0.002
+    bb_period: int = 200
+    bb_dev: float = 2.0
+    stop_loss_pct: float = 0.01
+    take_profit_pct: float = 0.05
+    lookback_period: int = 1000
+    interval: str = "1min"
+    scale: float = 0.2
 
 class OrderSignal:
     """A simple class to hold order signals."""
@@ -165,19 +178,17 @@ class SpectrApp(App):
 
         self.ticker_symbols = owned + remaining
 
-    def __init__(self, args):
+    def __init__(self, args, config: AppConfig):
         super().__init__()
         if not hasattr(self, "exit_event"):
             self.exit_event = asyncio.Event()
         self._consumer_task = None
         self.args = args  # Store CLI arguments
+        self.config = config
         self._sig_lock = threading.Lock()  # protects self.signal_detected
         self._poll_worker = None
         self._scanner_worker = None
         self._equity_worker = None
-        self.macd_thresh = self.args.macd_thresh
-        self.bb_period = self.args.bb_period
-        self.bb_dev = self.args.bb_dev
         self.df_cache = {symbol: pd.DataFrame() for symbol in self.ticker_symbols}
         if not os.path.exists(cache.CACHE_DIR):
             os.mkdir(cache.CACHE_DIR)
@@ -204,6 +215,53 @@ class SpectrApp(App):
     def compose(self) -> ComposeResult:
         yield TopOverlay(id="overlay-text")
         yield SymbolView(id="symbol-view")
+
+    def _fetch_data(self, symbol: str):
+        """Fetch the latest data and inject the most recent quote."""
+        log.debug(f"Fetching live data for {symbol}...")
+        df, quote = get_live_data(DATA_API, symbol)
+        if df.empty or quote is None:
+            return pd.DataFrame(), None
+
+        price = quote.get("price")
+        if price is not None:
+            self._latest_quotes[symbol.upper()] = float(price)
+
+        log.debug(f"Injecting quote for {symbol}")
+        df = utils.inject_quote_into_df(df, quote)
+        return df, quote
+
+    def _analyze_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
+        log.debug("Analyzing indicators")
+        df = metrics.analyze_indicators(
+            df,
+            self.config.bb_period,
+            self.config.bb_dev,
+            self.config.macd_thresh,
+        )
+        df["trade"] = None
+        df["signal"] = None
+        return df
+
+    def _handle_signal(self, symbol: str, df: pd.DataFrame, quote: dict, signal_dict: dict) -> None:
+        """Record signals and queue order events."""
+        signal = signal_dict.get("signal")
+        curr_price = quote.get("price")
+        reason = signal_dict.get("reason")
+        log.debug(f"Signal detected for {symbol}. Reason: {reason}")
+        df.at[df.index[-1], "trade"] = signal
+        self.call_from_thread(self.signal_detected.append, (symbol, curr_price, signal, reason))
+        self.call_from_thread(
+            cache.record_signal,
+            self.strategy_signals,
+            {
+                "time": datetime.now(),
+                "symbol": symbol,
+                "side": signal,
+                "price": curr_price,
+                "reason": reason,
+            },
+        )
 
     def on_mount(self):
         self.push_screen(SplashScreen(id="splash"), wait_for_dismiss=False)
@@ -235,23 +293,11 @@ class SpectrApp(App):
     def _poll_one_symbol(self, symbol: str):
         try:
             log.debug(f"Fetching live data for {symbol}...")
-            df, quote = get_live_data(DATA_API, symbol)
+            df, quote = self._fetch_data(symbol)
             if df.empty or quote is None:
                 return
 
-            price = quote.get("price")
-            if price is not None:
-                self._latest_quotes[symbol.upper()] = float(price)
-
-            log.debug(f"Injecting quote for {symbol}")
-            df = utils.inject_quote_into_df(df, quote)
-
-            log.debug(f"Analyzing {symbol}...")
-            df = metrics.analyze_indicators(
-                df, self.bb_period, self.bb_dev, self.macd_thresh
-            )
-            df["trade"] = None
-            df["signal"] = None
+            df = self._analyze_indicators(df)
 
             signal_dict = CustomStrategy.detect_signals(
                 df,
@@ -262,43 +308,8 @@ class SpectrApp(App):
 
             # Check for signal
             if signal_dict and not self._is_splash_active():
-                signal = signal_dict.get("signal")
-                curr_price = quote.get("price")
-                reason = signal_dict.get("reason")
-                log.debug(f"Signal detected for {symbol}. Reason: {reason}")
-                df.at[df.index[-1], 'trade'] = signal  # mark bar for plotting
-                if signal == "buy":
-                    log.debug("Buy signal detected!")
-                    self.call_from_thread(self.signal_detected.append, (symbol, curr_price, signal, reason))
-                    self.call_from_thread(
-                        cache.record_signal,
-                        self.strategy_signals,
-                        {
-                            "time": datetime.now(),
-                            "symbol": symbol,
-                            "side": "buy",
-                            "price": curr_price,
-                            "reason": reason,
-                        },
-                    )
-                    #play_sound(BUY_SOUND_PATH)
-                elif signal == "sell":
-                    log.debug("Sell signal detected!")
-                    self.call_from_thread(self.signal_detected.append, (symbol, curr_price, signal, reason))
-                    self.call_from_thread(
-                        cache.record_signal,
-                        self.strategy_signals,
-                        {
-                            "time": datetime.now(),
-                            "symbol": symbol,
-                            "side": "sell",
-                            "price": curr_price,
-                            "reason": reason,
-                        },
-                    )
-                    #play_sound(SELL_SOUND_PATH)
+                self._handle_signal(symbol, df, quote, signal_dict)
 
-            # Notify UI thread
             self.df_cache[symbol] = df
             self._update_queue.put(symbol)
             if symbol == self.ticker_symbols[self.active_symbol_index]:
@@ -307,7 +318,8 @@ class SpectrApp(App):
                 # refresh the active view from the UI thread
                 self.call_from_thread(self.update_view, self.ticker_symbols[self.active_symbol_index])
 
-        except Exception as exc:
+
+        except Exception:
             log.error(f"[poll] {symbol}: {traceback.format_exc()}")
 
     async def _polling_loop(self) -> None:
@@ -341,7 +353,7 @@ class SpectrApp(App):
             # push it straight into the Graph/MACD views.
             # If a buy signal was triggered, switch to that symbol
             if len(self.signal_detected) > 0:
-                for signal in self.signal_detected:
+                for signal in list(self.signal_detected):
                     sym, price, sig, reason = signal
                     index = self.ticker_symbols.index(sym)
                     self.active_symbol_index = index
@@ -366,43 +378,12 @@ class SpectrApp(App):
                         else:
                             msg = f"REAL {msg}"
                         self.signal_detected.remove(signal)
-                        BROKER_API.submit_order(symbol, side, OrderType.MARKET, 100.0, self.auto_trading_enabled)
-                        order_type = OrderType.MARKET
-                        limit_price = None
-                        if not is_market_open_now() and not is_crypto_symbol(symbol):
-                            quote = DATA_API.fetch_quote(symbol)
-                            order_type = OrderType.LIMIT
-                            if side == OrderSide.BUY:
-                                limit_price = (
-                                    quote.get("ask")
-                                    or quote.get("ask_price")
-                                    or quote.get("askPrice")
-                                    or quote.get("price")
-                                )
-                            else:
-                                limit_price = (
-                                    quote.get("bid")
-                                    or quote.get("bid_price")
-                                    or quote.get("bidPrice")
-                                    or quote.get("price")
-                                )
-                        BROKER_API.submit_order(
-                            symbol=symbol,
-                            side=side,
-                            type=order_type,
-                            quantity=1,
-                            limit_price=limit_price,
-                            market_price=price,
-                            real_trades=self.auto_trading_enabled,
-                        )
-                        play_sound(BUY_SOUND_PATH if sig == "buy" else SELL_SOUND_PATH)
+                        self._submit_order(sym, side, price)
             elif symbol == self.ticker_symbols[self.active_symbol_index]:
                 if not self.is_backtest:
                     df = self.df_cache.get(symbol)
                     if df is not None:
                         self.update_view(symbol)
-
-
 
 
     def _check_scan_symbol(self, row):
@@ -685,9 +666,7 @@ class SpectrApp(App):
         symbol = self.ticker_symbols[self.active_symbol_index]
         self.open_order_dialog(OrderSide.SELL, 25.0, symbol)
 
-    def open_order_dialog(self, side: OrderSide, pos_pct: float, symbol: str, reason: str | None = None):
-        if self._is_splash_active():
-            return
+    def _prepare_order_details(self, symbol: str, side: OrderSide) -> tuple[OrderType, float | None]:
         order_type = OrderType.MARKET
         limit_price = None
         if not is_market_open_now() and not is_crypto_symbol(symbol):
@@ -707,6 +686,25 @@ class SpectrApp(App):
                     or quote.get("bidPrice")
                     or quote.get("price")
                 )
+        return order_type, limit_price
+
+    def _submit_order(self, symbol: str, side: OrderSide, price: float) -> None:
+        order_type, limit_price = self._prepare_order_details(symbol, side)
+        BROKER_API.submit_order(
+            symbol=symbol,
+            side=side,
+            type=order_type,
+            quantity=1,
+            limit_price=limit_price,
+            market_price=price,
+            real_trades=self.auto_trading_enabled,
+        )
+        play_sound(BUY_SOUND_PATH if side == OrderSide.BUY else SELL_SOUND_PATH)
+
+    def open_order_dialog(self, side: OrderSide, pos_pct: float, symbol: str, reason: str | None = None):
+        if self._is_splash_active():
+            return
+        order_type, limit_price = self._prepare_order_details(symbol, side)
         self.push_screen(
             OrderDialog(
                 side=side,
@@ -960,7 +958,7 @@ class SpectrApp(App):
             # Run the back-test
             log.debug(f"Running backtest for {symbol}.")
             result = await asyncio.to_thread(
-                self.run_backtest, df, symbol, self.args, starting_cash
+                self.run_backtest, df, symbol, self.config, starting_cash
             )
             log.debug("Backtest completed successfully.")
 
@@ -1028,14 +1026,14 @@ class SpectrApp(App):
             current = self.ticker_symbols[self.active_symbol_index]
             self.update_view(current)
 
-    def run_backtest(self, df, symbol, args, starting_cash=1000.00):
+    def run_backtest(self, df, symbol, config: AppConfig, starting_cash=1000.00):
         cerebro = bt.Cerebro()
         cerebro.addstrategy(
             CustomStrategy,
             symbol=symbol,
-            bb_period=args.bb_period,
-            bb_dev=args.bb_dev,
-            macd_thresh=args.macd_thresh,
+            bb_period=config.bb_period,
+            bb_dev=config.bb_dev,
+            macd_thresh=config.macd_thresh,
         )
 
         data = bt.feeds.PandasData(dataname=df)
@@ -1066,33 +1064,42 @@ class SpectrApp(App):
             'sell_signals': strat.sell_signals,
         }
 
+BROKER_API = None
+DATA_API = None
 
-if __name__ == "__main__":
-    # Show splash screen in a separate thread
-    # splash_thread = threading.Thread(target=show_splash)
-    # splash_thread.daemon = True  # So the thread dies when the program exits
-    # splash_thread.start()
-
+def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--symbols", type=str, default='AAPL,AMZN,META,MSFT,NVDA,TSLA,GOOG,VTI,GLD,BTCUSD',
-                        help="List of ticker symbols (e.g. NVDA,TSLA,AAPL)")
+    parser.add_argument(
+        "--symbols",
+        type=str,
+        default="AAPL,AMZN,META,MSFT,NVDA,TSLA,GOOG,VTI,GLD,BTCUSD",
+        help="List of ticker symbols (e.g. NVDA,TSLA,AAPL)",
+    )
     parser.add_argument("--candles", action="store_true", help="Show candlestick chart.")
     parser.add_argument("--macd_thresh", type=float, default=0.002, help="MACD threshold")
     parser.add_argument("--bb_period", type=int, default=200, help="Bollinger Band period")
     parser.add_argument("--bb_dev", type=float, default=2.0, help="Bollinger Band std dev")
-    parser.add_argument("--real_trades", action='store_true', help="Enable live trading (vs paper)")
-    parser.add_argument('--interval', default='1min')
-    parser.add_argument('--stop_loss_pct', type=float, default=0.01, help="Stop loss pct")
-    parser.add_argument('--take_profit_pct', type=float, default=0.05, help="Take profit pct")
-    parser.add_argument('--lookback_period', type=int, default=1000, help="Lookback period")
-    parser.add_argument('--scale', type=float, default=0.2, help="Scale factor")
-    parser.add_argument("--broker", type=str, choices=["alpaca", "robinhood"], default="robinhood",
-                        help="Choose which broker to use (Alpaca, Robinhood)"
-                        )
-    parser.add_argument("--data_api", type=str, choices=["alpaca", "robinhood", "fmp"], default="robinhood",
-                        help="Choose which data provider to use (Alpaca, Robinhood, or FMP)"
-                        )
-    parser.add_argument('--debug', action='store_true')
+    parser.add_argument("--real_trades", action="store_true", help="Enable live trading (vs paper)")
+    parser.add_argument("--interval", default="1min")
+    parser.add_argument("--stop_loss_pct", type=float, default=0.01, help="Stop loss pct")
+    parser.add_argument("--take_profit_pct", type=float, default=0.05, help="Take profit pct")
+    parser.add_argument("--lookback_period", type=int, default=1000, help="Lookback period")
+    parser.add_argument("--scale", type=float, default=0.2, help="Scale factor")
+    parser.add_argument(
+        "--broker",
+        type=str,
+        choices=["alpaca", "robinhood"],
+        default="robinhood",
+        help="Choose which broker to use (Alpaca, Robinhood)",
+    )
+    parser.add_argument(
+        "--data_api",
+        type=str,
+        choices=["alpaca", "robinhood", "fmp"],
+        default="robinhood",
+        help="Choose which data provider to use (Alpaca, Robinhood, or FMP)",
+    )
+    parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
 
     if "--symbols" not in sys.argv:
@@ -1107,16 +1114,14 @@ if __name__ == "__main__":
     # Loading from .env file
     load_dotenv()
 
-    BROKER_API = None
-    DATA_API = None
+    global BROKER_API
+    global DATA_API
 
     if args.broker == "alpaca":
         from fetch.alpaca import AlpacaInterface
-
-        BROKER_API: BrokerInterface = AlpacaInterface(real_trades=args.real_trades)
+        BROKER_API = AlpacaInterface(real_trades=args.real_trades)
     elif args.broker == "robinhood":
         from fetch.robinhood import RobinhoodInterface, RobinhoodInterface
-
         BROKER_API = RobinhoodInterface()
     elif args.broker == "fmp":
         raise ValueError("Invalid broker: FMP does not support broker services, only data.")
@@ -1143,5 +1148,19 @@ if __name__ == "__main__":
         # FMP can only be a data_api, not valid for broker.
         DATA_API = FMPInterface()
 
-    app = SpectrApp(args)
+    config = AppConfig(
+        macd_thresh=args.macd_thresh,
+        bb_period=args.bb_period,
+        bb_dev=args.bb_dev,
+        stop_loss_pct=args.stop_loss_pct,
+        take_profit_pct=args.take_profit_pct,
+        lookback_period=args.lookback_period,
+        interval=args.interval,
+        scale=args.scale,
+    )
+
+    app = SpectrApp(args, config)
     app.run()
+
+if __name__ == "__main__":
+    main()
