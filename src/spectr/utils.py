@@ -15,34 +15,8 @@ import metrics
 from fetch import data_interface
 
 LOG_FILE = 'signal_log.csv'
-CACHE_DIR = 'cache'
-CACHE_PATH_STR = ".{}.cache"
 
 log = logging.getLogger(__name__)
-
-def save_cache(symbol, df):
-    if df is not None:
-        cache_path = os.path.join(CACHE_DIR, CACHE_PATH_STR.format(symbol))
-
-        # Fastparquet (the default engine) struggles with timezone aware
-        # datetimes.  Convert any tz-aware index to UTC and drop the timezone
-        # before persisting so we always write timezone naive timestamps.
-        df_to_save = df.copy()
-        if isinstance(df_to_save.index, pd.DatetimeIndex) and df_to_save.index.tz is not None:
-            df_to_save.index = df_to_save.index.tz_convert("UTC").tz_localize(None)
-
-        df_to_save.to_parquet(cache_path)
-        print(f"[Cache] DataFrame cached to {cache_path}")
-
-
-def load_cache(symbol):
-    cache_path = os.path.join(CACHE_DIR, CACHE_PATH_STR.format(symbol))
-    if os.path.exists(cache_path):
-        print(f"[Cache] Loading cached DataFrame from {cache_path}")
-        return pd.read_parquet(cache_path)
-    else:
-        log.debug("Cache not found.")
-    return pd.DataFrame() # Return empty dataframe.
 
 
 def human_format(num: float) -> str:
