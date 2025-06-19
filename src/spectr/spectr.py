@@ -183,7 +183,8 @@ class SpectrApp(App):
 
         self._update_queue: queue.Queue[str] = queue.Queue()
         self.signal_detected = []
-        self.strategy_signals: list[dict] = []
+        self._strategy_cache_file = pathlib.Path.home() / ".spectr_strategy_cache.json"
+        self.strategy_signals: list[dict] = self._load_strategy_cache()
         self._shutting_down = False
 
         self.trade_amount = 0.0
@@ -271,24 +272,30 @@ class SpectrApp(App):
                 if signal == "buy":
                     log.debug("Buy signal detected!")
                     self.call_from_thread(self.signal_detected.append, (symbol, curr_price, signal, reason))
-                    self.call_from_thread(self.strategy_signals.append, {
-                        "time": datetime.now(),
-                        "symbol": symbol,
-                        "side": "buy",
-                        "price": curr_price,
-                        "reason": reason,
-                    })
+                    self.call_from_thread(
+                        self._record_signal,
+                        {
+                            "time": datetime.now(),
+                            "symbol": symbol,
+                            "side": "buy",
+                            "price": curr_price,
+                            "reason": reason,
+                        },
+                    )
                     #play_sound(BUY_SOUND_PATH)
                 elif signal == "sell":
                     log.debug("Sell signal detected!")
                     self.call_from_thread(self.signal_detected.append, (symbol, curr_price, signal, reason))
-                    self.call_from_thread(self.strategy_signals.append, {
-                        "time": datetime.now(),
-                        "symbol": symbol,
-                        "side": "sell",
-                        "price": curr_price,
-                        "reason": reason,
-                    })
+                    self.call_from_thread(
+                        self._record_signal,
+                        {
+                            "time": datetime.now(),
+                            "symbol": symbol,
+                            "side": "sell",
+                            "price": curr_price,
+                            "reason": reason,
+                        },
+                    )
                     #play_sound(SELL_SOUND_PATH)
 
             # Notify UI thread
@@ -408,6 +415,19 @@ class SpectrApp(App):
         except Exception as exc:
             log.error(f"gainers cache write failed: {exc}")
 
+    def _save_strategy_cache(self) -> None:
+        try:
+            rows = []
+            for rec in self.strategy_signals:
+                out = dict(rec)
+                ts = out.get("time")
+                if isinstance(ts, datetime):
+                    out["time"] = ts.isoformat()
+                rows.append(out)
+            self._strategy_cache_file.write_text(json.dumps(rows, indent=0))
+        except Exception as exc:
+            log.error(f"strategy cache write failed: {exc}")
+
     def _load_scanner_cache(self) -> list[dict]:
         try:
             blob = json.loads(self._scanner_cache_file.read_text())
@@ -425,6 +445,27 @@ class SpectrApp(App):
             return blob.get("rows", [])
         except Exception:
             return []
+
+    def _load_strategy_cache(self) -> list[dict]:
+        try:
+            rows = json.loads(self._strategy_cache_file.read_text())
+        except Exception:
+            return []
+        out = []
+        for rec in rows:
+            if isinstance(rec, dict):
+                ts = rec.get("time")
+                if ts:
+                    try:
+                        rec["time"] = datetime.fromisoformat(ts)
+                    except Exception:
+                        rec["time"] = None
+                out.append(rec)
+        return out
+
+    def _record_signal(self, sig: dict) -> None:
+        self.strategy_signals.append(sig)
+        self._save_strategy_cache()
 
     def _check_scan_symbol(self, row):
         """Fetch extra metrics for *row* and flag if it passes the filter."""
