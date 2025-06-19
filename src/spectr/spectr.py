@@ -9,6 +9,7 @@ import time
 import queue
 import threading
 import traceback
+import sys
 from datetime import datetime, timedelta
 
 import backtrader as bt
@@ -57,6 +58,9 @@ from views.strategy_screen import StrategyScreen
 # --- SOUND PATHS ---
 BUY_SOUND_PATH = 'res/buy.mp3'
 SELL_SOUND_PATH = 'res/sell.mp3'
+
+# File used to cache the last used ticker symbol list
+SYMBOLS_CACHE_PATH = pathlib.Path.home() / ".spectr_symbols_cache.json"
 
 REFRESH_INTERVAL = 60  # seconds
 SCANNER_INTERVAL = REFRESH_INTERVAL
@@ -193,6 +197,7 @@ class SpectrApp(App):
         self.scanner_results: list[dict] = self._load_scanner_cache()
         self._gainers_cache_file = pathlib.Path.home() / ".spectr_gainers_cache.json"
         self.top_gainers: list[dict] = self._load_gainers_cache()
+        self._symbols_cache_file = SYMBOLS_CACHE_PATH
 
         # Track latest quotes and equity curve
         self._latest_quotes: dict[str, float] = {}
@@ -446,6 +451,18 @@ class SpectrApp(App):
         except Exception:
             return []
 
+    def _save_symbols_cache(self) -> None:
+        try:
+            self._symbols_cache_file.write_text(json.dumps(self.ticker_symbols))
+        except Exception as exc:
+            log.error(f"symbols cache write failed: {exc}")
+
+    def _load_symbols_cache(self) -> list[str]:
+        try:
+            return json.loads(self._symbols_cache_file.read_text())
+        except Exception:
+            return []
+
     def _load_strategy_cache(self) -> list[dict]:
         try:
             rows = json.loads(self._strategy_cache_file.read_text())
@@ -655,6 +672,8 @@ class SpectrApp(App):
             self._consumer_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 self._consumer_task = None
+
+        self._save_symbols_cache()
 
         log.debug("on_shutdown complete")
         self.exit()
@@ -1154,6 +1173,14 @@ if __name__ == "__main__":
                         )
     parser.add_argument('--debug', action='store_true')
     args = parser.parse_args()
+
+    if "--symbols" not in sys.argv:
+        try:
+            cached = json.loads(SYMBOLS_CACHE_PATH.read_text())
+            if isinstance(cached, list) and cached:
+                args.symbols = ",".join(cached)
+        except Exception:
+            pass
 
     args.symbols = [s.strip().upper() for s in args.symbols.split(",")]
     args.symbol = args.symbols[0]  # set initial active symbol
