@@ -1,20 +1,29 @@
 import asyncio
 import logging
 
+from .scanner_interface import ScannerInterface
 import cache
 
 
 log = logging.getLogger(__name__)
 
 
-class CustomScanner:
+class CustomScanner(ScannerInterface):
     """Background scanner for filtering top gainers."""
 
     def __init__(self, data_api, exit_event) -> None:
         self.data_api = data_api
         self.exit_event = exit_event
-        self.scanner_results: list[dict] = cache.load_scanner_cache()
-        self.top_gainers: list[dict] = cache.load_gainers_cache()
+        self._scanner_results: list[dict] = cache.load_scanner_cache()
+        self._top_gainers: list[dict] = cache.load_gainers_cache()
+
+    @property
+    def scanner_results(self) -> list[dict]:
+        return self._scanner_results
+
+    @property
+    def top_gainers(self) -> list[dict]:
+        return self._top_gainers
 
     def _check_scan_symbol(self, row: dict) -> dict | None:
         """Fetch extra metrics for ``row`` and flag if it passes the filter."""
@@ -77,18 +86,18 @@ class CustomScanner:
             if data is not None:
                 results.append(data)
 
-        self.top_gainers = results
+        self._top_gainers = results
         cache.save_gainers_cache(results)
         return [r for r in results if r.get("passed")]
 
     async def scanner_loop(self, interval: float = 60.0) -> None:
         log.debug("scanner_loop start")
-        self.scanner_results = cache.load_scanner_cache()
-        self.top_gainers = cache.load_gainers_cache()
+        self._scanner_results = cache.load_scanner_cache()
+        self._top_gainers = cache.load_gainers_cache()
         while not self.exit_event.is_set():
             try:
                 results = await self._run_scanner()
-                self.scanner_results = results
+                self._scanner_results = results
                 cache.save_scanner_cache(results)
             except Exception as exc:
                 log.error(f"[scanner] {exc}")

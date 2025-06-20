@@ -2,7 +2,7 @@ import logging
 import asyncio
 
 from textual import events
-from textual.widgets import Input, Label, Button, DataTable
+from textual.widgets import Input, Label, Button, DataTable, Select
 from textual.containers import Vertical, Horizontal, Container
 from textual.screen import ModalScreen
 import utils
@@ -29,6 +29,9 @@ class TickerInputDialog(ModalScreen):
             scanner_results_cb=None,
             gainers_results=None,
             gainers_results_cb=None,
+            scanner_names=None,
+            current_scanner=None,
+            set_scanner_cb=None,
     ):
         super().__init__()
         self.callback = callback
@@ -43,6 +46,9 @@ class TickerInputDialog(ModalScreen):
         self._scanner_refresh_job = None
         self.gainers_results_cb = gainers_results_cb
         self._gainers_refresh_job = None
+        self.scanner_names: list[str] = scanner_names or []
+        self.current_scanner = current_scanner or (self.scanner_names[0] if self.scanner_names else "")
+        self.set_scanner_cb = set_scanner_cb
 
     def compose(self):
         yield Vertical(
@@ -54,6 +60,15 @@ class TickerInputDialog(ModalScreen):
                 ),
                 Button("Submit", id="submit-button", variant="success"),
                 id="ticker_input_row",
+            ),
+            Horizontal(
+                Label("Scanner:", id="scanner-label"),
+                Select(
+                    id="scanner-select",
+                    prompt="Scanner",
+                    value=self.current_scanner,
+                    options=[(name, name) for name in self.scanner_names],
+                ),
             ),
             Label("Scanner results:", id="scanner-title"),
             Container(
@@ -87,6 +102,8 @@ class TickerInputDialog(ModalScreen):
         )
         scanner_table.cursor_type = "row"
         scanner_table.show_cursor = True
+        if self.scanner_names:
+            self.query_one("#scanner-select", Select).value = self.current_scanner
 
         if self.gainers_list:
             asyncio.create_task(self.refresh_top_movers(rows=self.gainers_list))
@@ -156,6 +173,12 @@ class TickerInputDialog(ModalScreen):
                 asyncio.create_task(self.refresh_top_movers())
             case "scanner-select-button":
                 self._select_scanners()
+
+    async def on_select_changed(self, event: Select.Changed):
+        if event.select.id == "scanner-select":
+            self.current_scanner = event.value
+            if callable(self.set_scanner_cb):
+                self.set_scanner_cb(event.value)
 
     def on_input_submitted(self, event: Input.Submitted):
         self._submit()
