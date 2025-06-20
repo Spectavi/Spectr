@@ -743,14 +743,19 @@ class SpectrApp(App):
 
     def _ask_agent(self) -> None:
         """Run the voice assistant and display errors in the overlay."""
+        overlay = self.query_one("#overlay-text", TopOverlay)
+        self.call_from_thread(overlay.show_prompt, "Listening...")
         try:
             self.voice_agent.listen_and_answer()
         except Exception as exc:
             log.error("Voice agent error: %s", traceback.format_exc())
             self.call_from_thread(
-                self.query_one("#overlay-text", TopOverlay).flash_message,
+                overlay.flash_message,
                 f"Voice error: {exc}",
             )
+        finally:
+            self.call_from_thread(overlay.clear_prompt)
+            self.call_from_thread(self.update_status_bar)
 
 
 
