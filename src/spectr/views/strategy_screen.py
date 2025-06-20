@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from textual.screen import Screen
-from textual.widgets import DataTable, Header, Footer, Static
+from textual.widgets import DataTable, Header, Footer, Static, Select
 from textual.containers import Vertical
 from textual.reactive import reactive
 
@@ -14,9 +14,12 @@ class StrategyScreen(Screen):
 
     signals: reactive[list] = reactive([])
 
-    def __init__(self, signals: list[dict]):
+    def __init__(self, signals: list[dict], strategies: list[str], current: str, callback=None):
         super().__init__()
         self.signals = signals
+        self.strategy_names = strategies
+        self.current = current
+        self.callback = callback
 
     def compose(self):
         table = DataTable(zebra_stripes=True)
@@ -33,8 +36,21 @@ class StrategyScreen(Screen):
                 sig.get("reason", ""),
             )
 
+        select = Select(
+            id="strategy-select",
+            prompt="Strategy",
+            value=self.current,
+            options=[(name, name) for name in self.strategy_names],
+        )
         yield Vertical(
             Static("Strategy Info", id="strategy-title"),
+            select,
             table,
             id="strategy-screen",
         )
+
+    async def on_select_changed(self, event: Select.Changed):
+        if event.select.id == "strategy-select":
+            self.current = event.value
+            if callable(self.callback):
+                self.callback(event.value)

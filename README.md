@@ -10,7 +10,7 @@
 
 **Spectr** is a terminal-based algorithmic trading terminal. It supports live-monitoring w/ algo-based auto-trading and historical backtesting. Supports Robinhood, Alpaca, and FMP.
 
-BYOS - Bring Your Own Strategy. You must implement your own trading strategy in custom_strategy.py.
+BYOS - Bring Your Own Strategy. You must implement your own trading strategy in strategies/custom_strategy.py.
 
 
 ![Example GIF](src/spectr/res/example_features.gif)
