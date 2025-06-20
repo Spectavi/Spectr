@@ -41,6 +41,7 @@ from views.top_overlay import TopOverlay
 from views.trades_screen import TradesScreen
 from views.strategy_screen import StrategyScreen
 from agent import VoiceAgent
+from custom_scanner import CustomScanner
 
 
 
@@ -210,17 +211,26 @@ class SpectrApp(App):
 
         self.voice_agent = VoiceAgent()
 
-        self.scanner_results: list[dict] = cache.load_scanner_cache()
-        self.top_gainers: list[dict] = cache.load_gainers_cache()
+        # Background scanner for finding potential symbols
+        self.scanner = CustomScanner(DATA_API, self.exit_event)
 
         # Track latest quotes and equity curve
         self._latest_quotes: dict[str, float] = {}
         self._equity_curve_data: list[tuple[datetime, float, float]] = []
 
+
         # Cache for portfolio data so reopening the portfolio screen is instant
         self._portfolio_balance_cache: dict | None = None
         self._portfolio_positions_cache: list | None = None
         self._portfolio_orders_cache: list | None = None
+
+    @property
+    def scanner_results(self) -> list[dict]:
+        return self.scanner.scanner_results
+
+    @property
+    def top_gainers(self) -> list[dict]:
+        return self.scanner.top_gainers
 
     def compose(self) -> ComposeResult:
         yield TopOverlay(id="overlay-text")
@@ -291,7 +301,7 @@ class SpectrApp(App):
 
         # Kick off background workers
         self._poll_worker = self.run_worker(self._polling_loop, thread=False)
-        self._scanner_worker = self.run_worker(self._scanner_loop, thread=False)
+        self._scanner_worker = self.run_worker(self.scanner.scanner_loop, thread=False)
         self._equity_worker = self.run_worker(self._equity_loop, thread=False)
 
         #self.update_status_bar()
@@ -409,89 +419,6 @@ class SpectrApp(App):
                         self.update_view(symbol)
 
 
-    def _check_scan_symbol(self, row):
-        """Fetch extra metrics for *row* and flag if it passes the filter."""
-        sym = row["symbol"]
-        quote = DATA_API.fetch_quote(sym)
-        if not quote:
-            return None
-
-        profile = {}
-        if hasattr(DATA_API, "fetch_company_profile"):
-            try:
-                profile = DATA_API.fetch_company_profile(sym) or {}
-            except Exception:
-                profile = {}
-
-        prev = quote.get("previousClose") or 0
-
-        avg_vol = quote.get("avgVolume") or profile.get("volAvg") or 0
-        volume = quote.get("volume") or 0
-        float_shares = (
-            profile.get("float")
-            or profile.get("floatShares")
-            or quote.get("sharesOutstanding")
-            or 0
-        )
-
-        rel_vol_pct = 100 * volume / avg_vol if avg_vol else 0
-
-        passed = True
-        if prev == 0 or (quote["price"] - prev) / prev < 0.05:
-            passed = False
-        if avg_vol == 0 or volume < 3 * avg_vol:
-            passed = False
-        if not DATA_API.has_recent_positive_news(sym, hours=48):
-            passed = False
-
-        return {
-            **row,
-            "open_price": quote["price"] - quote["change"],
-            "avg_volume": avg_vol,
-            "volume_pct": rel_vol_pct,
-            "float": float_shares,
-            "passed": passed,
-        }
-
-    async def _run_scanner(self) -> list[dict]:
-        if self.exit_event.is_set():
-            return []
-
-        gainers = DATA_API.fetch_top_movers(limit=50)
-        if self.exit_event.is_set():
-            return []
-
-        tasks = [asyncio.to_thread(self._check_scan_symbol, row) for row in gainers]
-        results = []
-        for coro in asyncio.as_completed(tasks):
-            if self.exit_event.is_set():
-                break
-            data = await coro
-            if data is not None:
-                results.append(data)
-
-        self.top_gainers = results
-        cache.save_gainers_cache(results)
-        return [r for r in results if r.get("passed")]
-
-    async def _scanner_loop(self) -> None:
-        log.debug("_scanner_loop start")
-        self.scanner_results = cache.load_scanner_cache()
-        self.top_gainers = cache.load_gainers_cache()
-        while not self.exit_event.is_set():
-            try:
-                results = await self._run_scanner()
-                self.scanner_results = results
-                cache.save_scanner_cache(results)
-            except Exception as exc:
-                log.error(f"[scanner] {exc}")
-
-            try:
-                await asyncio.wait_for(self.exit_event.wait(), timeout=SCANNER_INTERVAL)
-            except asyncio.TimeoutError:
-                pass
-
-        log.debug("_scanner_loop exit")
 
     async def _equity_loop(self) -> None:
         """Periodically update portfolio equity using cached quotes."""
