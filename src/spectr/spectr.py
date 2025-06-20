@@ -21,8 +21,7 @@ from textual import events
 import metrics
 import utils
 import cache
-from custom_strategy import CustomStrategy
-#from CustomStrategy import CustomStrategy
+from strategies import load_strategy, list_strategies
 from fetch.broker_interface import BrokerInterface, OrderSide, OrderType
 from utils import (
     play_sound,
@@ -196,6 +195,13 @@ class SpectrApp(App):
         self._update_queue: queue.Queue[str] = queue.Queue()
         self.signal_detected = []
         self.strategy_signals: list[dict] = cache.load_strategy_cache()
+        self.available_strategies = list_strategies()
+        default_name = "CustomStrategy"
+        if default_name in self.available_strategies:
+            self.strategy_name = default_name
+        else:
+            self.strategy_name = next(iter(self.available_strategies))
+        self.strategy_class = load_strategy(self.strategy_name)
         self._shutting_down = False
 
         self.trade_amount = 0.0
@@ -299,7 +305,7 @@ class SpectrApp(App):
 
             df = self._analyze_indicators(df)
 
-            signal_dict = CustomStrategy.detect_signals(
+            signal_dict = self.strategy_class.detect_signals(
                 df,
                 symbol,
                 position=BROKER_API.get_position(symbol),
@@ -784,7 +790,14 @@ class SpectrApp(App):
         if self.screen_stack and isinstance(self.screen_stack[-1], StrategyScreen):
             self.pop_screen()
         else:
-            self.push_screen(StrategyScreen(list(self.strategy_signals)))
+            self.push_screen(
+                StrategyScreen(
+                    list(self.strategy_signals),
+                    list(self.available_strategies.keys()),
+                    self.strategy_name,
+                    self.set_strategy,
+                )
+            )
 
 
     # ------------ Order Dialog Submit Logic -------------
@@ -922,6 +935,14 @@ class SpectrApp(App):
         except ValueError:
             self.trade_amount = 0.0
 
+    def set_strategy(self, name: str) -> None:
+        """Change the active trading strategy."""
+        if name not in self.available_strategies:
+            log.error(f"Unknown strategy: {name}")
+            return
+        self.strategy_name = name
+        self.strategy_class = load_strategy(name)
+
     # ---------- Back-test workflow ----------
 
     def action_prompt_backtest(self) -> None:
@@ -1035,7 +1056,7 @@ class SpectrApp(App):
     def run_backtest(self, df, symbol, config: AppConfig, starting_cash=1000.00):
         cerebro = bt.Cerebro()
         cerebro.addstrategy(
-            CustomStrategy,
+            self.strategy_class,
             symbol=symbol,
             bb_period=config.bb_period,
             bb_dev=config.bb_dev,
