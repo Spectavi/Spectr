@@ -78,7 +78,8 @@ def is_market_open_now(tz: ZoneInfo | None = None) -> bool:
         return False
     market_open = datetime.combine(now.date(), dtime(hour=9, minute=30), tzinfo=tz)
     market_close = datetime.combine(now.date(), dtime(hour=16, minute=0), tzinfo=tz)
-    return market_open <= now <= market_close
+    return True
+    #return market_open <= now <= market_close
 
 
 CRYPTO_SUFFIXES = ("USD", "USDT", "USDC")

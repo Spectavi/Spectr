@@ -35,7 +35,6 @@ class MACDView(Static):
         self.refresh()
 
     def render(self):
-        log.debug("Rendering macd")
         return self.build_graph()
 
     def load_df(self, df, args):

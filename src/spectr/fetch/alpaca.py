@@ -247,7 +247,7 @@ class AlpacaInterface(BrokerInterface):
     def get_positions(self):
         try:
             pos = self.get_api().get_all_positions()
-            log.debug(f"Fetched {len(pos)} positions: {pos}")
+            log.debug(f"Fetched {len(pos)} positions")
             return pos
         except Exception as exc:
             log.debug(f"Failed to fetch positions: {exc}")
@@ -259,7 +259,7 @@ class AlpacaInterface(BrokerInterface):
     def get_position(self, symbol: str):
         try:
             pos = self.get_api().get_open_position(symbol.upper())
-            log.debug(f"Fetched {symbol} position: {pos}")
+            log.debug(f"Fetched {symbol} position")
             return pos
         except Exception:
             log.debug("No position")
@@ -278,12 +278,13 @@ class AlpacaInterface(BrokerInterface):
         market_price: float | None = None,
         real_trades: bool = False,
     ):
+        log.debug(f"Attempting to submit {type.name}...")
         try:
             tc = self.get_api()
             if type == OrderType.MARKET:
                 order_req = MarketOrderRequest(
                     symbol=symbol.upper(),
-                    qty=quantity or 1,
+                    qty=quantity,
                     side=side.name.lower(),
                     time_in_force=TimeInForce.GTC,
                 )
@@ -291,7 +292,7 @@ class AlpacaInterface(BrokerInterface):
             else:
                 order_req = LimitOrderRequest(
                     symbol=symbol.upper(),
-                    qty=quantity or 1,
+                    qty=quantity,
                     side=side.name.lower(),
                     time_in_force=TimeInForce.GTC,
                     limit_price=limit_price,

@@ -65,7 +65,7 @@ TickerInputDialog {
 }
 #ticker_input_dlg_body {
     width: 75%;
-    height: 46;
+    height: 52;
     border: solid green;
     padding: 1 2;
     content-align-horizontal: center;
@@ -281,4 +281,8 @@ StrategyScreen {
     padding: 0 1;
     text-align: center;
     height: 3;
+}
+
+#strategy-select {
+    padding: 1 1;
 }

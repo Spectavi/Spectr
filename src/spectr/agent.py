@@ -7,13 +7,13 @@ import pygame
 import sounddevice as sd
 import soundfile as sf
 
-from .news import get_latest_news
+from news import get_latest_news
 
 
 class VoiceAgent:
     """Simple wrapper around OpenAI's voice features."""
 
-    def __init__(self, chat_model: str = "gpt-3.5-turbo", tts_model: str = "tts-1", voice: str = "nova") -> None:
+    def __init__(self, chat_model: str = "gpt-3.5-turbo", tts_model: str = "tts-1", voice: str = "fable") -> None:
         """Initialize the voice agent and OpenAI client."""
         self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         self.chat_model = chat_model
@@ -27,6 +27,7 @@ class VoiceAgent:
             model=self.tts_model,
             voice=self.voice,
             input=text,
+            speed=0.85,
         )
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
             f.write(response.content)

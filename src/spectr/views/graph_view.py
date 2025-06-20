@@ -51,7 +51,6 @@ class GraphView(Static):
         self.refresh()
 
     def render(self):
-        log.debug("Rendering graph")
         return self.build_graph()
 
     def build_graph(self):
