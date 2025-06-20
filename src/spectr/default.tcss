@@ -280,5 +280,5 @@ StrategyScreen {
 #strategy-title {
     padding: 0 1;
     text-align: center;
-    height: 5;
+    height: 3;
 }

@@ -94,8 +94,8 @@ python -m spectr --broker alpaca --data_api fmp --scale 0.5 --symbols NVDA,TSLA,
 | `--bb_dev`          | Bollinger Band std deviation (default: 2.0)             |
 | `--stop_loss-pct`   | Stop loss percent.                                      |
 | `--take_profit_pct` | Take profit percent.                                    |
-| `--scale`           | Scale the terminal UI (default: 1.0)                    |
-| `--candles`         | Enable candle chart mode.                               |
+| `--scale`           | Scale the terminal UI (default: 0.5)                    |
+| `--candles`         | Enable candle chart mode (default: on).                               |
 
 ---------------
 ### Ticker Select Dialog with Scanner. Select rows to add to watchlist:

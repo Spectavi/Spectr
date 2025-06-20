@@ -1075,7 +1075,8 @@ def main() -> None:
         default="AAPL,AMZN,META,MSFT,NVDA,TSLA,GOOG,VTI,GLD,BTCUSD",
         help="List of ticker symbols (e.g. NVDA,TSLA,AAPL)",
     )
-    parser.add_argument("--candles", action="store_true", help="Show candlestick chart.")
+    parser.add_argument("--candles", action="store_true", default=True,
+                        help="Show candlestick chart.")
     parser.add_argument("--macd_thresh", type=float, default=0.002, help="MACD threshold")
     parser.add_argument("--bb_period", type=int, default=200, help="Bollinger Band period")
     parser.add_argument("--bb_dev", type=float, default=2.0, help="Bollinger Band std dev")
@@ -1084,7 +1085,7 @@ def main() -> None:
     parser.add_argument("--stop_loss_pct", type=float, default=0.01, help="Stop loss pct")
     parser.add_argument("--take_profit_pct", type=float, default=0.05, help="Take profit pct")
     parser.add_argument("--lookback_period", type=int, default=1000, help="Lookback period")
-    parser.add_argument("--scale", type=float, default=0.2, help="Scale factor")
+    parser.add_argument('--scale', type=float, default=0.5, help="Scale factor")
     parser.add_argument(
         "--broker",
         type=str,
