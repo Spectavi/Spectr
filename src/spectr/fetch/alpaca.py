@@ -58,14 +58,16 @@ class AlpacaInterface(BrokerInterface):
     #  Returns whether the account has a pending order on the symbol.
     # ------------------------------------------------------------------ #
     def has_pending_order(self, symbol: str) -> bool:
-        """
-        True if there is *any* open order for `symbol` (market or limit).
-        """
+        """True if there is any order for ``symbol`` that is not closed."""
         try:
             tc = self.get_api()
-            req = GetOrdersRequest(status="open", symbols=[symbol.upper()])
-            open_orders = tc.get_orders(req)
-            return len(open_orders) > 0
+            req = GetOrdersRequest(status=QueryOrderStatus.ALL, symbols=[symbol.upper()])
+            orders = tc.get_orders(req)
+            for o in orders:
+                status = getattr(o, "status", "").lower()
+                if status not in {"filled", "canceled", "cancelled", "expired", "rejected"}:
+                    return True
+            return False
         except Exception as exc:
             log.error(f"has_pending_order error: {exc}")
             return False

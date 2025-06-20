@@ -380,6 +380,10 @@ class SpectrApp(App):
                         side = OrderSide.SELL
 
                     if not self.auto_trading_enabled and sig and side:
+                        if BROKER_API.has_pending_order(sym):
+                            log.info(f"Pending order for {sym}; ignoring signal")
+                            self.signal_detected.remove(signal)
+                            continue
                         self.signal_detected.remove(signal)
                         if self.screen_stack and not isinstance(self.screen_stack[-1], OrderDialog):
                             self.open_order_dialog(side=side, pos_pct=100.0, symbol=sym, reason=reason)
