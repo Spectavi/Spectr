@@ -3,6 +3,6 @@
 .env
 debug.log
 signal_log.csv
-CustomStrategy.py
+src/spectr/strategies/spectavi_strategy.py
 .idea
 .cache
