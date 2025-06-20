@@ -16,3 +16,5 @@ pytz
 fastparquet
 textual-web
 openai
+soundfile
+sounddevice

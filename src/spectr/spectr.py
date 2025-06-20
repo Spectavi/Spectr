@@ -40,7 +40,7 @@ from views.ticker_input_dialog import TickerInputDialog
 from views.top_overlay import TopOverlay
 from views.trades_screen import TradesScreen
 from views.strategy_screen import StrategyScreen
-from .agent import VoiceAgent
+from agent import VoiceAgent
 
 
 
