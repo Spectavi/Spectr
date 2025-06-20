@@ -281,12 +281,16 @@ class AlpacaInterface(BrokerInterface):
         log.debug(f"Attempting to submit {type.name}...")
         try:
             tc = self.get_api()
+            tif = TimeInForce.GTC
+            if quantity is not None and not float(quantity).is_integer():
+                tif = TimeInForce.DAY
+
             if type == OrderType.MARKET:
                 order_req = MarketOrderRequest(
                     symbol=symbol.upper(),
                     qty=quantity,
                     side=side.name.lower(),
-                    time_in_force=TimeInForce.GTC,
+                    time_in_force=tif,
                 )
                 price_used = market_price
             else:
@@ -294,7 +298,7 @@ class AlpacaInterface(BrokerInterface):
                     symbol=symbol.upper(),
                     qty=quantity,
                     side=side.name.lower(),
-                    time_in_force=TimeInForce.GTC,
+                    time_in_force=tif,
                     limit_price=limit_price,
                 )
                 price_used = limit_price
