@@ -1,7 +1,7 @@
 import os
 import tempfile
 
-import openai
+from openai import OpenAI
 import pygame
 import sounddevice as sd
 import soundfile as sf
@@ -11,7 +11,8 @@ class VoiceAgent:
     """Simple wrapper around OpenAI's voice features."""
 
     def __init__(self, chat_model: str = "gpt-3.5-turbo", tts_model: str = "tts-1", voice: str = "nova") -> None:
-        openai.api_key = os.getenv("OPENAI_API_KEY")
+        """Initialize the voice agent and OpenAI client."""
+        self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         self.chat_model = chat_model
         self.tts_model = tts_model
         self.voice = voice
@@ -19,7 +20,7 @@ class VoiceAgent:
 
     def say(self, text: str) -> None:
         """Speak *text* using OpenAI text-to-speech."""
-        response = openai.audio.speech.create(
+        response = self.client.audio.speech.create(
             model=self.tts_model,
             voice=self.voice,
             input=text,
@@ -39,8 +40,12 @@ class VoiceAgent:
             sf.write(f.name, rec, sample_rate)
             wav_path = f.name
         with open(wav_path, "rb") as audio_file:
-            user_text = openai.Audio.transcribe("whisper-1", audio_file)["text"]
-        completion = openai.chat.completions.create(
+            transcription = self.client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file,
+            )
+            user_text = transcription.text
+        completion = self.client.chat.completions.create(
             model=self.chat_model,
             messages=[{"role": "user", "content": user_text}],
         )
