@@ -1,10 +1,13 @@
 import os
 import tempfile
+import json
 
 from openai import OpenAI
 import pygame
 import sounddevice as sd
 import soundfile as sf
+
+from .news import get_latest_news
 
 
 class VoiceAgent:
@@ -45,11 +48,55 @@ class VoiceAgent:
                 file=audio_file,
             )
             user_text = transcription.text
+
+        messages = [{"role": "user", "content": user_text}]
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_latest_news",
+                    "description": "Fetch the most recent news article for a stock symbol",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "symbol": {"type": "string", "description": "Stock ticker"}
+                        },
+                        "required": ["symbol"],
+                    },
+                },
+            }
+        ]
+
         completion = self.client.chat.completions.create(
             model=self.chat_model,
-            messages=[{"role": "user", "content": user_text}],
+            messages=messages,
+            tools=tools,
         )
-        reply = completion.choices[0].message.content
+
+        message = completion.choices[0].message
+        if message.tool_calls:
+            for call in message.tool_calls:
+                if call.function.name == "get_latest_news":
+                    args = json.loads(call.function.arguments)
+                    result = get_latest_news(**args)
+                    messages.append({
+                        "role": "assistant",
+                        "content": None,
+                        "tool_call_id": call.id,
+                    })
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": call.id,
+                        "content": result,
+                    })
+            completion = self.client.chat.completions.create(
+                model=self.chat_model,
+                messages=messages,
+            )
+            reply = completion.choices[0].message.content
+        else:
+            reply = message.content
+
         self.say(reply)
         return reply
 
