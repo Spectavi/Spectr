@@ -372,6 +372,12 @@ class SpectrApp(App):
                             self.open_order_dialog(side=side, pos_pct=100.0, symbol=sym, reason=reason)
                         continue
                     else:
+                        # Skip auto-ordering if there's already an open order
+                        if BROKER_API.has_pending_order(sym):
+                            log.info(f"Pending order for {sym}; ignoring signal")
+                            self.signal_detected.remove(signal)
+                            continue
+
                         msg = f"ORDER SUBMITTED! {msg}"
                         if not self.args.real_trades:
                             msg = f"PAPER {msg}"
