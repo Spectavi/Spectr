@@ -31,7 +31,11 @@ class StrategyScreen(Screen):
             "Reason",
             "Strategy",
         )
-        for sig in sorted(self.signals, key=lambda r: r.get("time") or datetime.min):
+        for sig in sorted(
+            self.signals,
+            key=lambda r: r.get("time") or datetime.min,
+            reverse=True,
+        ):
             dt_raw = sig.get("time")
             dt = dt_raw.strftime("%Y-%m-%d %H:%M") if dt_raw else ""
             price = sig.get("price")
