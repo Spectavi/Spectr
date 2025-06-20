@@ -41,7 +41,7 @@ from views.top_overlay import TopOverlay
 from views.trades_screen import TradesScreen
 from views.strategy_screen import StrategyScreen
 from agent import VoiceAgent
-from custom_scanner import CustomScanner
+from scanners import load_scanner, list_scanners
 
 
 
@@ -211,8 +211,15 @@ class SpectrApp(App):
 
         self.voice_agent = VoiceAgent()
 
-        # Background scanner for finding potential symbols
-        self.scanner = CustomScanner(DATA_API, self.exit_event)
+        # Available background scanners
+        self.available_scanners = list_scanners()
+        default_scanner = "CustomScanner"
+        if default_scanner in self.available_scanners:
+            self.scanner_name = default_scanner
+        else:
+            self.scanner_name = next(iter(self.available_scanners))
+        self.scanner_class = load_scanner(self.scanner_name)
+        self.scanner = self.scanner_class(DATA_API, self.exit_event)
 
         # Track latest quotes and equity curve
         self._latest_quotes: dict[str, float] = {}
@@ -694,6 +701,9 @@ class SpectrApp(App):
                 scanner_results_cb=lambda: self.scanner_results,
                 gainers_results=self.top_gainers,
                 gainers_results_cb=lambda: self.top_gainers,
+                scanner_names=list(self.available_scanners.keys()),
+                current_scanner=self.scanner_name,
+                set_scanner_cb=self.set_scanner,
             )
         )
 
@@ -901,6 +911,20 @@ class SpectrApp(App):
             return
         self.strategy_name = name
         self.strategy_class = load_strategy(name)
+
+    def set_scanner(self, name: str) -> None:
+        """Change the active scanner implementation."""
+        if name not in self.available_scanners:
+            log.error(f"Unknown scanner: {name}")
+            return
+        self.scanner_name = name
+        self.scanner_class = load_scanner(name)
+        # stop old worker if running
+        if self._scanner_worker:
+            self._scanner_worker.cancel()
+            self._scanner_worker = None
+        self.scanner = self.scanner_class(DATA_API, self.exit_event)
+        self._scanner_worker = self.run_worker(self.scanner.scanner_loop, thread=False)
 
     # ---------- Back-test workflow ----------
 
