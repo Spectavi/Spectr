@@ -40,6 +40,8 @@ BYOS - Bring Your Own Strategy. You must implement your own trading strategy in 
 - 📈 Real-time data API support (FMP)
 - 👁️ Broker API support (Alpaca, Robinhood (currently broken))
 - 🔁 Backtest mode with visual result playback with `b`.
+- 🎤 Experimental voice agent that can answer questions and fetch the latest
+  news for a stock symbol.
 
 ---
 
