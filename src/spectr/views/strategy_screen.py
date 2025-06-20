@@ -23,7 +23,14 @@ class StrategyScreen(Screen):
 
     def compose(self):
         table = DataTable(zebra_stripes=True)
-        table.add_columns("Date/Time", "Symbol", "Side", "Price", "Reason")
+        table.add_columns(
+            "Date/Time",
+            "Symbol",
+            "Side",
+            "Price",
+            "Reason",
+            "Strategy",
+        )
         for sig in sorted(self.signals, key=lambda r: r.get("time") or datetime.min):
             dt_raw = sig.get("time")
             dt = dt_raw.strftime("%Y-%m-%d %H:%M") if dt_raw else ""
@@ -34,6 +41,7 @@ class StrategyScreen(Screen):
                 sig.get("side", "").upper(),
                 f"{price:.2f}" if price is not None else "",
                 sig.get("reason", ""),
+                sig.get("strategy", ""),
             )
 
         select = Select(

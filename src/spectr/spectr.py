@@ -287,6 +287,7 @@ class SpectrApp(App):
                 "side": signal,
                 "price": curr_price,
                 "reason": reason,
+                "strategy": self.strategy_name,
             },
         )
         if signal:
