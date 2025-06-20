@@ -739,7 +739,18 @@ class SpectrApp(App):
     def action_ask_agent(self) -> None:
         if self._is_splash_active():
             return
-        self.run_worker(self.voice_agent.listen_and_answer, thread=True)
+        self.run_worker(self._ask_agent, thread=True)
+
+    def _ask_agent(self) -> None:
+        """Run the voice assistant and display errors in the overlay."""
+        try:
+            self.voice_agent.listen_and_answer()
+        except Exception as exc:
+            log.error("Voice agent error: %s", traceback.format_exc())
+            self.call_from_thread(
+                self.query_one("#overlay-text", TopOverlay).flash_message,
+                f"Voice error: {exc}",
+            )
 
 
 
