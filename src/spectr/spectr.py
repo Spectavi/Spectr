@@ -40,6 +40,7 @@ from views.ticker_input_dialog import TickerInputDialog
 from views.top_overlay import TopOverlay
 from views.trades_screen import TradesScreen
 from views.strategy_screen import StrategyScreen
+from .agent import VoiceAgent
 
 
 
@@ -127,6 +128,7 @@ class SpectrApp(App):
         ("tab", "toggle_trades", "Trades Table"),
         ("p", "toggle_portfolio", "Portfolio"),
         ("s", "toggle_strategy_signals", "Strategy Signals"),
+        ("v", "ask_agent", "Voice Assistant"),
     ]
 
     ticker_symbols = reactive([])
@@ -206,6 +208,8 @@ class SpectrApp(App):
 
         self.trade_amount = 0.0
 
+        self.voice_agent = VoiceAgent()
+
         self.scanner_results: list[dict] = cache.load_scanner_cache()
         self.top_gainers: list[dict] = cache.load_gainers_cache()
 
@@ -268,9 +272,12 @@ class SpectrApp(App):
                 "reason": reason,
             },
         )
+        if signal:
+            self.voice_agent.say(f"{signal.capitalize()} signal for {symbol}")
 
     def on_mount(self):
         self.push_screen(SplashScreen(id="splash"), wait_for_dismiss=False)
+        self.voice_agent.say("Welcome to Spectr")
         self.refresh()
         # Set symbols and active symbol
         self.ticker_symbols = self.args.symbols
@@ -798,6 +805,11 @@ class SpectrApp(App):
                     self.set_strategy,
                 )
             )
+    def action_ask_agent(self) -> None:
+        if self._is_splash_active():
+            return
+        self.run_worker(self.voice_agent.listen_and_answer, thread=True)
+
 
 
     # ------------ Order Dialog Submit Logic -------------
