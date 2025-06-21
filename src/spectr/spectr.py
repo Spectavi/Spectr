@@ -921,7 +921,11 @@ class SpectrApp(App):
                     "If we remove it from the watchlist we could miss a sell signal."
                 )
                 self.voice_agent.say(msg)
-                self.query_one("#overlay-text", TopOverlay).flash_message(msg, duration=6.0)
+                self.query_one("#overlay-text", TopOverlay).flash_message(
+                    f"Failed to remove {sym}, has open position!",
+                    duration=6.0,
+                    style="bold red",
+                )
                 return self.ticker_symbols
 
             index = self.ticker_symbols.index(sym)
@@ -934,7 +938,9 @@ class SpectrApp(App):
             if self.ticker_symbols:
                 self.update_view(self.ticker_symbols[self.active_symbol_index])
             self.query_one("#overlay-text", TopOverlay).flash_message(
-                f"Removed {sym}", duration=5.0, style="bold yellow"
+                f"Removed {sym} from watchlist.",
+                duration=5.0,
+                style="bold yellow",
             )
         return self.ticker_symbols
 
