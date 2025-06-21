@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from tzlocal import get_localzone
 
 from .data_interface import DataInterface
+from spectr.exceptions import DataApiRateLimitError
 
 load_dotenv()
 FMP_API_KEY = os.getenv("FMP_API_KEY")
@@ -20,10 +21,16 @@ class FMPInterface(DataInterface):
         if not FMP_API_KEY:
             raise ValueError("FMP_API_KEY not found in environment")
 
+    def _check_rate_limit(self, resp: requests.Response) -> None:
+        """Raise DataApiRateLimitError if the response status is 429."""
+        if resp.status_code == 429:
+            raise DataApiRateLimitError("FMP API rate limit exceeded")
+
     def fetch_chart_data(self, symbol: str, from_date: str, to_date: str, interval: str = "1min") -> pd.DataFrame:
         # Fetch intraday data
         url = f"https://financialmodelingprep.com/api/v3/historical-chart/{interval}/{symbol}?from_date={from_date}&to_date={to_date}&extended=true&timeseries=390&apikey={FMP_API_KEY}"
         resp = requests.get(url)
+        self._check_rate_limit(resp)
         data = resp.json()
 
         if not isinstance(data, list) or not data:
@@ -54,6 +61,7 @@ class FMPInterface(DataInterface):
             url = f"https://financialmodelingprep.com/api/v3/quote/{symbol}?apikey={FMP_API_KEY}"
         try:
             response = requests.get(url)
+            self._check_rate_limit(response)
             response.raise_for_status()
             data = response.json()
             if not data or not isinstance(data, list):
@@ -71,6 +79,7 @@ class FMPInterface(DataInterface):
         # Fetch intraday data (limited history on free tier)
         url = f"https://financialmodelingprep.com/api/v3/historical-chart/{interval}/{symbol}?from={from_date}&to={to_date}&apikey={FMP_API_KEY}"
         resp = requests.get(url)
+        self._check_rate_limit(resp)
         data = resp.json()
 
         if not isinstance(data, list) or not data:
@@ -100,7 +109,9 @@ class FMPInterface(DataInterface):
         """
         url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={FMP_API_KEY}"
         try:
-            data = requests.get(url, timeout=10).json()
+            resp = requests.get(url, timeout=10)
+            self._check_rate_limit(resp)
+            data = resp.json()
             log.debug(f"Fetched {len(data)} gainers.")
             # sort numerically just in case
             data = sorted(data, key=lambda d: float(d["changesPercentage"]), reverse=True)
@@ -123,7 +134,9 @@ class FMPInterface(DataInterface):
         )
 
         try:
-            news = requests.get(url, timeout=10).json()
+            resp = requests.get(url, timeout=10)
+            self._check_rate_limit(resp)
+            news = resp.json()
             log.debug(f"Fetched {len(news)} news articles for {symbol} since {since}")
             if len(news) > 0:
                 return True
@@ -139,7 +152,9 @@ class FMPInterface(DataInterface):
         """Fetch profile information such as share float."""
         url = f"https://financialmodelingprep.com/api/v3/profile/{symbol}?apikey={FMP_API_KEY}"
         try:
-            data = requests.get(url, timeout=10).json()
+            resp = requests.get(url, timeout=10)
+            self._check_rate_limit(resp)
+            data = resp.json()
             log.debug(f"Fetched {len(data)} profiles for {symbol}")
             if isinstance(data, list) and data:
                 return data[0]
