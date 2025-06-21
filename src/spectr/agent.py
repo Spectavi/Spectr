@@ -133,7 +133,7 @@ class VoiceAgent:
                         "type": "function",
                         "function": {
                             "name": "get_quote",
-                            "description": "Fetch the latest quote for a symbol",
+                            "description": "Return only the latest price for a symbol",
                             "parameters": {
                                 "type": "object",
                                 "properties": {
@@ -357,7 +357,10 @@ class VoiceAgent:
                         self._serialize(self.data_api.fetch_company_profile(symbol))
                     ),
                     "get_quote": lambda symbol: json.dumps(
-                        self._serialize(self.data_api.fetch_quote(symbol))
+                        (lambda q: q.get("price")
+                        or q.get("last_trade_price")
+                        or q.get("lastTradePrice")
+                        or q.get("close"))(self.data_api.fetch_quote(symbol))
                     ),
                     "get_bid_ask": lambda symbol: json.dumps(
                         {
