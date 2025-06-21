@@ -3,7 +3,7 @@ import asyncio
 import contextlib
 import logging
 import os
-
+import math
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 
 import queue
@@ -203,12 +203,14 @@ class SpectrApp(App):
         self.signal_detected = []
         self.strategy_signals: list[dict] = cache.load_strategy_cache()
         self.available_strategies = list_strategies()
-        default_name = "CustomStrategy"
+        saved_strategy = cache.load_selected_strategy()
+        default_name = saved_strategy or "CustomStrategy"
         if default_name in self.available_strategies:
             self.strategy_name = default_name
         else:
             self.strategy_name = next(iter(self.available_strategies))
         self.strategy_class = load_strategy(self.strategy_name)
+        cache.save_selected_strategy(self.strategy_name)
         self._shutting_down = False
 
         self.trade_amount = 0.0
@@ -217,12 +219,14 @@ class SpectrApp(App):
 
         # Available background scanners
         self.available_scanners = list_scanners()
-        default_scanner = "CustomScanner"
+        saved_scanner = cache.load_selected_scanner()
+        default_scanner = saved_scanner or "CustomScanner"
         if default_scanner in self.available_scanners:
             self.scanner_name = default_scanner
         else:
             self.scanner_name = next(iter(self.available_scanners))
         self.scanner_class = load_scanner(self.scanner_name)
+        cache.save_selected_scanner(self.scanner_name)
         self.scanner = self.scanner_class(DATA_API, self.exit_event)
 
         # Track latest quotes and equity curve
@@ -631,6 +635,9 @@ class SpectrApp(App):
                         or quote.get("askPrice")
                         or quote.get("price")
                 )
+                # Nudge limit sells slightly below the bid to improve fill odds
+                if limit_price:
+                    limit_price *= 1.003
             else:
                 limit_price = (
                         quote.get("bid")
@@ -638,6 +645,9 @@ class SpectrApp(App):
                         or quote.get("bidPrice")
                         or quote.get("price")
                 )
+                # Nudge limit sells slightly below the bid to improve fill odds
+                if limit_price:
+                    limit_price *= 0.997
         log.debug(f"Order details for {symbol}: type={order_type}, limit_price={limit_price}")
         return order_type, limit_price
 
@@ -668,8 +678,41 @@ class SpectrApp(App):
             )
             play_sound(BUY_SOUND_PATH if side == OrderSide.BUY else SELL_SOUND_PATH)
         except Exception as e:
-            log.error(f"Failed to submit order for {symbol}: {traceback.format_exc()}")
-            self.voice_agent.say(text=f"Failed to submit order for {symbol}: {e}")
+            err_msg = str(e).lower()
+            retried = False
+            if (
+                    side == OrderSide.BUY
+                    and not float(qty).is_integer()
+                    and "fraction" in err_msg
+            ):
+                fallback_qty = math.floor(qty)
+                total = fallback_qty * price
+                if fallback_qty > 0 and 0 < total <= self.trade_amount:
+                    log.warning(
+                        f"{symbol} not fractionable, retrying with qty={fallback_qty}"
+                    )
+                    try:
+                        BROKER_API.submit_order(
+                            symbol=symbol,
+                            side=side,
+                            type=order_type,
+                            quantity=fallback_qty,
+                            limit_price=limit_price,
+                            market_price=price,
+                            real_trades=self.auto_trading_enabled,
+                        )
+                        play_sound(
+                            BUY_SOUND_PATH if side == OrderSide.BUY else SELL_SOUND_PATH
+                        )
+                        retried = True
+                    except Exception as exc2:
+                        e = exc2
+            if not retried:
+                log.error(
+                    f"Failed to submit order for {symbol}: {traceback.format_exc()}"
+                )
+                self.voice_agent.say(text=f"Failed to submit order for {symbol}: {e}")
+                raise
 
     def open_order_dialog(self, side: OrderSide, pos_pct: float, symbol: str, reason: str | None = None):
         if self._is_splash_active():
@@ -918,6 +961,7 @@ class SpectrApp(App):
             return
         self.strategy_name = name
         self.strategy_class = load_strategy(name)
+        cache.save_selected_strategy(name)
 
     def set_scanner(self, name: str) -> None:
         """Change the active scanner implementation."""
@@ -926,6 +970,7 @@ class SpectrApp(App):
             return
         self.scanner_name = name
         self.scanner_class = load_scanner(name)
+        cache.save_selected_scanner(name)
         # stop old worker if running
         if self._scanner_worker:
             self._scanner_worker.cancel()

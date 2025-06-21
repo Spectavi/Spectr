@@ -14,6 +14,7 @@ from alpaca.trading import (
 from dotenv import load_dotenv
 
 from .broker_interface import BrokerInterface, OrderType
+from utils import is_crypto_symbol
 
 # Loading from .env file, you need to create one and define both ALPACA_API_KEY and ALPACA_SECRET_KEY
 load_dotenv()
@@ -273,7 +274,7 @@ class AlpacaInterface(BrokerInterface):
         symbol: str,
         side: OrderSide,
         type: OrderType,
-        quantity: int | None = None,
+        quantity: float | None = None,
         limit_price: float | None = None,
         market_price: float | None = None,
         real_trades: bool = False,
@@ -282,7 +283,7 @@ class AlpacaInterface(BrokerInterface):
         try:
             tc = self.get_api()
             tif = TimeInForce.GTC
-            if quantity is not None and not float(quantity).is_integer():
+            if quantity is not None and not float(quantity).is_integer() and not is_crypto_symbol(symbol):
                 tif = TimeInForce.DAY
 
             if type == OrderType.MARKET:

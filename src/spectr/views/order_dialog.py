@@ -93,6 +93,10 @@ class OrderDialog(ModalScreen):
         self.pos_qty   = None
         self.pos_value = None
 
+        # Tracks if the user has manually changed the qty so we don't
+        # overwrite their choice on subsequent refreshes.
+        self._qty_modified = False
+
     # ------------------------------------------------------------------
     def compose(self):
         components = [
@@ -221,7 +225,12 @@ class OrderDialog(ModalScreen):
             new_price = new_price.get("price", 0)
             self.price = new_price
             self.query_one("#dlg_price", Static).update(self._price_fmt())
-            if self.side == OrderSide.BUY and self.trade_amount > 0 and self.price > 0:
+            if (
+                    self.side == OrderSide.BUY
+                    and self.trade_amount > 0
+                    and self.price > 0
+                    and not self._qty_modified
+            ):
                 self.qty = self.trade_amount / self.price
                 self.query_one("#dlg_qty_in", Input).value = str(self.qty)
             self._update_total()
@@ -239,6 +248,8 @@ class OrderDialog(ModalScreen):
                 self.qty = float(event.value)
             except ValueError:
                 self.qty = 0
+            else:
+                self._qty_modified = True
         elif event.input.id == "dlg_lim_in":
             try:
                 self.limit_price = float(event.value)

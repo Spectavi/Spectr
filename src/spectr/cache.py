@@ -16,6 +16,8 @@ SYMBOLS_CACHE_PATH = pathlib.Path.home() / ".spectr_symbols_cache.json"
 SCANNER_CACHE_FILE = pathlib.Path.home() / ".spectr_scanner_cache.json"
 GAINERS_CACHE_FILE = pathlib.Path.home() / ".spectr_gainers_cache.json"
 STRATEGY_CACHE_FILE = pathlib.Path.home() / ".spectr_strategy_cache.json"
+STRATEGY_NAME_FILE = pathlib.Path.home() / ".spectr_selected_strategy.json"
+SCANNER_NAME_FILE = pathlib.Path.home() / ".spectr_selected_scanner.json"
 
 
 def save_cache(symbol: str, df: pd.DataFrame) -> None:
@@ -124,3 +126,34 @@ def load_symbols_cache(path: pathlib.Path = SYMBOLS_CACHE_PATH) -> list[str]:
         return json.loads(path.read_text())
     except Exception:
         return []
+
+def save_selected_strategy(name: str, path: pathlib.Path = STRATEGY_NAME_FILE) -> None:
+    """Persist the currently selected strategy name."""
+    try:
+        path.write_text(json.dumps(name))
+    except Exception as exc:
+        log.error(f"strategy name cache write failed: {exc}")
+
+
+def load_selected_strategy(path: pathlib.Path = STRATEGY_NAME_FILE) -> str | None:
+    """Load the last selected strategy name from cache."""
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return None
+
+
+def save_selected_scanner(name: str, path: pathlib.Path = SCANNER_NAME_FILE) -> None:
+    """Persist the currently selected scanner name."""
+    try:
+        path.write_text(json.dumps(name))
+    except Exception as exc:
+        log.error(f"scanner name cache write failed: {exc}")
+
+
+def load_selected_scanner(path: pathlib.Path = SCANNER_NAME_FILE) -> str | None:
+    """Load the last selected scanner name from cache."""
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return None

@@ -1,6 +1,9 @@
 import os
 import tempfile
 import json
+import threading
+import queue
+import time
 
 from openai import OpenAI
 import pygame
@@ -13,26 +16,49 @@ from news import get_latest_news
 class VoiceAgent:
     """Simple wrapper around OpenAI's voice features."""
 
-    def __init__(self, chat_model: str = "gpt-3.5-turbo", tts_model: str = "tts-1", voice: str = "fable") -> None:
+    def __init__(self, chat_model: str = "gpt-3.5-turbo", tts_model: str = "tts-1-hd", voice: str = "sage") -> None:
         """Initialize the voice agent and OpenAI client."""
         self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         self.chat_model = chat_model
         self.tts_model = tts_model
         self.voice = voice
         pygame.mixer.init()
+        self._queue: queue.Queue[str] = queue.Queue()
+        self._worker = threading.Thread(target=self._speech_worker, daemon=True)
+        self._worker.start()
 
     def say(self, text: str) -> None:
+        """Queue *text* to be spoken using OpenAI text-to-speech."""
+        self._queue.put(text)
+
+    def _speech_worker(self) -> None:
+        while True:
+            text = self._queue.get()
+            self._speak(text)
+            self._queue.task_done()
+
+    def _speak(self, text: str) -> None:
         """Speak *text* using OpenAI text-to-speech."""
         response = self.client.audio.speech.create(
             model=self.tts_model,
             voice=self.voice,
             input=text,
             speed=0.85,
+            instructions="""
+            Tone: Exciting, high-energy, and persuasive, creating urgency and anticipation.
+
+            Delivery: Rapid-fire yet clear, with dynamic inflections to keep engagement high and momentum strong.
+
+            Pronunciation: Crisp and precise, with emphasis on key action words like bid, buy, checkout, and sold to drive urgency.
+            """
         )
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
             f.write(response.content)
             fname = f.name
-        pygame.mixer.Sound(fname).play()
+        sound = pygame.mixer.Sound(fname)
+        channel = sound.play()
+        while channel.get_busy():
+            time.sleep(0.5)
 
     def listen_and_answer(self) -> str:
         """Record a short audio question and reply with a spoken answer."""
@@ -82,7 +108,7 @@ class VoiceAgent:
                     result = get_latest_news(**args)
                     messages.append({
                         "role": "assistant",
-                        "content": None,
+                        "content": "Here is the latest news article for your query.",
                         "tool_call_id": call.id,
                     })
                     messages.append({
