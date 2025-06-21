@@ -18,6 +18,7 @@ dependencies = [
   "textual>=0.59",
   "pandas>=2.2",
   "requests>=2.32",
+  "tzlocal>=5.0",
   # add anything else used: numpy, plotext, etc.
 ]
 
