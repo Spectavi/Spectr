@@ -102,15 +102,11 @@ class VoiceAgent:
 
         message = completion.choices[0].message
         if message.tool_calls:
+            messages.append(message.model_dump())
             for call in message.tool_calls:
                 if call.function.name == "get_latest_news":
                     args = json.loads(call.function.arguments)
                     result = get_latest_news(**args)
-                    messages.append({
-                        "role": "assistant",
-                        "content": "Here is the latest news article for your query.",
-                        "tool_call_id": call.id,
-                    })
                     messages.append({
                         "role": "tool",
                         "tool_call_id": call.id,
