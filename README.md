@@ -89,7 +89,13 @@ pip install -r requirements.txt
 ```
 # Usage
 ```bash
-python -m spectr --broker alpaca --data_api fmp --scale 0.5 --symbols NVDA,TSLA,BTCUSD --candles
+pip install -e .
+
+# After installation you can launch the UI with the `spectr` command
+spectr --broker alpaca --data_api fmp --scale 0.5 --symbols NVDA,TSLA,BTCUSD --candles
+
+# Alternatively without installing you can run
+PYTHONPATH=src python -m spectr.spectr --broker alpaca --data_api fmp --scale 0.5 --symbols NVDA,TSLA,BTCUSD --candles
 ```
 
 
