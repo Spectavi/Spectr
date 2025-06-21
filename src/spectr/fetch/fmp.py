@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from tzlocal import get_localzone
 
 from .data_interface import DataInterface
-from spectr.exceptions import DataApiRateLimitError
+from exceptions import DataApiRateLimitError
 
 load_dotenv()
 FMP_API_KEY = os.getenv("FMP_API_KEY")

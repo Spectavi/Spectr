@@ -43,7 +43,7 @@ BYOS - Bring Your Own Strategy. You must implement your own trading strategy in 
 - 🎤 Experimental voice agent that can answer questions and fetch recent news
   articles for a stock symbol.
 - 🎤 Optional real-time mode listens for the wake word "spectr". Enable with
-  `--voice_agent_listen`.
+  `--listen`.
 
 ---
 

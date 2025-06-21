@@ -158,7 +158,7 @@ class AlpacaInterface(BrokerInterface):
     # ------------------------------------------------------------------ #
     #  EVERY order on the account (open + closed + canceled …)
     # ------------------------------------------------------------------ #
-    def get_all_orders(self, real_trades: bool = False) -> list:
+    def get_all_orders(self, real_trades: bool = False) -> pd.DataFrame:
         """
         Fetch *all* orders for the account, across every symbol and status.
 
@@ -177,11 +177,11 @@ class AlpacaInterface(BrokerInterface):
             (Empty DataFrame on error or if no orders exist.)
         """
         try:
-            log.debug("get_all_orders called...")
             api = self.get_api()
-
             # Empty request object => no filters → returns every order
-            return  api.get_orders(GetOrdersRequest(status=QueryOrderStatus.ALL))
+            orders = api.get_orders(GetOrdersRequest(status=QueryOrderStatus.ALL))
+            log.debug(f"get_all_orders returned {len(orders)} orders")
+            return orders
         except Exception as exc:
             log.error(f"get_all_orders error: {exc}")
             return pd.DataFrame()
@@ -248,7 +248,7 @@ class AlpacaInterface(BrokerInterface):
     def get_positions(self):
         try:
             pos = self.get_api().get_all_positions()
-            log.debug(f"Fetched {len(pos)} positions")
+            log.debug(f"get_positions: {len(pos)}")
             return pos
         except Exception as exc:
             log.debug(f"Failed to fetch positions: {exc}")
@@ -260,7 +260,7 @@ class AlpacaInterface(BrokerInterface):
     def get_position(self, symbol: str):
         try:
             pos = self.get_api().get_open_position(symbol.upper())
-            log.debug(f"Fetched {symbol} position")
+            log.debug(f"get_position for {symbol}: {len(pos)}")
             return pos
         except Exception:
             log.debug("No position")
@@ -277,7 +277,6 @@ class AlpacaInterface(BrokerInterface):
         quantity: float | None = None,
         limit_price: float | None = None,
         market_price: float | None = None,
-        real_trades: bool = False,
     ):
         log.debug(f"Attempting to submit {type.name}...")
         try:
@@ -306,7 +305,7 @@ class AlpacaInterface(BrokerInterface):
 
             tc.submit_order(order_req)
             price_disp = price_used if price_used is not None else "MKT"
-            log.debug(
+            log.info(
                 f"ORDER PLACED: {side.name.upper()} {quantity or 1} shares of {symbol.upper()} @ {price_disp}"
             )
         except Exception as exc:
@@ -320,7 +319,7 @@ class AlpacaInterface(BrokerInterface):
         try:
             api = self.get_api()
             api.cancel_order_by_id(order_id)
-            log.debug(f"Order cancelled: {order_id}")
+            log.info(f"Order cancelled: {order_id}")
             return True
         except Exception as exc:
             log.error(f"Failed to cancel order {order_id}: {exc}")

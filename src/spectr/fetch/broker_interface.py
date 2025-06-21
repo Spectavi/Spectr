@@ -47,7 +47,7 @@ class BrokerInterface(ABC):
         pass
 
     @abstractmethod
-    def get_all_orders(self) -> list:
+    def get_all_orders(self) -> pd.DataFrame:
         """Gets all orders on an account."""
         pass
 
@@ -80,7 +80,6 @@ class BrokerInterface(ABC):
         quantity: float | None = None,
         limit_price: float | None = None,
         market_price: float | None = None,
-        real_trades: bool = False,
     ):
         """Submit a buy/sell order."""
         pass

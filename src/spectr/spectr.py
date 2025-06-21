@@ -33,7 +33,7 @@ from utils import (
     get_live_data,
 )
 import broker_tools
-from .backtest import run_backtest
+from backtest import run_backtest
 from views.backtest_input_dialog import BacktestInputDialog
 from views.backtest_result_screen import BacktestResultScreen
 from views.order_dialog import OrderDialog
@@ -211,9 +211,9 @@ class SpectrApp(App):
             data_api=DATA_API,
             get_cached_orders=lambda: self._portfolio_orders_cache,
         )
-        if getattr(args, "voice_agent_listen", False):
+        if getattr(args, "listen", False):
             self.voice_agent.start_wake_word_listener(
-                getattr(args, "voice_agent_wake_word", "spectr")
+                getattr(args, "wake_word", "spectr")
             )
 
         # Available background scanners
@@ -299,10 +299,10 @@ class SpectrApp(App):
         if signal:
             self.voice_agent.say(f"{signal.capitalize()} signal for {symbol}")
 
-    def on_mount(self):
-        self.push_screen(SplashScreen(id="splash"), wait_for_dismiss=False)
-        self.voice_agent.say("Welcome to Spectr", wait=True)
+    async def on_mount(self, event: events.Mount) -> None:
+        await self.push_screen(SplashScreen(id="splash"), wait_for_dismiss=False)
         self.refresh()
+
         # Set symbols and active symbol
         self.ticker_symbols = self.args.symbols
         # Ensure any open positions are at the start of the watchlist.
@@ -328,7 +328,6 @@ class SpectrApp(App):
 
     def _poll_one_symbol(self, symbol: str):
         try:
-            log.debug(f"Fetching live data for {symbol}...")
             df, quote = self._fetch_data(symbol)
             if df.empty or quote is None:
                 return
@@ -340,7 +339,6 @@ class SpectrApp(App):
                 symbol,
                 position=BROKER_API.get_position(symbol),
             )
-            log.debug("Detect signals finished.")
 
             # Check for signal
             if signal_dict and not self._is_splash_active():
@@ -351,6 +349,7 @@ class SpectrApp(App):
             if symbol == self.ticker_symbols[self.active_symbol_index]:
                 if self._is_splash_active():
                     self.call_from_thread(self.pop_screen)
+                    self.voice_agent.say("Welcome to Spectr", wait=True)
                 # refresh the active view from the UI thread
                 self.call_from_thread(self.update_view, self.ticker_symbols[self.active_symbol_index])
 
@@ -363,8 +362,6 @@ class SpectrApp(App):
         if self.is_backtest:
             return
 
-        log.debug("_polling_loop start")
-
         while not self.exit_event.is_set():
             tasks = [asyncio.to_thread(self._poll_one_symbol, sym) for sym in self.ticker_symbols]
             if tasks:
@@ -375,11 +372,9 @@ class SpectrApp(App):
             except asyncio.TimeoutError:
                 pass
 
-        log.debug("_polling_loop exit")
 
     async def _process_updates(self) -> None:
         """Runs in Textual’s event loop; applies any fresh data to the UI."""
-        log.debug("_process_updates start")
         while True:
             symbol: str = await asyncio.to_thread(self._update_queue.get)
             if symbol is None:
@@ -389,7 +384,6 @@ class SpectrApp(App):
             # push it straight into the Graph/MACD views.
             # If a buy signal was triggered, switch to that symbol
             if len(self.signal_detected) > 0:
-                log.debug(f"Signals found, processing...")
                 for signal in list(self.signal_detected):
                     sym, price, sig, reason = signal
                     index = self.ticker_symbols.index(sym)
@@ -407,7 +401,7 @@ class SpectrApp(App):
                     if not self.auto_trading_enabled and sig and side:
                         log.debug(f"Signal detected, opening dialog: {msg}")
                         if BROKER_API.has_pending_order(sym):
-                            log.debug(f"Pending order for {sym}; ignoring signal")
+                            log.warning(f"Pending order for {sym}; ignoring signal!")
                             self.signal_detected.remove(signal)
                             continue
                         self.signal_detected.remove(signal)
@@ -415,10 +409,10 @@ class SpectrApp(App):
                             self.open_order_dialog(side=side, pos_pct=100.0, symbol=sym, reason=reason)
                         continue
                     elif self.auto_trading_enabled and sig and side:
-                        log.debug(f"AUTO-TRADE: Submitting order for {sym} at {price} with side {side}")
+                        log.info(f"AUTO-TRADE: Submitting order for {sym} at {price} with side {side}")
                         # Skip auto-ordering if there's already an open order
                         if BROKER_API.has_pending_order(sym):
-                            log.debug(f"Pending order for {sym}; ignoring signal")
+                            log.warning(f"Pending order for {sym}; ignoring signal!")
                             self.signal_detected.remove(signal)
                             continue
                         self.signal_detected.remove(signal)
@@ -442,7 +436,6 @@ class SpectrApp(App):
 
     async def _equity_loop(self) -> None:
         """Periodically update portfolio equity using cached quotes."""
-        log.debug("_equity_loop start")
         while not self.exit_event.is_set():
             try:
                 self._update_portfolio_equity()
@@ -523,6 +516,8 @@ class SpectrApp(App):
         self.auto_trading_enabled = False
         self._shutting_down = True
 
+        self.voice_agent.stop_wake_word_listener()
+
         if self._scanner_worker:
             log.debug("cancelling scanner worker")
             self._scanner_worker.cancel()
@@ -538,8 +533,6 @@ class SpectrApp(App):
             self._equity_worker.cancel()
             self._equity_worker = None
 
-        self.voice_agent.stop_wake_word_listener()
-
         if self._consumer_task:
             log.debug("cancelling consumer task")
             self._update_queue.put_nowait(None)
@@ -550,7 +543,7 @@ class SpectrApp(App):
         cache.save_symbols_cache(self.ticker_symbols)
 
         log.debug("on_shutdown complete")
-        self.exit()
+        self.exit(return_code=0)
 
     async def action_quit(self):
         """Prompt the user for confirmation before quitting."""
@@ -759,7 +752,6 @@ class SpectrApp(App):
                 quantity=msg.qty,
                 limit_price=msg.limit_price,
                 market_price=msg.price,
-                real_trades=self.auto_trading_enabled,
             )
         except Exception as e:
             log.error(e)
@@ -1056,12 +1048,12 @@ def main() -> None:
         help="Choose which data provider to use (Alpaca, Robinhood, or FMP)",
     )
     parser.add_argument(
-        "--voice_agent_listen",
+        "--listen",
         action="store_true",
         help="Enable real-time voice agent listening for a wake word",
     )
     parser.add_argument(
-        "--voice_agent_wake_word",
+        "--wake_word",
         default="spectr",
         help="Wake word that triggers the voice agent",
     )

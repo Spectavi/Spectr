@@ -6,8 +6,8 @@ import types
 from robin_stocks import robinhood as r
 from dotenv import load_dotenv
 
-from src.spectr.fetch.broker_interface import BrokerInterface, OrderSide
-from src.spectr.fetch.data_interface import DataInterface
+from broker_interface import BrokerInterface, OrderSide, OrderType
+from data_interface import DataInterface
 
 log = logging.getLogger(__name__)
 load_dotenv()
@@ -223,7 +223,6 @@ class RobinhoodInterface(BrokerInterface, DataInterface):
         quantity: float | None = None,
         limit_price: float | None = None,
         market_price: float | None = None,
-        real_trades: bool = False,
     ):
         try:
             if type != OrderType.MARKET:

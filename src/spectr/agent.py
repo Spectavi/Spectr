@@ -18,7 +18,6 @@ import pandas as pd
 from news import get_latest_news, get_recent_news
 import cache
 from fetch.broker_interface import BrokerInterface, OrderSide, OrderType
-from spectr.exceptions import DataApiRateLimitError
 
 
 class VoiceAgent:
@@ -28,8 +27,8 @@ class VoiceAgent:
         self,
         broker_api: BrokerInterface | None = None,
         data_api: object | None = None,
-        chat_model: str = "gpt-3.5-turbo",
-        tts_model: str = "tts-1-hd",
+        chat_model: str = "o3-mini",
+        tts_model: str = "gpt-4o-mini-tts",
         voice: str = "sage",
         get_cached_orders: Optional[Callable[[], list]] | None = None,
     ) -> None:
@@ -46,10 +45,13 @@ class VoiceAgent:
         self._worker = threading.Thread(target=self._speech_worker, daemon=True)
         self._worker.start()
 
-        self.system_prompt = (
-            "You are a helpful trading assistant. "
-            "Use the provided tools to fetch market data such as float, quotes or charts. "
-            "Do not claim you lack real-time data; instead call the tools when needed and respond concisely."
+        self.system_prompt = ("""
+            You are a helpful trading assistant who talks like a British Bloomberg or CNBC Financial News anchor.
+            Use the provided tools to fetch market data such as a symbols float, quotes or chart data.
+            Use that data to answer questions about stocks, ETFs, and other financial instruments.
+            Do NOT ever claim that you lack real-time data if you have a tool that gets you that data; instead call the tools and respond concisely.
+            You should always be friendly and helpful, but also sound like a professional financial news anchor with a British accent like Lara Croft.
+        """
         )
         # Keep track of the full chat history so conversations persist between
         # invocations of ``listen_and_answer``.
@@ -282,7 +284,7 @@ class VoiceAgent:
                     "type": "function",
                     "function": {
                         "name": "get_pending_orders",
-                        "description": "Fetch pending orders for a symbol",
+                        "description": "Fetch pending orders for a specific symbol",
                         "parameters": {
                             "type": "object",
                             "properties": {
@@ -312,7 +314,7 @@ class VoiceAgent:
                     "type": "function",
                     "function": {
                         "name": "get_orders_for_symbol",
-                        "description": "Fetch all orders for a symbol",
+                        "description": "Fetch all orders for a specific symbol",
                         "parameters": {
                             "type": "object",
                             "properties": {
@@ -326,7 +328,7 @@ class VoiceAgent:
                     "type": "function",
                     "function": {
                         "name": "has_position",
-                        "description": "Check if a position exists for a symbol",
+                        "description": "Check if a position exists for a specific symbol",
                         "parameters": {
                             "type": "object",
                             "properties": {
@@ -340,7 +342,7 @@ class VoiceAgent:
                     "type": "function",
                     "function": {
                         "name": "get_position",
-                        "description": "Fetch position details for a symbol",
+                        "description": "Fetch position details for a specific symbol",
                         "parameters": {
                             "type": "object",
                             "properties": {
@@ -479,7 +481,6 @@ class VoiceAgent:
                                 quantity=quantity,
                                 limit_price=limit_price,
                                 market_price=market_price,
-                                real_trades=self.broker.real_trades,
                             )
                         )
                     ),
@@ -516,13 +517,11 @@ class VoiceAgent:
             model=self.tts_model,
             voice=self.voice,
             input=text,
-            speed=0.85,
+            speed=0.95,
             instructions="""
-            Tone: Exciting, high-energy, and persuasive, creating urgency and anticipation.
-
-            Delivery: Rapid-fire yet clear, with dynamic inflections to keep engagement high and momentum strong.
-
-            Pronunciation: Crisp and precise, with emphasis on key action words like bid, buy, checkout, and sold to drive urgency.
+            Accent: Speak with an attractive British accent.
+            Tone: Use a professional, news anchor tone like you would hear on Bloomberg or CNBC. Keep answers very concise and to the point.
+            If you don't know the answer or have access to that data, say so, but don't go on about other ways to find it.
             """
         )
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
@@ -568,11 +567,6 @@ class VoiceAgent:
                     args = json.loads(call.function.arguments)
                     try:
                         result = func(**args)
-                    except DataApiRateLimitError:
-                        self.say(
-                            "The data provider is rate limiting us. Please try again shortly."
-                        )
-                        return ""
                     except requests.HTTPError as exc:
                         if exc.response is not None and exc.response.status_code == 429:
                             self.say(
@@ -639,7 +633,7 @@ class VoiceAgent:
                     )
                 text = transcription.text.lower()
                 if self.wake_word in text:
-                    self.say("Yes?")
+                    #self.say("Yes?")
                     self.listen_and_answer()
             except Exception:
                 pass
