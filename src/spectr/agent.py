@@ -14,6 +14,8 @@ import requests
 
 import pandas as pd
 
+import cache
+
 from news import get_latest_news
 from fetch.broker_interface import BrokerInterface, OrderSide, OrderType
 from spectr.exceptions import DataApiRateLimitError
@@ -113,6 +115,22 @@ class VoiceAgent:
                         },
                         "required": ["symbol"],
                     },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_scanner_cache",
+                    "description": "Return cached scanner results",
+                    "parameters": {"type": "object", "properties": {}, "required": []},
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_gainers_cache",
+                    "description": "Return cached top gainers data",
+                    "parameters": {"type": "object", "properties": {}, "required": []},
                 },
             },
         ]
@@ -365,6 +383,12 @@ class VoiceAgent:
     def _build_tool_funcs(self) -> dict:
         funcs = {
             "get_latest_news": get_latest_news,
+            "get_scanner_cache": lambda: json.dumps(
+                self._serialize(cache.load_scanner_cache())
+            ),
+            "get_gainers_cache": lambda: json.dumps(
+                self._serialize(cache.load_gainers_cache())
+            ),
         }
 
         if self.data_api:
