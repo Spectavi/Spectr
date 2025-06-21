@@ -216,6 +216,10 @@ class SpectrApp(App):
         self.trade_amount = 0.0
 
         self.voice_agent = VoiceAgent(broker_api=BROKER_API)
+        if getattr(args, "voice_agent_listen", False):
+            self.voice_agent.start_wake_word_listener(
+                getattr(args, "voice_agent_wake_word", "spectr")
+            )
 
         # Available background scanners
         self.available_scanners = list_scanners()
@@ -527,6 +531,8 @@ class SpectrApp(App):
             log.debug("cancelling equity worker")
             self._equity_worker.cancel()
             self._equity_worker = None
+
+        self.voice_agent.stop_wake_word_listener()
 
         if self._consumer_task:
             log.debug("cancelling consumer task")
@@ -1163,6 +1169,16 @@ def main() -> None:
         choices=["alpaca", "robinhood", "fmp"],
         default="robinhood",
         help="Choose which data provider to use (Alpaca, Robinhood, or FMP)",
+    )
+    parser.add_argument(
+        "--voice_agent_listen",
+        action="store_true",
+        help="Enable real-time voice agent listening for a wake word",
+    )
+    parser.add_argument(
+        "--voice_agent_wake_word",
+        default="spectr",
+        help="Wake word that triggers the voice agent",
     )
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
