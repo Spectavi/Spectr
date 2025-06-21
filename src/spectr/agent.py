@@ -9,11 +9,13 @@ from openai import OpenAI
 import pygame
 import sounddevice as sd
 import soundfile as sf
+import requests
 
 import pandas as pd
 
 from news import get_latest_news
 from fetch.broker_interface import BrokerInterface, OrderSide, OrderType
+from spectr.exceptions import DataApiRateLimitError
 
 
 class VoiceAgent:
@@ -499,12 +501,27 @@ class VoiceAgent:
                 func = self.tool_funcs.get(call.function.name)
                 if func:
                     args = json.loads(call.function.arguments)
-                    result = func(**args)
-                    self.chat_history.append({
-                        "role": "tool",
-                        "tool_call_id": call.id,
-                        "content": result,
-                    })
+                    try:
+                        result = func(**args)
+                    except DataApiRateLimitError:
+                        self.say(
+                            "The data provider is rate limiting us. Please try again shortly."
+                        )
+                        return ""
+                    except requests.HTTPError as exc:
+                        if exc.response is not None and exc.response.status_code == 429:
+                            self.say(
+                                "The data provider is rate limiting us. Please try again shortly."
+                            )
+                            return ""
+                        raise
+                    self.chat_history.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": call.id,
+                            "content": result,
+                        }
+                    )
             completion = self.client.chat.completions.create(
                 model=self.chat_model,
                 messages=self.chat_history,
