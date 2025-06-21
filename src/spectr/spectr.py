@@ -210,6 +210,8 @@ class SpectrApp(App):
             broker_api=BROKER_API,
             data_api=DATA_API,
             get_cached_orders=lambda: self._portfolio_orders_cache,
+            add_symbol=self.add_symbol,
+            remove_symbol=self.remove_symbol,
         )
         if getattr(args, "listen", False):
             self.voice_agent.start_wake_word_listener(
@@ -892,6 +894,55 @@ class SpectrApp(App):
             self._scanner_worker = None
         self.scanner = self.scanner_class(DATA_API, self.exit_event)
         self._scanner_worker = self.run_worker(self.scanner.scanner_loop, thread=False)
+
+    def add_symbol(self, symbol: str) -> list[str]:
+        """Append *symbol* to ``ticker_symbols`` and return the updated list."""
+        sym = symbol.strip().upper()
+        if not sym:
+            return self.ticker_symbols
+        if sym not in self.ticker_symbols:
+            self.ticker_symbols.append(sym)
+            self._prepend_open_positions()
+            self.args.symbols = self.ticker_symbols
+            self.df_cache.setdefault(sym, pd.DataFrame())
+            cache.save_symbols_cache(self.ticker_symbols)
+            self.query_one("#overlay-text", TopOverlay).flash_message(
+                f"Added {sym}", duration=5.0, style="bold green"
+            )
+        return self.ticker_symbols
+
+    def remove_symbol(self, symbol: str) -> list[str]:
+        """Remove *symbol* from ``ticker_symbols`` and return the updated list."""
+        sym = symbol.strip().upper()
+        if sym in self.ticker_symbols:
+            if BROKER_API.has_position(sym):
+                msg = (
+                    f"I'm sorry, you currently have an open position for {sym}. "
+                    "If we remove it from the watchlist we could miss a sell signal."
+                )
+                self.voice_agent.say(msg)
+                self.query_one("#overlay-text", TopOverlay).flash_message(
+                    f"Failed to remove {sym}, has open position!",
+                    duration=6.0,
+                    style="bold red",
+                )
+                return self.ticker_symbols
+
+            index = self.ticker_symbols.index(sym)
+            self.ticker_symbols.remove(sym)
+            self.df_cache.pop(sym, None)
+            if self.active_symbol_index >= len(self.ticker_symbols):
+                self.active_symbol_index = max(0, len(self.ticker_symbols) - 1)
+            self.args.symbols = self.ticker_symbols
+            cache.save_symbols_cache(self.ticker_symbols)
+            if self.ticker_symbols:
+                self.update_view(self.ticker_symbols[self.active_symbol_index])
+            self.query_one("#overlay-text", TopOverlay).flash_message(
+                f"Removed {sym} from watchlist.",
+                duration=5.0,
+                style="bold yellow",
+            )
+        return self.ticker_symbols
 
     # ---------- Back-test workflow ----------
 
