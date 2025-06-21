@@ -215,7 +215,11 @@ class SpectrApp(App):
 
         self.trade_amount = 0.0
 
-        self.voice_agent = VoiceAgent(broker_api=BROKER_API, data_api=DATA_API)
+        self.voice_agent = VoiceAgent(
+            broker_api=BROKER_API,
+            data_api=DATA_API,
+            get_cached_orders=lambda: self._portfolio_orders_cache,
+        )
         if getattr(args, "voice_agent_listen", False):
             self.voice_agent.start_wake_word_listener(
                 getattr(args, "voice_agent_wake_word", "spectr")
