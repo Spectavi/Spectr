@@ -4,6 +4,7 @@ import json
 import threading
 import queue
 import time
+from typing import Callable, Optional
 
 from openai import OpenAI
 import pygame
@@ -28,6 +29,7 @@ class VoiceAgent:
         chat_model: str = "gpt-3.5-turbo",
         tts_model: str = "tts-1-hd",
         voice: str = "sage",
+        get_cached_orders: Optional[Callable[[], list]] | None = None,
     ) -> None:
         """Initialize the voice agent and OpenAI client."""
         self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -36,6 +38,7 @@ class VoiceAgent:
         self.voice = voice
         self.broker = broker_api
         self.data_api = data_api
+        self._get_cached_orders = get_cached_orders
         pygame.mixer.init()
         self._queue: queue.Queue[tuple[str, threading.Event | None]] = queue.Queue()
         self._worker = threading.Thread(target=self._speech_worker, daemon=True)
@@ -204,6 +207,18 @@ class VoiceAgent:
                         },
                     },
                 ]
+            )
+
+        if self._get_cached_orders:
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_cached_orders",
+                        "description": "Return cached portfolio orders if available",
+                        "parameters": {"type": "object", "properties": {}, "required": []},
+                    },
+                }
             )
 
         if self.broker:
@@ -394,6 +409,11 @@ class VoiceAgent:
                         )
                     ),
                 }
+            )
+
+        if self._get_cached_orders:
+            funcs["get_cached_orders"] = lambda: json.dumps(
+                self._serialize(self._get_cached_orders() or [])
             )
 
         if self.broker:
