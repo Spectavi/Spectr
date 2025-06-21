@@ -63,7 +63,7 @@ class VoiceAgent:
             pass
         if hasattr(obj, "model_dump"):
             try:
-                return obj.model_dump()
+                return self._serialize(obj.model_dump())
             except Exception:
                 pass
         if hasattr(obj, "__dict__"):
