@@ -35,7 +35,7 @@ class VoiceAgent:
         self.broker = broker_api
         self.data_api = data_api
         pygame.mixer.init()
-        self._queue: queue.Queue[str] = queue.Queue()
+        self._queue: queue.Queue[tuple[str, threading.Event | None]] = queue.Queue()
         self._worker = threading.Thread(target=self._speech_worker, daemon=True)
         self._worker.start()
 
@@ -411,14 +411,25 @@ class VoiceAgent:
 
         return funcs
 
-    def say(self, text: str) -> None:
-        """Queue *text* to be spoken using OpenAI text-to-speech."""
-        self._queue.put(text)
+    def say(self, text: str, wait: bool = False) -> None:
+        """Queue *text* to be spoken using OpenAI text-to-speech.
+
+        If ``wait`` is ``True`` this method will block until the speech has
+        finished playing.  This is useful for cases like the application start
+        up splash screen where we don't want to proceed until the welcome
+        message is complete.
+        """
+        done = threading.Event() if wait else None
+        self._queue.put((text, done))
+        if wait:
+            done.wait()
 
     def _speech_worker(self) -> None:
         while True:
-            text = self._queue.get()
+            text, done = self._queue.get()
             self._speak(text)
+            if done is not None:
+                done.set()
             self._queue.task_done()
 
     def _speak(self, text: str) -> None:
