@@ -5,5 +5,5 @@ except PackageNotFoundError:  # during editable install
     __version__ = "0.2.0"
 
 from .fetch import broker_interface, data_interface  # noqa
-import utils
-import exceptions
+from . import utils
+from . import exceptions

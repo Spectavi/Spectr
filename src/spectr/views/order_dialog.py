@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fetch.broker_interface import OrderType, OrderSide
+from ..fetch.broker_interface import OrderType, OrderSide
 
 """OrderDialog with dynamic Limit‑Price field.
 Shows a limit‑price input only when the user picks OrderType.LIMIT.

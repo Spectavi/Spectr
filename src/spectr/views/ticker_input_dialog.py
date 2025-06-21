@@ -5,7 +5,7 @@ from textual import events
 from textual.widgets import Input, Label, Button, DataTable, Select
 from textual.containers import Vertical, Horizontal, Container
 from textual.screen import ModalScreen
-import utils
+from .. import utils
 
 log = logging.getLogger(__name__)
 

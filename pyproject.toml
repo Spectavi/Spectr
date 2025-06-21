@@ -27,4 +27,4 @@ Issues   = "https://github.com/your-handle/spectr/issues"
 Docs     = "https://spectr.readthedocs.io"
 
 [project.scripts]
-spectr = "spectr.app:cli_entry"   # $ spectr ↵ launches the UI
+spectr = "spectr.spectr:main"   # $ spectr ↵ launches the UI

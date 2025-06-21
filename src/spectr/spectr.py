@@ -19,31 +19,31 @@ from textual import events
 from textual.app import App, ComposeResult
 from textual.reactive import reactive
 
-import agent
-import cache
-import metrics
-import utils
-from agent import VoiceAgent
-from fetch.broker_interface import OrderSide, OrderType
-from scanners import load_scanner, list_scanners
-from strategies import load_strategy, list_strategies
-from utils import (
+from . import agent
+from . import cache
+from . import metrics
+from . import utils
+from .agent import VoiceAgent
+from .fetch.broker_interface import OrderSide, OrderType
+from .scanners import load_scanner, list_scanners
+from .strategies import load_strategy, list_strategies
+from .utils import (
     play_sound,
     get_historical_data,
     get_live_data,
 )
-import broker_tools
-from backtest import run_backtest
-from views.backtest_input_dialog import BacktestInputDialog
-from views.backtest_result_screen import BacktestResultScreen
-from views.order_dialog import OrderDialog
-from views.portfolio_screen import PortfolioScreen
-from views.splash_screen import SplashScreen
-from views.strategy_screen import StrategyScreen
-from views.symbol_view import SymbolView
-from views.ticker_input_dialog import TickerInputDialog
-from views.top_overlay import TopOverlay
-from views.trades_screen import TradesScreen
+from . import broker_tools
+from .backtest import run_backtest
+from .views.backtest_input_dialog import BacktestInputDialog
+from .views.backtest_result_screen import BacktestResultScreen
+from .views.order_dialog import OrderDialog
+from .views.portfolio_screen import PortfolioScreen
+from .views.splash_screen import SplashScreen
+from .views.strategy_screen import StrategyScreen
+from .views.symbol_view import SymbolView
+from .views.ticker_input_dialog import TickerInputDialog
+from .views.top_overlay import TopOverlay
+from .views.trades_screen import TradesScreen
 
 # Notes for scanner filter:
 # - Already up 5%?
@@ -1127,10 +1127,10 @@ def main() -> None:
     global DATA_API
 
     if args.broker == "alpaca":
-        from fetch.alpaca import AlpacaInterface
+        from .fetch.alpaca import AlpacaInterface
         BROKER_API = AlpacaInterface(real_trades=args.real_trades)
     elif args.broker == "robinhood":
-        from fetch.robinhood import RobinhoodInterface, RobinhoodInterface
+        from .fetch.robinhood import RobinhoodInterface, RobinhoodInterface
         BROKER_API = RobinhoodInterface()
     elif args.broker == "fmp":
         raise ValueError("Invalid broker: FMP does not support broker services, only data.")
@@ -1138,21 +1138,21 @@ def main() -> None:
         raise ValueError(f"Unknown broker: {args.broker}")
 
     if args.data_api == "alpaca":
-        from fetch.alpaca import AlpacaInterface
+        from .fetch.alpaca import AlpacaInterface
 
         if args.broker == "alpaca":
             DATA_API = BROKER_API
         else:
             DATA_API = AlpacaInterface(real_trades=args.real_trades)
     elif args.data_api == "robinhood":
-        from fetch.robinhood import RobinhoodInterface
+        from .fetch.robinhood import RobinhoodInterface
 
         if args.broker == "robinhood":
             DATA_API = BROKER_API
         else:
             DATA_API = RobinhoodInterface()
     elif args.data_api == "fmp":
-        from fetch.fmp import FMPInterface
+        from .fetch.fmp import FMPInterface
 
         # FMP can only be a data_api, not valid for broker.
         DATA_API = FMPInterface()
