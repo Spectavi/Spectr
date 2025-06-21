@@ -35,6 +35,7 @@ from utils import (
     is_market_open_now,
     is_crypto_symbol,
 )
+from .backtest import run_backtest
 from views.backtest_input_dialog import BacktestInputDialog
 from views.backtest_result_screen import BacktestResultScreen
 from views.order_dialog import OrderDialog
@@ -97,14 +98,6 @@ class OrderSignal:
         self.symbol = symbol
         self.side = side
         self.pos_pct = pos_pct
-
-
-# --- Backtest Function ---
-class CommInfoFractional(bt.CommissionInfo):
-    def getsize(self, price, cash):
-        """Returns fractional size for cash operation @price"""
-        return self.p.leverage * (cash / price)
-
 
 class SpectrApp(App):
     CSS_PATH = "default.tcss"
@@ -1030,7 +1023,12 @@ class SpectrApp(App):
             # Run the back-test
             log.debug(f"Running backtest for {symbol}.")
             result = await asyncio.to_thread(
-                self.run_backtest, df, symbol, self.config, starting_cash
+                run_backtest,
+                df,
+                symbol,
+                self.config,
+                self.strategy_class,
+                starting_cash,
             )
             log.debug("Backtest completed successfully.")
 
@@ -1098,43 +1096,6 @@ class SpectrApp(App):
             current = self.ticker_symbols[self.active_symbol_index]
             self.update_view(current)
 
-    def run_backtest(self, df, symbol, config: AppConfig, starting_cash=1000.00):
-        cerebro = bt.Cerebro()
-        cerebro.addstrategy(
-            self.strategy_class,
-            symbol=symbol,
-            bb_period=config.bb_period,
-            bb_dev=config.bb_dev,
-            macd_thresh=config.macd_thresh,
-        )
-
-        data = bt.feeds.PandasData(dataname=df)
-        cerebro.adddata(data)
-        cerebro.broker.setcash(starting_cash)
-        cerebro.broker.addcommissioninfo(CommInfoFractional())
-        cerebro.broker.setcommission(commission=0.00)
-        cerebro.addsizer(bt.sizers.AllInSizer, percents=100)
-
-        log.debug(f"Starting Portfolio Value: {cerebro.broker.getvalue():.2f}")
-        results = cerebro.run()
-        log.debug(f"Final Portfolio Value: {cerebro.broker.getvalue():.2f}")
-        # cerebro.plot() # Hawk TUI!
-
-        strat = results[0]
-
-        # Generate equity curve
-        portfolio_values = [strat.broker.get_value()]  # or track each day manually
-        timestamps = df.index.tolist()
-        equity_curve = list(zip(timestamps, portfolio_values))
-
-        return {
-            'final_value': cerebro.broker.getvalue(),
-            'equity_curve': equity_curve,
-            'price_data': df[['close']].copy(),
-            'timestamps': timestamps,
-            'buy_signals': strat.buy_signals,
-            'sell_signals': strat.sell_signals,
-        }
 
 
 BROKER_API = None
