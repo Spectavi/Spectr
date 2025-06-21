@@ -31,6 +31,8 @@ class VoiceAgent:
         tts_model: str = "gpt-4o-mini-tts",
         voice: str = "sage",
         get_cached_orders: Optional[Callable[[], list]] | None = None,
+        add_symbol: Optional[Callable[[str], list]] | None = None,
+        remove_symbol: Optional[Callable[[str], list]] | None = None,
     ) -> None:
         """Initialize the voice agent and OpenAI client."""
         self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -40,6 +42,8 @@ class VoiceAgent:
         self.broker = broker_api
         self.data_api = data_api
         self._get_cached_orders = get_cached_orders
+        self._add_symbol = add_symbol
+        self._remove_symbol = remove_symbol
         pygame.mixer.init()
         self._queue: queue.Queue[tuple[str, threading.Event | None]] = queue.Queue()
         self._worker = threading.Thread(target=self._speech_worker, daemon=True)
@@ -151,6 +155,42 @@ class VoiceAgent:
                 },
             },
         ]
+
+        if self._add_symbol:
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "add_symbol",
+                        "description": "Add a ticker to the watch list and return the updated list",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "symbol": {"type": "string", "description": "Ticker symbol"}
+                            },
+                            "required": ["symbol"],
+                        },
+                    },
+                }
+            )
+
+        if self._remove_symbol:
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "remove_symbol",
+                        "description": "Remove a ticker from the watch list and return the updated list",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "symbol": {"type": "string", "description": "Ticker symbol"}
+                            },
+                            "required": ["symbol"],
+                        },
+                    },
+                }
+            )
 
         if self.data_api:
             tools.extend(
@@ -410,6 +450,16 @@ class VoiceAgent:
                 self._serialize(cache.load_gainers_cache())
             ),
         }
+
+        if self._add_symbol:
+            funcs["add_symbol"] = lambda symbol: json.dumps(
+                self._serialize(self._add_symbol(symbol))
+            )
+
+        if self._remove_symbol:
+            funcs["remove_symbol"] = lambda symbol: json.dumps(
+                self._serialize(self._remove_symbol(symbol))
+            )
 
         if self.data_api:
             funcs.update(
