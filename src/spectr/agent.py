@@ -56,6 +56,13 @@ class VoiceAgent:
             return [self._serialize(o) for o in obj]
         if isinstance(obj, dict):
             return {k: self._serialize(v) for k, v in obj.items()}
+        # Represent datetime objects in ISO format so json.dumps works
+        try:
+            from datetime import datetime, date, time as dt_time
+            if isinstance(obj, (datetime, date, dt_time)):
+                return obj.isoformat()
+        except Exception:
+            pass
         # UUIDs appear in objects returned by broker APIs
         try:
             import uuid
