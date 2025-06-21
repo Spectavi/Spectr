@@ -19,7 +19,13 @@ dependencies = [
   "pandas>=2.2",
   "requests>=2.32",
   "tzlocal>=5.0",
-  # add anything else used: numpy, plotext, etc.
+  "pygame>=2.5",
+  "sounddevice>=0.4",
+  "soundfile>=0.12",
+  "plotext>=5.2",
+  "ta>=0.11",
+  "openai>=1.0",
+  "python-dotenv>=1.0",
 ]
 
 [project.urls]

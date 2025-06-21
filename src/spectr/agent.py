@@ -8,8 +8,12 @@ from typing import Callable, Optional
 
 from openai import OpenAI
 import pygame
-import sounddevice as sd
-import soundfile as sf
+try:  # optional voice dependencies
+    import sounddevice as sd
+    import soundfile as sf
+except Exception:  # pragma: no cover - missing portaudio
+    sd = None
+    sf = None
 import requests
 
 import pandas as pd
@@ -590,6 +594,10 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
 
     def listen_and_answer(self) -> str:
         """Record a short audio question and reply with a spoken answer."""
+        if sd is None or sf is None:
+            raise RuntimeError(
+                "sounddevice and soundfile are required for voice features"
+            )
         duration = 5
         sample_rate = 16_000
         rec = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1)
@@ -656,6 +664,10 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
     # ------------------------------------------------------------------
     def start_wake_word_listener(self, wake_word: str = "spectr") -> None:
         """Begin a background thread listening for *wake_word*."""
+        if sd is None or sf is None:
+            raise RuntimeError(
+                "sounddevice and soundfile are required for voice features"
+            )
         if self._listen_thread and self._listen_thread.is_alive():
             return
 
@@ -674,6 +686,8 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
             self._listen_thread.join(timeout=1.0)
 
     def _wake_word_loop(self) -> None:
+        if sd is None or sf is None:
+            return
         sample_rate = 16_000
         duration = 2
         while not self._wake_event.is_set():
