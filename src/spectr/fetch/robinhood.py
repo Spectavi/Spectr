@@ -6,8 +6,8 @@ import types
 from robin_stocks import robinhood as r
 from dotenv import load_dotenv
 
-from broker_interface import BrokerInterface, OrderSide, OrderType
-from data_interface import DataInterface
+from .broker_interface import BrokerInterface, OrderSide, OrderType
+from .data_interface import DataInterface
 
 log = logging.getLogger(__name__)
 load_dotenv()

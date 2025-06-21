@@ -2,8 +2,8 @@ import logging
 import math
 import traceback
 
-from fetch.broker_interface import BrokerInterface, OrderSide, OrderType
-from utils import is_market_open_now, is_crypto_symbol, play_sound
+from .fetch.broker_interface import BrokerInterface, OrderSide, OrderType
+from .utils import is_market_open_now, is_crypto_symbol, play_sound
 
 log = logging.getLogger(__name__)
 

@@ -15,9 +15,9 @@ import requests
 import pandas as pd
 
 
-from news import get_latest_news, get_recent_news
-import cache
-from fetch.broker_interface import BrokerInterface, OrderSide, OrderType
+from .news import get_latest_news, get_recent_news
+from . import cache
+from .fetch.broker_interface import BrokerInterface, OrderSide, OrderType
 
 
 class VoiceAgent:

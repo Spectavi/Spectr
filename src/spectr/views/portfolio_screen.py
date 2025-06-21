@@ -9,7 +9,7 @@ from textual.reactive import reactive
 from textual import events
 from textual.widgets._data_table import CellDoesNotExist
 
-from fetch.broker_interface import OrderSide
+from ..fetch.broker_interface import OrderSide
 import asyncio
 
 from .equity_curve_view import EquityCurveView
