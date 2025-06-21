@@ -3,7 +3,6 @@ import asyncio
 import contextlib
 import logging
 import os
-import math
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 
 import queue
@@ -32,9 +31,8 @@ from utils import (
     play_sound,
     get_historical_data,
     get_live_data,
-    is_market_open_now,
-    is_crypto_symbol,
 )
+import broker_tools
 from .backtest import run_backtest
 from views.backtest_input_dialog import BacktestInputDialog
 from views.backtest_result_screen import BacktestResultScreen
@@ -424,7 +422,18 @@ class SpectrApp(App):
                             self.signal_detected.remove(signal)
                             continue
                         self.signal_detected.remove(signal)
-                        self._submit_order(sym, side, price)
+                        broker_tools.submit_order(
+                            BROKER_API,
+                            sym,
+                            side,
+                            price,
+                            self.trade_amount,
+                            self.auto_trading_enabled,
+                            data_api=DATA_API,
+                            voice_agent=self.voice_agent,
+                            buy_sound_path=BUY_SOUND_PATH,
+                            sell_sound_path=SELL_SOUND_PATH,
+                        )
             elif symbol == self.ticker_symbols[self.active_symbol_index]:
                 if not self.is_backtest:
                     df = self.df_cache.get(symbol)
@@ -625,102 +634,13 @@ class SpectrApp(App):
         symbol = self.ticker_symbols[self.active_symbol_index]
         self.open_order_dialog(OrderSide.SELL, 25.0, symbol)
 
-    def _prepare_order_details(self, symbol: str, side: OrderSide) -> tuple[OrderType, float | None]:
-        order_type = OrderType.MARKET
-        limit_price = None
-        if not is_market_open_now() and not is_crypto_symbol(symbol):
-            quote = DATA_API.fetch_quote(symbol)
-            order_type = OrderType.LIMIT
-            if side == OrderSide.BUY:
-                limit_price = (
-                        quote.get("ask")
-                        or quote.get("ask_price")
-                        or quote.get("askPrice")
-                        or quote.get("price")
-                )
-                # Nudge limit sells slightly below the bid to improve fill odds
-                if limit_price:
-                    limit_price *= 1.003
-            else:
-                limit_price = (
-                        quote.get("bid")
-                        or quote.get("bid_price")
-                        or quote.get("bidPrice")
-                        or quote.get("price")
-                )
-                # Nudge limit sells slightly below the bid to improve fill odds
-                if limit_price:
-                    limit_price *= 0.997
-        log.debug(f"Order details for {symbol}: type={order_type}, limit_price={limit_price}")
-        return order_type, limit_price
-
-    def _submit_order(self, symbol: str, side: OrderSide, price: float) -> None:
-        log.debug(f"Submitting order for {symbol} at {price} with side {side}")
-        order_type, limit_price = self._prepare_order_details(symbol, side)
-
-        qty = 1
-        if side == OrderSide.BUY and self.trade_amount > 0 and price > 0:
-            qty = self.trade_amount / price
-        elif side == OrderSide.SELL:
-            pos = BROKER_API.get_position(symbol)
-            if pos:
-                log.debug(f"Position for {symbol}: {pos}")
-                qty = float(pos.qty)
-            else:
-                log.debug(f"WARNING: No position to sell for {symbol}")
-                return
-        try:
-            BROKER_API.submit_order(
-                symbol=symbol,
-                side=side,
-                type=order_type,
-                quantity=qty,
-                limit_price=limit_price,
-                market_price=price,
-                real_trades=self.auto_trading_enabled,
-            )
-            play_sound(BUY_SOUND_PATH if side == OrderSide.BUY else SELL_SOUND_PATH)
-        except Exception as e:
-            err_msg = str(e).lower()
-            retried = False
-            if (
-                    side == OrderSide.BUY
-                    and not float(qty).is_integer()
-                    and "fraction" in err_msg
-            ):
-                fallback_qty = math.floor(qty)
-                total = fallback_qty * price
-                if fallback_qty > 0 and 0 < total <= self.trade_amount:
-                    log.warning(
-                        f"{symbol} not fractionable, retrying with qty={fallback_qty}"
-                    )
-                    try:
-                        BROKER_API.submit_order(
-                            symbol=symbol,
-                            side=side,
-                            type=order_type,
-                            quantity=fallback_qty,
-                            limit_price=limit_price,
-                            market_price=price,
-                            real_trades=self.auto_trading_enabled,
-                        )
-                        play_sound(
-                            BUY_SOUND_PATH if side == OrderSide.BUY else SELL_SOUND_PATH
-                        )
-                        retried = True
-                    except Exception as exc2:
-                        e = exc2
-            if not retried:
-                log.error(
-                    f"Failed to submit order for {symbol}: {traceback.format_exc()}"
-                )
-                self.voice_agent.say(text=f"Failed to submit order for {symbol}: {e}")
-                raise
 
     def open_order_dialog(self, side: OrderSide, pos_pct: float, symbol: str, reason: str | None = None):
         if self._is_splash_active():
             return
-        order_type, limit_price = self._prepare_order_details(symbol, side)
+        order_type, limit_price = broker_tools.prepare_order_details(
+            symbol, side, DATA_API
+        )
         self.push_screen(
             OrderDialog(
                 side=side,
