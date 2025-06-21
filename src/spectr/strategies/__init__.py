@@ -1,5 +1,6 @@
 import importlib
 import inspect
+import logging
 import pkgutil
 from typing import Type
 
@@ -13,7 +14,15 @@ def list_strategies() -> dict[str, Type[bt.Strategy]]:
     strategies: dict[str, Type[bt.Strategy]] = {}
     package = __name__
     for _, mod_name, _ in pkgutil.iter_modules(__path__):
-        module = importlib.import_module(f"{package}.{mod_name}")
+        try:
+            module = importlib.import_module(f"{package}.{mod_name}")
+        except Exception as exc:  # pragma: no cover - import failures
+            logging.getLogger(__name__).warning(
+                "Skipping strategy module %s due to import error: %s",
+                mod_name,
+                exc,
+            )
+            continue
         for name, obj in inspect.getmembers(module, inspect.isclass):
             if issubclass(obj, bt.Strategy) and obj is not bt.Strategy:
                 strategies[name] = obj

@@ -2,7 +2,7 @@ import asyncio
 import logging
 
 from .scanner_interface import ScannerInterface
-import cache
+from .. import cache
 
 
 log = logging.getLogger(__name__)
