@@ -42,6 +42,8 @@ BYOS - Bring Your Own Strategy. You must implement your own trading strategy in 
 - 🔁 Backtest mode with visual result playback with `b`.
 - 🎤 Experimental voice agent that can answer questions and fetch the latest
   news for a stock symbol.
+- 🎤 Optional real-time mode listens for the wake word "spectr". Enable with
+  `--voice_agent_listen`.
 
 ---
 
@@ -102,6 +104,8 @@ python -m spectr --broker alpaca --data_api fmp --scale 0.5 --symbols NVDA,TSLA,
 | `--take_profit_pct` | Take profit percent.                                    |
 | `--scale`           | Scale the terminal UI (default: 0.5)                    |
 | `--candles`         | Enable candle chart mode (default: on).                               |
+| `--voice_agent_listen` | Enable real-time voice agent listening for the wake word. |
+| `--voice_agent_wake_word` | Word that triggers the voice agent (default: spectr). |
 
 ---------------
 ### Ticker Select Dialog with Scanner. Select rows to add to watchlist:
