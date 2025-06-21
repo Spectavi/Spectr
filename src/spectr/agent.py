@@ -460,7 +460,17 @@ class VoiceAgent:
             )
             user_text = transcription.text
 
-        messages = [{"role": "user", "content": user_text}]
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a helpful trading assistant. "
+                    "Use the provided tools to fetch market data such as float, quotes or charts. "
+                    "Do not claim you lack real-time data; instead call the tools when needed and respond concisely."
+                ),
+            },
+            {"role": "user", "content": user_text},
+        ]
         tools = self.tools
 
         completion = self.client.chat.completions.create(
