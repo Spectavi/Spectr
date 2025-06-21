@@ -22,6 +22,7 @@ class VoiceAgent:
     def __init__(
         self,
         broker_api: BrokerInterface | None = None,
+        data_api: object | None = None,
         chat_model: str = "gpt-3.5-turbo",
         tts_model: str = "tts-1-hd",
         voice: str = "sage",
@@ -32,6 +33,7 @@ class VoiceAgent:
         self.tts_model = tts_model
         self.voice = voice
         self.broker = broker_api
+        self.data_api = data_api
         pygame.mixer.init()
         self._queue: queue.Queue[str] = queue.Queue()
         self._worker = threading.Thread(target=self._speech_worker, daemon=True)
@@ -91,6 +93,98 @@ class VoiceAgent:
                 },
             },
         ]
+
+        if self.data_api:
+            tools.extend(
+                [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "get_company_profile",
+                            "description": "Fetch company profile information",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "symbol": {"type": "string", "description": "Ticker symbol"}
+                                },
+                                "required": ["symbol"],
+                            },
+                        },
+                    },
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "get_quote",
+                            "description": "Fetch the latest quote for a symbol",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "symbol": {"type": "string", "description": "Ticker symbol"}
+                                },
+                                "required": ["symbol"],
+                            },
+                        },
+                    },
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "get_bid_ask",
+                            "description": "Return current bid and ask prices",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "symbol": {"type": "string", "description": "Ticker symbol"}
+                                },
+                                "required": ["symbol"],
+                            },
+                        },
+                    },
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "get_float",
+                            "description": "Return float shares for a symbol",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "symbol": {"type": "string", "description": "Ticker symbol"}
+                                },
+                                "required": ["symbol"],
+                            },
+                        },
+                    },
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "get_volume",
+                            "description": "Return current volume for a symbol",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "symbol": {"type": "string", "description": "Ticker symbol"}
+                                },
+                                "required": ["symbol"],
+                            },
+                        },
+                    },
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "get_chart_data",
+                            "description": "Fetch recent chart data for a symbol",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "symbol": {"type": "string", "description": "Ticker symbol"},
+                                    "from_date": {"type": "string", "description": "YYYY-MM-DD"},
+                                    "to_date": {"type": "string", "description": "YYYY-MM-DD"},
+                                },
+                                "required": ["symbol", "from_date", "to_date"],
+                            },
+                        },
+                    },
+                ]
+            )
 
         if self.broker:
             tools.extend([
@@ -238,36 +332,75 @@ class VoiceAgent:
             "get_latest_news": get_latest_news,
         }
 
-        if not self.broker:
-            return funcs
-
-        funcs.update(
-            {
-                "get_balance": lambda: json.dumps(self._serialize(self.broker.get_balance())),
-                "has_pending_order": lambda symbol: json.dumps(self.broker.has_pending_order(symbol)),
-                "get_pending_orders": lambda symbol: json.dumps(self._serialize(self.broker.get_pending_orders(symbol))),
-                "get_closed_orders": lambda: json.dumps(self._serialize(self.broker.get_closed_orders())),
-                "get_all_orders": lambda: json.dumps(self._serialize(self.broker.get_all_orders())),
-                "get_orders_for_symbol": lambda symbol: json.dumps(self._serialize(self.broker.get_orders_for_symbol(symbol))),
-                "has_position": lambda symbol: json.dumps(self.broker.has_position(symbol)),
-                "get_position": lambda symbol: json.dumps(self._serialize(self.broker.get_position(symbol))),
-                "get_positions": lambda: json.dumps(self._serialize(self.broker.get_positions())),
-                "submit_order": lambda symbol, side, type, quantity=None, limit_price=None, market_price=None: json.dumps(
-                    self._serialize(
-                        self.broker.submit_order(
-                            symbol=symbol,
-                            side=OrderSide[side.upper()],
-                            type=OrderType[type.upper()],
-                            quantity=quantity,
-                            limit_price=limit_price,
-                            market_price=market_price,
-                            real_trades=self.broker.real_trades,
+        if self.data_api:
+            funcs.update(
+                {
+                    "get_company_profile": lambda symbol: json.dumps(
+                        self._serialize(self.data_api.fetch_company_profile(symbol))
+                    ),
+                    "get_quote": lambda symbol: json.dumps(
+                        self._serialize(self.data_api.fetch_quote(symbol))
+                    ),
+                    "get_bid_ask": lambda symbol: json.dumps(
+                        {
+                            "bid": (
+                                self.data_api.fetch_quote(symbol).get("bid")
+                                or self.data_api.fetch_quote(symbol).get("bidPrice")
+                                or self.data_api.fetch_quote(symbol).get("bid_price")
+                            ),
+                            "ask": (
+                                self.data_api.fetch_quote(symbol).get("ask")
+                                or self.data_api.fetch_quote(symbol).get("askPrice")
+                                or self.data_api.fetch_quote(symbol).get("ask_price")
+                            ),
+                        }
+                    ),
+                    "get_float": lambda symbol: json.dumps(
+                        (
+                            self.data_api.fetch_company_profile(symbol).get("float")
+                            or self.data_api.fetch_company_profile(symbol).get("floatShares")
+                            or self.data_api.fetch_company_profile(symbol).get("sharesOutstanding")
                         )
-                    )
-                ),
-                "cancel_order": lambda order_id: json.dumps(self._serialize(self.broker.cancel_order(order_id))),
-            }
-        )
+                    ),
+                    "get_volume": lambda symbol: json.dumps(
+                        self.data_api.fetch_quote(symbol).get("volume")
+                    ),
+                    "get_chart_data": lambda symbol, from_date, to_date: json.dumps(
+                        self._serialize(
+                            self.data_api.fetch_chart_data(symbol, from_date, to_date)
+                        )
+                    ),
+                }
+            )
+
+        if self.broker:
+            funcs.update(
+                {
+                    "get_balance": lambda: json.dumps(self._serialize(self.broker.get_balance())),
+                    "has_pending_order": lambda symbol: json.dumps(self.broker.has_pending_order(symbol)),
+                    "get_pending_orders": lambda symbol: json.dumps(self._serialize(self.broker.get_pending_orders(symbol))),
+                    "get_closed_orders": lambda: json.dumps(self._serialize(self.broker.get_closed_orders())),
+                    "get_all_orders": lambda: json.dumps(self._serialize(self.broker.get_all_orders())),
+                    "get_orders_for_symbol": lambda symbol: json.dumps(self._serialize(self.broker.get_orders_for_symbol(symbol))),
+                    "has_position": lambda symbol: json.dumps(self.broker.has_position(symbol)),
+                    "get_position": lambda symbol: json.dumps(self._serialize(self.broker.get_position(symbol))),
+                    "get_positions": lambda: json.dumps(self._serialize(self.broker.get_positions())),
+                    "submit_order": lambda symbol, side, type, quantity=None, limit_price=None, market_price=None: json.dumps(
+                        self._serialize(
+                            self.broker.submit_order(
+                                symbol=symbol,
+                                side=OrderSide[side.upper()],
+                                type=OrderType[type.upper()],
+                                quantity=quantity,
+                                limit_price=limit_price,
+                                market_price=market_price,
+                                real_trades=self.broker.real_trades,
+                            )
+                        )
+                    ),
+                    "cancel_order": lambda order_id: json.dumps(self._serialize(self.broker.cancel_order(order_id))),
+                }
+            )
 
         return funcs
 
