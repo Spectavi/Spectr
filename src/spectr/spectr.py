@@ -906,12 +906,24 @@ class SpectrApp(App):
             self.args.symbols = self.ticker_symbols
             self.df_cache.setdefault(sym, pd.DataFrame())
             cache.save_symbols_cache(self.ticker_symbols)
+            self.query_one("#overlay-text", TopOverlay).flash_message(
+                f"Added {sym}", duration=5.0, style="bold green"
+            )
         return self.ticker_symbols
 
     def remove_symbol(self, symbol: str) -> list[str]:
         """Remove *symbol* from ``ticker_symbols`` and return the updated list."""
         sym = symbol.strip().upper()
         if sym in self.ticker_symbols:
+            if BROKER_API.has_position(sym):
+                msg = (
+                    f"I'm sorry, you currently have an open position for {sym}. "
+                    "If we remove it from the watchlist we could miss a sell signal."
+                )
+                self.voice_agent.say(msg)
+                self.query_one("#overlay-text", TopOverlay).flash_message(msg, duration=6.0)
+                return self.ticker_symbols
+
             index = self.ticker_symbols.index(sym)
             self.ticker_symbols.remove(sym)
             self.df_cache.pop(sym, None)
@@ -921,6 +933,9 @@ class SpectrApp(App):
             cache.save_symbols_cache(self.ticker_symbols)
             if self.ticker_symbols:
                 self.update_view(self.ticker_symbols[self.active_symbol_index])
+            self.query_one("#overlay-text", TopOverlay).flash_message(
+                f"Removed {sym}", duration=5.0, style="bold yellow"
+            )
         return self.ticker_symbols
 
     # ---------- Back-test workflow ----------
