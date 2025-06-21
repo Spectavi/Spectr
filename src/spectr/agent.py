@@ -129,6 +129,7 @@ class VoiceAgent:
                             "days": {"type": "integer", "description": "Days of history", "default": 30},
                         },
                         "required": ["symbol"],
+                    },
                 },
             },
             {
@@ -398,7 +399,8 @@ class VoiceAgent:
         funcs = {
             "get_latest_news": get_latest_news,
             "get_recent_news": lambda symbol, days=30: json.dumps(
-                get_recent_news(symbol, days),
+                get_recent_news(symbol, days)
+            ),
             "get_scanner_cache": lambda: json.dumps(
                 self._serialize(cache.load_scanner_cache())
             ),
