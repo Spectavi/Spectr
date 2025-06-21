@@ -14,7 +14,7 @@ from alpaca.trading import (
 from dotenv import load_dotenv
 
 from .broker_interface import BrokerInterface, OrderType
-from utils import is_crypto_symbol
+from ..utils import is_crypto_symbol
 
 # Loading from .env file, you need to create one and define both ALPACA_API_KEY and ALPACA_SECRET_KEY
 load_dotenv()
