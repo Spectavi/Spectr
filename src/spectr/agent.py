@@ -41,19 +41,33 @@ class VoiceAgent:
         self.tool_funcs = self._build_tool_funcs()
 
     def _serialize(self, obj):
+        """Recursively convert *obj* into JSON serialisable primitives."""
         if obj is None:
             return None
         if isinstance(obj, pd.DataFrame):
             return obj.to_dict(orient="records")
-        if isinstance(obj, (list, tuple)):
+        if isinstance(obj, (list, tuple, set)):
             return [self._serialize(o) for o in obj]
+        if isinstance(obj, dict):
+            return {k: self._serialize(v) for k, v in obj.items()}
+        # UUIDs appear in objects returned by broker APIs
+        try:
+            import uuid
+            if isinstance(obj, uuid.UUID):
+                return str(obj)
+        except Exception:
+            pass
         if hasattr(obj, "model_dump"):
             try:
                 return obj.model_dump()
             except Exception:
                 pass
         if hasattr(obj, "__dict__"):
-            return {k: v for k, v in vars(obj).items() if not k.startswith("_")}
+            return {
+                k: self._serialize(v)
+                for k, v in vars(obj).items()
+                if not k.startswith("_")
+            }
         return obj
 
     def _build_tools(self) -> list:
