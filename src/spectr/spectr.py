@@ -215,7 +215,7 @@ class SpectrApp(App):
 
         self.trade_amount = 0.0
 
-        self.voice_agent = VoiceAgent()
+        self.voice_agent = VoiceAgent(broker_api=BROKER_API)
 
         # Available background scanners
         self.available_scanners = list_scanners()
