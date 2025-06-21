@@ -39,6 +39,17 @@ class VoiceAgent:
         self._worker = threading.Thread(target=self._speech_worker, daemon=True)
         self._worker.start()
 
+        self.system_prompt = (
+            "You are a helpful trading assistant. "
+            "Use the provided tools to fetch market data such as float, quotes or charts. "
+            "Do not claim you lack real-time data; instead call the tools when needed and respond concisely."
+        )
+        # Keep track of the full chat history so conversations persist between
+        # invocations of ``listen_and_answer``.
+        self.chat_history: list[dict] = [
+            {"role": "system", "content": self.system_prompt}
+        ]
+
         self.tools = self._build_tools()
         self.tool_funcs = self._build_tool_funcs()
 
@@ -471,45 +482,39 @@ class VoiceAgent:
             )
             user_text = transcription.text
 
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are a helpful trading assistant. "
-                    "Use the provided tools to fetch market data such as float, quotes or charts. "
-                    "Do not claim you lack real-time data; instead call the tools when needed and respond concisely."
-                ),
-            },
-            {"role": "user", "content": user_text},
-        ]
+        # Append the user's question so future calls retain context
+        self.chat_history.append({"role": "user", "content": user_text})
         tools = self.tools
 
         completion = self.client.chat.completions.create(
             model=self.chat_model,
-            messages=messages,
+            messages=self.chat_history,
             tools=tools,
         )
 
         message = completion.choices[0].message
         if message.tool_calls:
-            messages.append(message.model_dump())
+            self.chat_history.append(message.model_dump())
             for call in message.tool_calls:
                 func = self.tool_funcs.get(call.function.name)
                 if func:
                     args = json.loads(call.function.arguments)
                     result = func(**args)
-                    messages.append({
+                    self.chat_history.append({
                         "role": "tool",
                         "tool_call_id": call.id,
                         "content": result,
                     })
             completion = self.client.chat.completions.create(
                 model=self.chat_model,
-                messages=messages,
+                messages=self.chat_history,
             )
-            reply = completion.choices[0].message.content
+            reply_message = completion.choices[0].message
+            reply = reply_message.content
+            self.chat_history.append(reply_message.model_dump())
         else:
             reply = message.content
+            self.chat_history.append({"role": "assistant", "content": reply})
 
         self.say(reply)
         return reply
