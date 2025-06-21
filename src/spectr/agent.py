@@ -14,9 +14,9 @@ import requests
 
 import pandas as pd
 
-import cache
 
-from news import get_latest_news
+from news import get_latest_news, get_recent_news
+import cache
 from fetch.broker_interface import BrokerInterface, OrderSide, OrderType
 from spectr.exceptions import DataApiRateLimitError
 
@@ -107,7 +107,7 @@ class VoiceAgent:
                 "type": "function",
                 "function": {
                     "name": "get_latest_news",
-                    "description": "Fetch the most recent news article for a stock symbol",
+                    "description": "Fetch only the most recent news article for a stock symbol",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -115,6 +115,20 @@ class VoiceAgent:
                         },
                         "required": ["symbol"],
                     },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_recent_news",
+                    "description": "Fetch all recent news articles for a stock symbol",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "symbol": {"type": "string", "description": "Stock ticker"},
+                            "days": {"type": "integer", "description": "Days of history", "default": 30},
+                        },
+                        "required": ["symbol"],
                 },
             },
             {
@@ -383,6 +397,8 @@ class VoiceAgent:
     def _build_tool_funcs(self) -> dict:
         funcs = {
             "get_latest_news": get_latest_news,
+            "get_recent_news": lambda symbol, days=30: json.dumps(
+                get_recent_news(symbol, days),
             "get_scanner_cache": lambda: json.dumps(
                 self._serialize(cache.load_scanner_cache())
             ),
