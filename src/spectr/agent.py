@@ -519,9 +519,15 @@ class VoiceAgent:
             input=text,
             speed=0.95,
             instructions="""
-            Accent: Speak with an attractive British accent.
-            Tone: Use a professional, news anchor tone like you would hear on Bloomberg or CNBC. Keep answers very concise and to the point.
-            If you don't know the answer or have access to that data, say so, but don't go on about other ways to find it.
+            Voice: Warm, upbeat, and reassuring, with a steady and confident cadence that keeps the conversation calm and productive.
+
+Tone: Positive and solution-oriented, always focusing on the next steps rather than dwelling on the problem.
+
+Dialect: Neutral and professional, avoiding overly casual speech but maintaining a friendly and approachable style.
+
+Pronunciation: Clear and precise, with a natural rhythm that emphasizes key words to instill confidence and keep the customer engaged.
+
+Features: Uses empathetic phrasing, gentle reassurance, and proactive language to shift the focus from frustration to resolution.
             """
         )
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
