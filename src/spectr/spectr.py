@@ -42,6 +42,7 @@ from .views.splash_screen import SplashScreen
 from .views.strategy_screen import StrategyScreen
 from .views.symbol_view import SymbolView
 from .views.ticker_input_dialog import TickerInputDialog
+from .views.onboarding_app import OnboardingApp
 from .views.top_overlay import TopOverlay
 from .views.trades_screen import TradesScreen
 
@@ -1088,14 +1089,14 @@ def main() -> None:
         "--broker",
         type=str,
         choices=["alpaca", "robinhood"],
-        default="robinhood",
+        default=None,
         help="Choose which broker to use (Alpaca, Robinhood)",
     )
     parser.add_argument(
         "--data_api",
         type=str,
         choices=["alpaca", "robinhood", "fmp"],
-        default="robinhood",
+        default=None,
         help="Choose which data provider to use (Alpaca, Robinhood, or FMP)",
     )
     parser.add_argument(
@@ -1122,6 +1123,32 @@ def main() -> None:
 
     # Loading from .env file
     load_dotenv()
+
+    cfg = None
+    if not args.broker or not args.data_api:
+        cfg = cache.load_onboarding_config()
+        if cfg:
+            if not args.broker:
+                args.broker = cfg.get("broker")
+            if not args.data_api:
+                args.data_api = cfg.get("data_api")
+            os.environ.setdefault("BROKER_API_KEY", cfg.get("broker_key", ""))
+            os.environ.setdefault("DATA_API_KEY", cfg.get("data_key", ""))
+
+    if not args.broker or not args.data_api:
+        onboarding = OnboardingApp()
+        onboarding.run()
+        if onboarding.result:
+            cache.save_onboarding_config(onboarding.result)
+            args.broker = onboarding.result.get("broker")
+            args.data_api = onboarding.result.get("data_api")
+            if onboarding.result.get("broker_key"):
+                os.environ["BROKER_API_KEY"] = onboarding.result["broker_key"]
+            if onboarding.result.get("data_key"):
+                os.environ["DATA_API_KEY"] = onboarding.result["data_key"]
+        else:
+            print("Onboarding cancelled.")
+            return
 
     global BROKER_API
     global DATA_API
