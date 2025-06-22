@@ -47,16 +47,21 @@ class VolumeView(Static):
         prev_close = df["close"].shift(1).fillna(df["close"])
         colors = np.where(df["close"] >= prev_close, "green", "red")
 
-        # Plot volume bars on the RIGHT y-axis with per-bar colors
-        plt.bar(
-            times,
-            df["volume"].to_numpy(dtype=float),
-            label = "Volume",
-            color = colors.tolist(),  # ← list of colors, one per bar
-            yside = "right",
-            marker = "hd",
-            width = 0.4,
-        )
+        # plotext.bar() only accepts a single colour value, so we need to
+        # draw each bar individually in order to colour them separately.
+        # The number of points is usually small (<200), so this has
+        # negligible performance impact.
+        volumes = df["volume"].to_numpy(dtype=float)
+        for t, v, c in zip(times, volumes, colors.tolist()):
+            plt.bar(
+                [t],
+                [v],
+                label="Volume",
+                color=c,
+                yside="right",
+                marker="hd",
+                width=0.4,
+            )
 
         # Cosmetics – keep the same theme as other views
         #plt.title(f"Volume — {self.args.symbols[self.args.active_index]}")
