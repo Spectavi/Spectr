@@ -157,3 +157,20 @@ def load_selected_scanner(path: pathlib.Path = SCANNER_NAME_FILE) -> str | None:
         return json.loads(path.read_text())
     except Exception:
         return None
+ONBOARD_FILE = pathlib.Path.home() / ".spectr_onboard.json"
+
+
+def save_onboarding_config(config: dict, path: pathlib.Path = ONBOARD_FILE) -> None:
+    """Persist onboarding configuration."""
+    try:
+        path.write_text(json.dumps(config))
+    except Exception as exc:
+        log.error(f"onboarding cache write failed: {exc}")
+
+
+def load_onboarding_config(path: pathlib.Path = ONBOARD_FILE) -> dict | None:
+    """Load onboarding configuration if present."""
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return None
