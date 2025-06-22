@@ -6,7 +6,9 @@ from email.utils import parsedate_to_datetime
 import requests
 import xml.etree.ElementTree as ET
 
-FMP_API_KEY = os.getenv("FMP_API_KEY")
+# Prefer the generic DATA_API_KEY used by the onboarding dialog, but also accept
+# the legacy FMP_API_KEY for existing setups.
+FMP_API_KEY = os.getenv("DATA_API_KEY") or os.getenv("FMP_API_KEY")
 log = logging.getLogger(__name__)
 
 def get_latest_news(symbol: str) -> str:

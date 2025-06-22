@@ -12,9 +12,21 @@ from .data_interface import DataInterface
 log = logging.getLogger(__name__)
 load_dotenv()
 
-# Robinhood credentials (must be stored in .env)
-ROBIN_USER = os.getenv("ROBINHOOD_USERNAME")
-ROBIN_PASS = os.getenv("ROBINHOOD_PASSWORD")
+# Credentials are supplied via the generic BROKER_* variables for broker usage.
+# If Robinhood is also the selected data provider (``DATA_PROVIDER``), allow the
+# generic data variables to supply the credentials.  Otherwise fall back to the
+# legacy ROBINHOOD_* names for compatibility.
+DATA_PROVIDER = os.getenv("DATA_PROVIDER")
+ROBIN_USER = (
+    os.getenv("BROKER_API_KEY")
+    or (os.getenv("DATA_API_KEY") if DATA_PROVIDER == "robinhood" else None)
+    or os.getenv("ROBINHOOD_USERNAME")
+)
+ROBIN_PASS = (
+    os.getenv("BROKER_SECRET")
+    or (os.getenv("DATA_SECRET") if DATA_PROVIDER == "robinhood" else None)
+    or os.getenv("ROBINHOOD_PASSWORD")
+)
 
 ## WARNING: Doesn't really work unless you already have phone / email MFA enabled. It now uses the app and robin-stocks
 ## doesn't properly authenticate. Robinhood has sent users stating that API usage is not allowed, so user at your own risk.
