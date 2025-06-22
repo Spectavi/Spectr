@@ -1,10 +1,11 @@
+from pathlib import Path
 from textual.app import App
 
 from .onboarding_dialog import OnboardingDialog
 
 class OnboardingApp(App):
     """Temporary app to collect onboarding information."""
-    CSS_PATH = "default.tcss"
+    CSS_PATH = Path(__file__).resolve().parent.parent / "default.tcss"
 
     def __init__(self) -> None:
         super().__init__()
