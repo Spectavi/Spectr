@@ -51,11 +51,11 @@ class VolumeView(Static):
         plt.bar(
             times,
             df["volume"].to_numpy(dtype=float),
-            label = "Volume",
-            color = colors.tolist(),  # ← list of colors, one per bar
-            yside = "right",
-            marker = "hd",
-            width = 0.4,
+            label="Volume",
+            color=colors.tolist(),
+            yside="right",
+            marker="hd",
+            width=0.4,
         )
 
         # Cosmetics – keep the same theme as other views
