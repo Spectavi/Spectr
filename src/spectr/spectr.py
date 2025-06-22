@@ -1133,7 +1133,11 @@ def main() -> None:
             if not args.data_api:
                 args.data_api = cfg.get("data_api")
             os.environ.setdefault("BROKER_API_KEY", cfg.get("broker_key", ""))
+            os.environ.setdefault("BROKER_SECRET", cfg.get("broker_secret", ""))
             os.environ.setdefault("DATA_API_KEY", cfg.get("data_key", ""))
+            os.environ.setdefault("DATA_SECRET", cfg.get("data_secret", ""))
+            os.environ.setdefault("OPENAI_API_KEY", cfg.get("openai_key", ""))
+            os.environ.setdefault("DATA_PROVIDER", cfg.get("data_api", ""))
 
     if not args.broker or not args.data_api:
         onboarding = OnboardingApp()
@@ -1144,11 +1148,22 @@ def main() -> None:
             args.data_api = onboarding.result.get("data_api")
             if onboarding.result.get("broker_key"):
                 os.environ["BROKER_API_KEY"] = onboarding.result["broker_key"]
+            if onboarding.result.get("broker_secret"):
+                os.environ["BROKER_SECRET"] = onboarding.result["broker_secret"]
             if onboarding.result.get("data_key"):
                 os.environ["DATA_API_KEY"] = onboarding.result["data_key"]
+            if onboarding.result.get("data_secret"):
+                os.environ["DATA_SECRET"] = onboarding.result["data_secret"]
+            if onboarding.result.get("openai_key"):
+                os.environ["OPENAI_API_KEY"] = onboarding.result["openai_key"]
+            if onboarding.result.get("data_api"):
+                os.environ["DATA_PROVIDER"] = onboarding.result["data_api"]
         else:
             print("Onboarding cancelled.")
             return
+    else:
+        # If the user provided CLI options, ensure DATA_PROVIDER is set
+        os.environ.setdefault("DATA_PROVIDER", args.data_api)
 
     global BROKER_API
     global DATA_API

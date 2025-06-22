@@ -16,12 +16,26 @@ from dotenv import load_dotenv
 from .broker_interface import BrokerInterface, OrderType
 from ..utils import is_crypto_symbol
 
-# Loading from .env file, you need to create one and define both ALPACA_API_KEY and ALPACA_SECRET_KEY
+# Load credentials. Prefer the generic BROKER_* or DATA_* environment variables
+# provided by the onboarding dialog. Fallback to the legacy ALPACA_* variables
+# so existing setups continue to work.
 load_dotenv()
-PAPER_API_KEY = os.getenv("ALPACA_API_KEY_PAPER")
-PAPER_SECRET_KEY = os.getenv('ALPACA_SECRET_KEY_PAPER')
-API_KEY = os.getenv('ALPACA_API_KEY')
-SECRET_KEY = os.getenv('ALPACA_SECRET_KEY')
+
+# Determine if Alpaca is being used as the data provider.  In that case we allow
+# the generic ``DATA_API_KEY``/``DATA_SECRET`` variables to supply the
+# credentials.  Otherwise we fall back to the broker-specific or legacy
+# variables.
+DATA_PROVIDER = os.getenv("DATA_PROVIDER")
+API_KEY = (
+    os.getenv("BROKER_API_KEY")
+    or (os.getenv("DATA_API_KEY") if DATA_PROVIDER == "alpaca" else None)
+    or os.getenv("ALPACA_API_KEY")
+)
+SECRET_KEY = (
+    os.getenv("BROKER_SECRET")
+    or (os.getenv("DATA_SECRET") if DATA_PROVIDER == "alpaca" else None)
+    or os.getenv("ALPACA_SECRET_KEY")
+)
 
 log = logging.getLogger(__name__)
 
@@ -35,10 +49,14 @@ class AlpacaInterface(BrokerInterface):
         return self._real_trades
 
     def get_api(self):
-        #url = 'https://api.alpaca.markets' if real_trades else 'https://paper-api.alpaca.markets'
-        return TradingClient(API_KEY if self.real_trades else PAPER_API_KEY,
-                             SECRET_KEY if self.real_trades else PAPER_SECRET_KEY,
-                             paper=not self.real_trades)
+        """Return an authenticated TradingClient instance."""
+        # The same API key/secret pair is used for both live and paper
+        # environments.  The ``paper`` flag controls which endpoint is used.
+        return TradingClient(
+            API_KEY,
+            SECRET_KEY,
+            paper=not self.real_trades,
+        )
 
     # ------------------------------------------------------------------ #
     #  Returns account balance info.

@@ -11,7 +11,10 @@ from .data_interface import DataInterface
 from ..exceptions import DataApiRateLimitError
 
 load_dotenv()
-FMP_API_KEY = os.getenv("FMP_API_KEY")
+# Prefer the generic DATA_API_KEY environment variable set by the onboarding
+# dialog, but fall back to the legacy FMP_API_KEY if present for backwards
+# compatibility.
+FMP_API_KEY = os.getenv("DATA_API_KEY") or os.getenv("FMP_API_KEY")
 
 log = logging.getLogger(__name__)
 
@@ -19,7 +22,7 @@ log = logging.getLogger(__name__)
 class FMPInterface(DataInterface):
     def __init__(self):
         if not FMP_API_KEY:
-            raise ValueError("FMP_API_KEY not found in environment")
+            raise ValueError("DATA_API_KEY not found in environment")
 
     def _check_rate_limit(self, resp: requests.Response) -> None:
         """Raise DataApiRateLimitError if the response status is 429."""
