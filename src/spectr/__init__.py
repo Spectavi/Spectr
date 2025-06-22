@@ -7,3 +7,6 @@ except PackageNotFoundError:  # during editable install
 from .fetch import broker_interface, data_interface  # noqa
 from . import utils
 from . import exceptions
+from .plotext_fix import apply_patch as _patch_plotext
+
+_patch_plotext()
