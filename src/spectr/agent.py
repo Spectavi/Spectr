@@ -17,6 +17,7 @@ except Exception:  # pragma: no cover - missing portaudio
 import requests
 
 import pandas as pd
+import numpy as np
 
 
 from .news import get_latest_news, get_recent_news
@@ -598,10 +599,31 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
             raise RuntimeError(
                 "sounddevice and soundfile are required for voice features"
             )
-        duration = 5
         sample_rate = 16_000
-        rec = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1)
-        sd.wait()
+        max_duration = 30  # safety valve to avoid runaway recording
+        silence_threshold = 0.01
+        silence_secs = 1.0
+        buffers: list[np.ndarray] = []
+        silence_start: float | None = None
+        start_time = time.time()
+        with sd.InputStream(samplerate=sample_rate, channels=1) as stream:
+            while True:
+                data, _ = stream.read(int(sample_rate * 0.1))
+                buffers.append(data.copy())
+                # compute RMS amplitude to detect silence
+                amp = float(np.linalg.norm(data) / len(data))
+                if amp < silence_threshold:
+                    if silence_start is None:
+                        silence_start = time.time()
+                    elif time.time() - silence_start >= silence_secs:
+                        break
+                else:
+                    silence_start = None
+
+                if time.time() - start_time > max_duration:
+                    break
+
+        rec = np.concatenate(buffers, axis=0)
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as f:
             sf.write(f.name, rec, sample_rate)
             wav_path = f.name
