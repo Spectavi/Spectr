@@ -3,7 +3,7 @@ import logging
 from typing import Optional
 
 from textual.screen import Screen
-from textual.widgets import Static, DataTable, Switch, Input
+from textual.widgets import Static, DataTable, Switch, Input, Button
 from textual.containers import Vertical, Container, Horizontal
 from textual.reactive import reactive
 from textual import events
@@ -13,6 +13,8 @@ from ..fetch.broker_interface import OrderSide
 import asyncio
 
 from .equity_curve_view import EquityCurveView
+from .setup_confirm_dialog import SetupConfirmDialog
+from .setup_app import SetupApp
 
 log = logging.getLogger(__name__)
 
@@ -216,6 +218,7 @@ class PortfolioScreen(Screen):
             self.holdings_table,
             Static("Order History:", id="orders-title"),
             self.order_table,
+            Button("Setup", id="setup-button"),
             id="portfolio-screen",
         )
 
@@ -444,3 +447,10 @@ class PortfolioScreen(Screen):
             "done_for_day",
         }
         return status not in not_cancelable
+
+    async def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "setup-button":
+            result = await self.app.push_screen(SetupConfirmDialog(), wait_for_dismiss=True)
+            if result:
+                setup = SetupApp()
+                setup.run()
