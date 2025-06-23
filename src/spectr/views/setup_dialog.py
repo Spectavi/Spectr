@@ -5,7 +5,7 @@ from textual.app import ComposeResult
 from textual.message import Message
 from textual import events
 
-class OnboardingDialog(ModalScreen):
+class SetupDialog(ModalScreen):
     """Ask the user for broker and data provider configuration."""
 
     BINDINGS = [
@@ -16,7 +16,7 @@ class OnboardingDialog(ModalScreen):
     class Submit(Message):
         def __init__(
             self,
-            sender: "OnboardingDialog",
+            sender: "SetupDialog",
             *,
             broker: str,
             paper: str,
@@ -47,7 +47,7 @@ class OnboardingDialog(ModalScreen):
 
     def compose(self) -> ComposeResult:
         yield VerticalScroll(
-            Static("Onboarding", id="onboarding-title"),
+            Static("Setup", id="setup-title"),
             Label("Broker:"),
             Select(id="broker-select", options=[("Alpaca", "alpaca"), ("Robinhood", "robinhood")]),
             Input(placeholder="Broker API Key", id="broker-key"),
@@ -65,9 +65,9 @@ class OnboardingDialog(ModalScreen):
             Horizontal(
                 Button("Save", id="save", variant="success"),
                 Button("Cancel", id="cancel", variant="error"),
-                id="onboarding_buttons_row",
+                id="setup_buttons_row",
             ),
-            id="onboarding_body",
+            id="setup_body",
         )
 
     async def on_mount(self, event: events.Mount) -> None:

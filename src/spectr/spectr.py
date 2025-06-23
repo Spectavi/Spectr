@@ -42,7 +42,7 @@ from .views.splash_screen import SplashScreen
 from .views.strategy_screen import StrategyScreen
 from .views.symbol_view import SymbolView
 from .views.ticker_input_dialog import TickerInputDialog
-from .views.onboarding_app import OnboardingApp
+from .views.setup_app import SetupApp
 from .views.top_overlay import TopOverlay
 from .views.trades_screen import TradesScreen
 
@@ -1143,28 +1143,28 @@ def main() -> None:
             os.environ.setdefault("DATA_PROVIDER", cfg.get("data_api", ""))
 
     if not args.broker or not args.data_api:
-        onboarding = OnboardingApp()
-        onboarding.run()
-        if onboarding.result:
-            cache.save_onboarding_config(onboarding.result)
-            args.broker = onboarding.result.get("broker")
-            args.data_api = onboarding.result.get("data_api")
-            os.environ["PAPER_API_KEY"] = onboarding.result.get("paper_key", "")
-            os.environ["PAPER_SECRET"] = onboarding.result.get("paper_secret", "")
-            if onboarding.result.get("broker_key"):
-                os.environ["BROKER_API_KEY"] = onboarding.result["broker_key"]
-            if onboarding.result.get("broker_secret"):
-                os.environ["BROKER_SECRET"] = onboarding.result["broker_secret"]
-            if onboarding.result.get("data_key"):
-                os.environ["DATA_API_KEY"] = onboarding.result["data_key"]
-            if onboarding.result.get("data_secret"):
-                os.environ["DATA_SECRET"] = onboarding.result["data_secret"]
-            if onboarding.result.get("openai_key"):
-                os.environ["OPENAI_API_KEY"] = onboarding.result["openai_key"]
-            if onboarding.result.get("data_api"):
-                os.environ["DATA_PROVIDER"] = onboarding.result["data_api"]
+        setup = SetupApp()
+        setup.run()
+        if setup.result:
+            cache.save_onboarding_config(setup.result)
+            args.broker = setup.result.get("broker")
+            args.data_api = setup.result.get("data_api")
+            os.environ["PAPER_API_KEY"] = setup.result.get("paper_key", "")
+            os.environ["PAPER_SECRET"] = setup.result.get("paper_secret", "")
+            if setup.result.get("broker_key"):
+                os.environ["BROKER_API_KEY"] = setup.result["broker_key"]
+            if setup.result.get("broker_secret"):
+                os.environ["BROKER_SECRET"] = setup.result["broker_secret"]
+            if setup.result.get("data_key"):
+                os.environ["DATA_API_KEY"] = setup.result["data_key"]
+            if setup.result.get("data_secret"):
+                os.environ["DATA_SECRET"] = setup.result["data_secret"]
+            if setup.result.get("openai_key"):
+                os.environ["OPENAI_API_KEY"] = setup.result["openai_key"]
+            if setup.result.get("data_api"):
+                os.environ["DATA_PROVIDER"] = setup.result["data_api"]
         else:
-            print("Onboarding cancelled.")
+            print("Setup cancelled.")
             return
     else:
         # If the user provided CLI options, ensure DATA_PROVIDER is set

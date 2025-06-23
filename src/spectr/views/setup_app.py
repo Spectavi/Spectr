@@ -1,10 +1,10 @@
 from pathlib import Path
 from textual.app import App
 
-from .onboarding_dialog import OnboardingDialog
+from .setup_dialog import SetupDialog
 
-class OnboardingApp(App):
-    """Temporary app to collect onboarding information."""
+class SetupApp(App):
+    """Temporary app to collect setup information."""
     CSS_PATH = Path(__file__).resolve().parent.parent / "default.tcss"
 
     def __init__(self) -> None:
@@ -12,7 +12,7 @@ class OnboardingApp(App):
         self.result = None
 
     async def on_mount(self) -> None:
-        await self.push_screen(OnboardingDialog(self._on_submit), wait_for_dismiss=False)
+        await self.push_screen(SetupDialog(self._on_submit), wait_for_dismiss=False)
 
     def _on_submit(
         self,
