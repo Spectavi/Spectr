@@ -172,6 +172,32 @@ OrderDialog {
     margin: 2 2;
 }
 
+/* ------- Onboarding Dialog ------- */
+
+OnboardingDialog {
+    align: center middle;
+}
+
+#onboarding_body {
+    width: 70%;
+    border: solid green;
+    padding: 1 2;
+    content-align-horizontal: center;
+    background: #1a1a1a;
+}
+
+#onboarding_body Label,
+#onboarding_body Input,
+#onboarding_body Select,
+#onboarding_body Button {
+    padding: 1 1;
+}
+
+#onboarding_buttons_row {
+    width: 100%;
+    content-align-horizontal: center;
+}
+
 
 
 /* ------- Portfolio Screen ------- */

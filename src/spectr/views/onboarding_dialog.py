@@ -1,5 +1,6 @@
 from textual.screen import ModalScreen
 from textual.widgets import Static, Input, Button, Label, Select
+from textual.containers import Vertical, Horizontal
 from textual.app import ComposeResult
 from textual.message import Message
 from textual import events
@@ -9,7 +10,7 @@ class OnboardingDialog(ModalScreen):
 
     BINDINGS = [
         ("enter", "save", "Save"),
-        ("escape", "app.pop_screen", "Cancel"),
+        ("escape", "cancel", "Cancel"),
     ]
 
     class Submit(Message):
@@ -45,28 +46,29 @@ class OnboardingDialog(ModalScreen):
         self._callback = callback
 
     def compose(self) -> ComposeResult:
-        yield Static("Initial Setup", classes="title")
-
-        yield Label("Broker:")
-        yield Select(id="broker-select", options=[("Alpaca", "alpaca"), ("Robinhood", "robinhood")])
-        yield Input(placeholder="Broker API Key", id="broker-key")
-        yield Input(placeholder="Broker Secret Key", id="broker-secret")
-
-        yield Label("Paper Trading:")
-        yield Select(id="paper-select", options=[("Alpaca", "alpaca")])
-        yield Input(placeholder="Paper API Key", id="paper-key")
-        yield Input(placeholder="Paper Secret Key", id="paper-secret")
-
-        yield Label("Data Provider:")
-        yield Select(id="data-select", options=[("Alpaca", "alpaca"), ("Robinhood", "robinhood"), ("FMP", "fmp")])
-        yield Input(placeholder="Data API Key", id="data-key")
-        yield Input(placeholder="Data Secret Key", id="data-secret")
-
-        yield Label("OpenAI API Key:")
-        yield Input(placeholder="OpenAI API Key", id="openai-key")
-
-        yield Button("Save", id="save", variant="success")
-        yield Button("Cancel", id="cancel", variant="error")
+        yield Vertical(
+            Static("Onboarding", classes="title"),
+            Label("Broker:"),
+            Select(id="broker-select", options=[("Alpaca", "alpaca"), ("Robinhood", "robinhood")]),
+            Input(placeholder="Broker API Key", id="broker-key"),
+            Input(placeholder="Broker Secret Key", id="broker-secret"),
+            Label("Paper Trading:"),
+            Select(id="paper-select", options=[("Alpaca", "alpaca")]),
+            Input(placeholder="Paper API Key", id="paper-key"),
+            Input(placeholder="Paper Secret Key", id="paper-secret"),
+            Label("Data Provider:"),
+            Select(id="data-select", options=[("Alpaca", "alpaca"), ("Robinhood", "robinhood"), ("FMP", "fmp")]),
+            Input(placeholder="Data API Key", id="data-key"),
+            Input(placeholder="Data Secret Key", id="data-secret"),
+            Label("OpenAI API Key:"),
+            Input(placeholder="OpenAI API Key", id="openai-key"),
+            Horizontal(
+                Button("Save", id="save", variant="success"),
+                Button("Cancel", id="cancel", variant="error"),
+                id="onboarding_buttons_row",
+            ),
+            id="onboarding_body",
+        )
 
     async def on_mount(self, event: events.Mount) -> None:
         self._update_broker_fields()
@@ -120,31 +122,39 @@ class OnboardingDialog(ModalScreen):
             secret_input.placeholder = "Data Password"
             secret_input.display = True
 
+    def action_cancel(self) -> None:
+        """Exit the entire app when the dialog is cancelled."""
+        self.app.exit()
+
+    def action_save(self) -> None:
+        """Collect field values and exit with the result."""
+        broker = self.query_one("#broker-select", Select).value
+        paper = self.query_one("#paper-select", Select).value
+        data = self.query_one("#data-select", Select).value
+        broker_key = self.query_one("#broker-key", Input).value
+        broker_secret = self.query_one("#broker-secret", Input).value
+        paper_key = self.query_one("#paper-key", Input).value
+        paper_secret = self.query_one("#paper-secret", Input).value
+        data_key = self.query_one("#data-key", Input).value
+        data_secret = self.query_one("#data-secret", Input).value
+        openai_key = self.query_one("#openai-key", Input).value
+        self.dismiss()
+        if self._callback:
+            self._callback(
+                broker,
+                paper,
+                data,
+                broker_key,
+                broker_secret,
+                paper_key,
+                paper_secret,
+                data_key,
+                data_secret,
+                openai_key,
+            )
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "save":
-            broker = self.query_one("#broker-select", Select).value
-            paper = self.query_one("#paper-select", Select).value
-            data = self.query_one("#data-select", Select).value
-            broker_key = self.query_one("#broker-key", Input).value
-            broker_secret = self.query_one("#broker-secret", Input).value
-            paper_key = self.query_one("#paper-key", Input).value
-            paper_secret = self.query_one("#paper-secret", Input).value
-            data_key = self.query_one("#data-key", Input).value
-            data_secret = self.query_one("#data-secret", Input).value
-            openai_key = self.query_one("#openai-key", Input).value
-            self.dismiss()
-            if self._callback:
-                self._callback(
-                    broker,
-                    paper,
-                    data,
-                    broker_key,
-                    broker_secret,
-                    paper_key,
-                    paper_secret,
-                    data_key,
-                    data_secret,
-                    openai_key,
-                )
+            self.action_save()
         else:
-            self.dismiss()
+            self.action_cancel()
