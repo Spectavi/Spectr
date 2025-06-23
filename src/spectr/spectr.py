@@ -813,6 +813,7 @@ class SpectrApp(App):
                     self.args.real_trades,
                     self.set_real_trades,
                     self.args.broker == "robinhood" and self.args.real_trades,
+                    os.getenv("PAPER_API_KEY", "") == "" or os.getenv("PAPER_SECRET", "") == "",
                     self.auto_trading_enabled,
                     self.set_auto_trading,
                     BROKER_API.get_balance,
@@ -1134,6 +1135,8 @@ def main() -> None:
                 args.data_api = cfg.get("data_api")
             os.environ.setdefault("BROKER_API_KEY", cfg.get("broker_key", ""))
             os.environ.setdefault("BROKER_SECRET", cfg.get("broker_secret", ""))
+            os.environ.setdefault("PAPER_API_KEY", cfg.get("paper_key", ""))
+            os.environ.setdefault("PAPER_SECRET", cfg.get("paper_secret", ""))
             os.environ.setdefault("DATA_API_KEY", cfg.get("data_key", ""))
             os.environ.setdefault("DATA_SECRET", cfg.get("data_secret", ""))
             os.environ.setdefault("OPENAI_API_KEY", cfg.get("openai_key", ""))
@@ -1146,6 +1149,8 @@ def main() -> None:
             cache.save_onboarding_config(onboarding.result)
             args.broker = onboarding.result.get("broker")
             args.data_api = onboarding.result.get("data_api")
+            os.environ["PAPER_API_KEY"] = onboarding.result.get("paper_key", "")
+            os.environ["PAPER_SECRET"] = onboarding.result.get("paper_secret", "")
             if onboarding.result.get("broker_key"):
                 os.environ["BROKER_API_KEY"] = onboarding.result["broker_key"]
             if onboarding.result.get("broker_secret"):

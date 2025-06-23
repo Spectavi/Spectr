@@ -36,6 +36,8 @@ SECRET_KEY = (
     or (os.getenv("DATA_SECRET") if DATA_PROVIDER == "alpaca" else None)
     or os.getenv("ALPACA_SECRET_KEY")
 )
+PAPER_KEY = os.getenv("PAPER_API_KEY") or API_KEY
+PAPER_SECRET = os.getenv("PAPER_SECRET") or SECRET_KEY
 
 log = logging.getLogger(__name__)
 
@@ -50,11 +52,11 @@ class AlpacaInterface(BrokerInterface):
 
     def get_api(self):
         """Return an authenticated TradingClient instance."""
-        # The same API key/secret pair is used for both live and paper
-        # environments.  The ``paper`` flag controls which endpoint is used.
+        key = API_KEY if self.real_trades else PAPER_KEY
+        secret = SECRET_KEY if self.real_trades else PAPER_SECRET
         return TradingClient(
-            API_KEY,
-            SECRET_KEY,
+            key,
+            secret,
             paper=not self.real_trades,
         )
 
