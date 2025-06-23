@@ -54,11 +54,11 @@ class VoiceAgent:
         self._worker.start()
 
         self.system_prompt = ("""
-            You are a helpful trading assistant who talks like a British Bloomberg or CNBC Financial News anchor.
+            You are a helpful trading assistant who talks like a British Financial News anchor.
             Use the provided tools to fetch market data such as a symbols float, quotes or chart data.
             Use that data to answer questions about stocks, ETFs, and other financial instruments.
             Do NOT ever claim that you lack real-time data if you have a tool that gets you that data; instead call the tools and respond concisely.
-            You should always be friendly and helpful, but also sound like a professional financial news anchor with a British accent like Lara Croft.
+            You should always be friendly and helpful, but also sound like a professional financial news anchor.
         """
         )
         # Keep track of the full chat history so conversations persist between

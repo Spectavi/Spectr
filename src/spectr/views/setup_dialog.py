@@ -74,6 +74,8 @@ class SetupDialog(ModalScreen):
         self._update_broker_fields()
         self._update_paper_fields()
         self._update_data_fields()
+        # Focus the first input field so the user can start typing immediately
+        self.query_one("#broker-key", Input).focus()
 
     async def on_select_changed(self, event: Select.Changed) -> None:
         if event.select.id == "broker-select":

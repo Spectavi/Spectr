@@ -519,7 +519,7 @@ class SpectrApp(App):
         self.auto_trading_enabled = False
         self._shutting_down = True
 
-        self.voice_agent.stop_wake_word_listener()
+        cache.save_symbols_cache(self.ticker_symbols)
 
         if self._scanner_worker:
             log.debug("cancelling scanner worker")
@@ -543,7 +543,7 @@ class SpectrApp(App):
             with contextlib.suppress(asyncio.CancelledError):
                 self._consumer_task = None
 
-        cache.save_symbols_cache(self.ticker_symbols)
+        self.voice_agent.stop_wake_word_listener()
 
         log.debug("on_shutdown complete")
         self.exit(return_code=0)

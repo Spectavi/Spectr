@@ -6,3 +6,4 @@ signal_log.csv
 src/spectr/strategies/spectavi_strategy.py
 .idea
 .cache
+cache
