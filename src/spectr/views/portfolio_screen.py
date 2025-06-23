@@ -46,6 +46,7 @@ class PortfolioScreen(Screen):
         real_trades: bool,
         set_real_trades_cb=None,
         disable_live_switch: bool = False,
+        hide_live_switch: bool = False,
         auto_trading: bool = False,
         set_auto_trading_cb=None,
         balance_callback=None,
@@ -64,6 +65,7 @@ class PortfolioScreen(Screen):
             self.cached_orders.sort(key=self._order_date, reverse=True)
         self.real_trades = real_trades
         self.disable_live_switch = disable_live_switch
+        self.hide_live_switch = hide_live_switch
         self._has_cached_balance = cash is not None
         self._has_cached_positions = positions is not None
         self._has_cached_orders = orders is not None
@@ -185,10 +187,17 @@ class PortfolioScreen(Screen):
         yield Vertical(
             self.top_title,
             Horizontal(
-                Container(
-                    Static("Live Trading"),
-                    self.mode_switch,
-                    id="mode-switch-container"),
+                *(
+                    []
+                    if self.hide_live_switch
+                    else [
+                        Container(
+                            Static("Live Trading"),
+                            self.mode_switch,
+                            id="mode-switch-container",
+                        )
+                    ]
+                ),
                 Container(
                     Static("Auto Trades"),
                     self.auto_switch,
