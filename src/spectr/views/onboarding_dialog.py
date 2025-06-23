@@ -1,6 +1,6 @@
 from textual.screen import ModalScreen
 from textual.widgets import Static, Input, Button, Label, Select
-from textual.containers import Vertical, Horizontal
+from textual.containers import Vertical, Horizontal, VerticalScroll
 from textual.app import ComposeResult
 from textual.message import Message
 from textual import events
@@ -46,8 +46,8 @@ class OnboardingDialog(ModalScreen):
         self._callback = callback
 
     def compose(self) -> ComposeResult:
-        yield Vertical(
-            Static("Onboarding", classes="title"),
+        yield VerticalScroll(
+            Static("Onboarding", id="onboarding-title"),
             Label("Broker:"),
             Select(id="broker-select", options=[("Alpaca", "alpaca"), ("Robinhood", "robinhood")]),
             Input(placeholder="Broker API Key", id="broker-key"),

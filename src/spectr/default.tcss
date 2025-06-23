@@ -175,7 +175,7 @@ OrderDialog {
 /* ------- Onboarding Dialog ------- */
 
 OnboardingDialog {
-    align: center middle;
+    align: center top;
 }
 
 #onboarding_body {
@@ -183,7 +183,17 @@ OnboardingDialog {
     border: solid green;
     padding: 1 2;
     content-align-horizontal: center;
+    content-align-vertical: top;
+    height: 100%;
+    overflow: auto;
     background: #1a1a1a;
+}
+
+#onboarding-title {
+    text-align: center;
+    padding: 0 1;
+    width: 100%;
+    height: 3;
 }
 
 #onboarding_body Label,
