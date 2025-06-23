@@ -218,6 +218,7 @@ class PortfolioScreen(Screen):
             self.holdings_table,
             Static("Order History:", id="orders-title"),
             self.order_table,
+            Button("Close", id="close-button", variant="error"),
             Button("Setup", id="setup-button"),
             id="portfolio-screen",
         )
@@ -454,3 +455,5 @@ class PortfolioScreen(Screen):
             if result:
                 setup = SetupApp()
                 setup.run()
+        elif event.button.id == "close-button":
+            self.app.pop_screen()
