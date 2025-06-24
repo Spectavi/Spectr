@@ -218,8 +218,11 @@ class PortfolioScreen(Screen):
             self.holdings_table,
             Static("Order History:", id="orders-title"),
             self.order_table,
-            Button("Close", id="close-button", variant="error"),
-            Button("Setup", id="setup-button"),
+            Horizontal(
+                Button("Close", id="close-button", variant="error"),
+                Button("Setup", id="setup-button"),
+                id="portfolio_buttons_row",
+            ),
             id="portfolio-screen",
         )
 
