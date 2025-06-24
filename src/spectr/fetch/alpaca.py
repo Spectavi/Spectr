@@ -323,11 +323,12 @@ class AlpacaInterface(BrokerInterface):
                 )
                 price_used = limit_price
 
-            tc.submit_order(order_req)
+            order = tc.submit_order(order_req)
             price_disp = price_used if price_used is not None else "MKT"
             log.info(
                 f"ORDER PLACED: {side.name.upper()} {quantity or 1} shares of {symbol.upper()} @ {price_disp}"
             )
+            return order
         except Exception as exc:
             log.error(f"ORDER FAILED: {exc}")
             raise

@@ -239,18 +239,19 @@ class RobinhoodInterface(BrokerInterface, DataInterface):
         try:
             if type != OrderType.MARKET:
                 log.error("RobinhoodInterface only supports market orders")
-                return
+                return None
             if side == OrderSide.BUY:
-                r.orders.order_buy_market(symbol, quantity or 1)
+                order = r.orders.order_buy_market(symbol, quantity or 1)
             else:
-                r.orders.order_sell_market(symbol, quantity or 1)
+                order = r.orders.order_sell_market(symbol, quantity or 1)
             price_disp = market_price if market_price is not None else "MKT"
             log.debug(
                 f"ORDER PLACED: {side.name.upper()} {quantity or 1} shares of {symbol} @ {price_disp}"
             )
+            return order
         except Exception as exc:
             log.error(f"ORDER FAILED: {exc}")
-
+            
     def cancel_order(self, order_id: str) -> bool:
         try:
             r.orders.cancel_stock_order(order_id)

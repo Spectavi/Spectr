@@ -419,7 +419,7 @@ class SpectrApp(App):
                             self.signal_detected.remove(signal)
                             continue
                         self.signal_detected.remove(signal)
-                        broker_tools.submit_order(
+                        order = broker_tools.submit_order(
                             BROKER_API,
                             sym,
                             side,
@@ -430,6 +430,12 @@ class SpectrApp(App):
                             voice_agent=self.voice_agent,
                             buy_sound_path=BUY_SOUND_PATH,
                             sell_sound_path=SELL_SOUND_PATH,
+                        )
+                        cache.attach_order_to_last_signal(
+                            self.strategy_signals,
+                            sym.upper(),
+                            side.name.lower(),
+                            order,
                         )
             elif symbol == self.ticker_symbols[self.active_symbol_index]:
                 if not self.is_backtest:
@@ -748,13 +754,19 @@ class SpectrApp(App):
             f"(total ${msg.total:,.2f})"
         )
         try:
-            BROKER_API.submit_order(
+            order = BROKER_API.submit_order(
                 symbol=msg.symbol,
                 side=msg.side,
                 type=msg.order_type,
                 quantity=msg.qty,
                 limit_price=msg.limit_price,
                 market_price=msg.price,
+            )
+            cache.attach_order_to_last_signal(
+                self.strategy_signals,
+                msg.symbol.upper(),
+                msg.side.name.lower(),
+                order,
             )
         except Exception as e:
             log.error(e)

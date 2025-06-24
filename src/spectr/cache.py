@@ -114,6 +114,83 @@ def record_signal(cache_list: list[dict], sig: dict, path: pathlib.Path = STRATE
     save_strategy_cache(cache_list, path)
 
 
+def attach_order_to_last_signal(
+    cache_list: list[dict],
+    symbol: str,
+    side: str,
+    order: object | None,
+    path: pathlib.Path = STRATEGY_CACHE_FILE,
+) -> None:
+    """Attach order details to the most recent matching signal."""
+    if order is None:
+        return
+
+    order_id = getattr(order, "id", None) or getattr(order, "order_id", None)
+    if hasattr(order, "__getitem__"):
+        try:
+            order_id = order_id or order["id"]
+        except Exception:
+            try:
+                order_id = order_id or order["order_id"]
+            except Exception:
+                pass
+
+    status = getattr(order, "status", None)
+    if status is None and hasattr(order, "__getitem__"):
+        status = order.get("status") or order.get("state")
+
+    for rec in reversed(cache_list):
+        if rec.get("symbol") == symbol and rec.get("side") == side and "order_status" not in rec:
+            if order_id:
+                rec["order_id"] = order_id
+            if status:
+                rec["order_status"] = status
+            break
+
+    save_strategy_cache(cache_list, path)
+
+
+def update_order_statuses(
+    cache_list: list[dict],
+    orders: list,
+    path: pathlib.Path = STRATEGY_CACHE_FILE,
+) -> None:
+    """Refresh order status values in the strategy cache."""
+
+    if not orders:
+        return
+
+    # Build a mapping of order_id -> status for quick lookup
+    status_map: dict[str, str] = {}
+    for order in orders:
+        order_id = getattr(order, "id", None) or getattr(order, "order_id", None)
+        if hasattr(order, "__getitem__"):
+            order_id = order_id or order.get("id") or order.get("order_id")
+        if not order_id:
+            continue
+
+        status = getattr(order, "status", None)
+        if status is None and hasattr(order, "__getitem__"):
+            status = order.get("status") or order.get("state")
+        if status is None:
+            continue
+
+        status_map[str(order_id)] = status
+
+    updated = False
+    for rec in cache_list:
+        rec_id = rec.get("order_id")
+        if rec_id is None:
+            continue
+        new_status = status_map.get(str(rec_id))
+        if new_status and rec.get("order_status") != new_status:
+            rec["order_status"] = new_status
+            updated = True
+
+    if updated:
+        save_strategy_cache(cache_list, path)
+
+
 def save_symbols_cache(symbols: list[str], path: pathlib.Path = SYMBOLS_CACHE_PATH) -> None:
     try:
         path.write_text(json.dumps(symbols))

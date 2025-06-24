@@ -30,6 +30,7 @@ class StrategyScreen(Screen):
             "Price",
             "Reason",
             "Strategy",
+            "Order Status",
         )
         for sig in sorted(
             self.signals,
@@ -46,6 +47,7 @@ class StrategyScreen(Screen):
                 f"{price:.2f}" if price is not None else "",
                 sig.get("reason", ""),
                 sig.get("strategy", ""),
+                sig.get("order_status", ""),
             )
 
         select = Select(

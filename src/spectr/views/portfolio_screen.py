@@ -11,6 +11,7 @@ from textual.widgets._data_table import CellDoesNotExist
 
 from ..fetch.broker_interface import OrderSide
 import asyncio
+from .. import cache
 
 from .equity_curve_view import EquityCurveView
 from .setup_confirm_dialog import SetupConfirmDialog
@@ -317,10 +318,11 @@ class PortfolioScreen(Screen):
         if orders:
             log.debug(f"Order History fetched.")
             orders.sort(key=self._order_date, reverse=True)
+            cache.update_order_statuses(self.app.strategy_signals, orders)
             table = self.query_one("#orders-table", DataTable)
             table.clear()
             for order in orders:
-                print(f"Order: {order}")
+                log.debug(f"Order: {order}")
                 price = (
                         getattr(order, "filled_avg_price", None)
                         or getattr(order, "limit_price", None)

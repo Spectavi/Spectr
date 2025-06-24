@@ -61,8 +61,14 @@ def submit_order(
     voice_agent=None,
     buy_sound_path: str | None = None,
     sell_sound_path: str | None = None,
-) -> None:
-    """Prepare and submit an order, handling fractional reattempts."""
+) -> object | None:
+    """Prepare and submit an order, handling fractional reattempts.
+
+    Returns
+    -------
+    object | None
+        The order object returned by ``broker.submit_order`` when available.
+    """
     order_type, limit_price = prepare_order_details(symbol, side, data_api)
 
     qty = 1.0
@@ -78,7 +84,7 @@ def submit_order(
             return
 
     try:
-        broker.submit_order(
+        order = broker.submit_order(
             symbol=symbol,
             side=side,
             type=order_type,
@@ -89,6 +95,7 @@ def submit_order(
         )
         if buy_sound_path and sell_sound_path:
             play_sound(buy_sound_path if side == OrderSide.BUY else sell_sound_path)
+        return order
     except Exception as e:  # noqa: BLE001
         err_msg = str(e).lower()
         retried = False
@@ -104,7 +111,7 @@ def submit_order(
                     f"{symbol} not fractionable, retrying with qty={fallback_qty}"
                 )
                 try:
-                    broker.submit_order(
+                    res = broker.submit_order(
                         symbol=symbol,
                         side=side,
                         type=order_type,
@@ -118,6 +125,7 @@ def submit_order(
                             buy_sound_path if side == OrderSide.BUY else sell_sound_path
                         )
                     retried = True
+                    order = res
                 except Exception as exc2:  # noqa: BLE001
                     e = exc2
         if not retried:
@@ -127,3 +135,4 @@ def submit_order(
             if voice_agent is not None:
                 voice_agent.say(text=f"Failed to submit order for {symbol}: {e}")
             raise
+    return order if 'order' in locals() else None
