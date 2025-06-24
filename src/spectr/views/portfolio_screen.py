@@ -372,6 +372,12 @@ class PortfolioScreen(Screen):
             self.equity_view.reset()
             await self._reload_account_data()
             await self._refresh_orders()
+            # Turning live trading on/off should disable auto trading
+            if self.auto_trading_enabled:
+                self.auto_trading_enabled = False
+                self.auto_switch.value = False
+                if callable(self._set_auto_trading_cb):
+                    self._set_auto_trading_cb(False)
         elif event.switch.id == "auto-trade-switch":
             self.auto_trading_enabled = event.value
             if callable(self._set_auto_trading_cb):
