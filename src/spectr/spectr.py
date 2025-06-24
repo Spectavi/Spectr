@@ -423,6 +423,32 @@ class SpectrApp(App):
                         if self.screen_stack and not isinstance(self.screen_stack[-1], OrderDialog):
                             self.open_order_dialog(side=side, pos_pct=100.0, symbol=sym, reason=reason)
                         continue
+                    elif self.auto_trading_enabled and sig and side:
+                        log.info(f"AUTO-TRADE: Submitting order for {sym} at {price} with side {side}")
+                        # Skip auto-ordering if there's already an open order
+                        if BROKER_API.has_pending_order(sym):
+                            log.warning(f"Pending order for {sym}; ignoring signal!")
+                            self.signal_detected.remove(signal)
+                            continue
+                        self.signal_detected.remove(signal)
+                        order = broker_tools.submit_order(
+                            BROKER_API,
+                            sym,
+                            side,
+                            price,
+                            self.trade_amount,
+                            self.auto_trading_enabled,
+                            data_api=DATA_API,
+                            voice_agent=self.voice_agent,
+                            buy_sound_path=BUY_SOUND_PATH,
+                            sell_sound_path=SELL_SOUND_PATH,
+                        )
+                        cache.attach_order_to_last_signal(
+                            self.strategy_signals,
+                            sym.upper(),
+                            side.name.lower(),
+                            order,
+                        )
             elif symbol == self.ticker_symbols[self.active_symbol_index]:
                 if not self.is_backtest:
                     df = self.df_cache.get(symbol)
@@ -740,13 +766,19 @@ class SpectrApp(App):
             f"(total ${msg.total:,.2f})"
         )
         try:
-            BROKER_API.submit_order(
+            order = BROKER_API.submit_order(
                 symbol=msg.symbol,
                 side=msg.side,
                 type=msg.order_type,
                 quantity=msg.qty,
                 limit_price=msg.limit_price,
                 market_price=msg.price,
+            )
+            cache.attach_order_to_last_signal(
+                self.strategy_signals,
+                msg.symbol.upper(),
+                msg.side.name.lower(),
+                order,
             )
         except Exception as e:
             log.error(e)

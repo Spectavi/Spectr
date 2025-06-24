@@ -81,7 +81,7 @@ class BrokerInterface(ABC):
         limit_price: float | None = None,
         market_price: float | None = None,
     ):
-        """Submit a buy/sell order."""
+        """Submit a buy/sell order and return the resulting order object."""
         pass
 
     @abstractmethod
