@@ -284,6 +284,17 @@ PortfolioScreen {
     height: 11;
 }
 
+#portfolio_buttons_row {
+    width: 100%;
+    height: 3;
+    content-align-horizontal: center;
+    align: center middle;
+    margin: 1 1;
+}
+
+#close-button, #setup-button {
+    margin: 0 1;
+}
 
 BacktestResultScreen {
     align: center middle;

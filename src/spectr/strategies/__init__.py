@@ -17,7 +17,7 @@ def list_strategies() -> dict[str, Type[bt.Strategy]]:
         try:
             module = importlib.import_module(f"{package}.{mod_name}")
         except Exception as exc:  # pragma: no cover - import failures
-            logging.getLogger(__name__).warning(
+            logging.getLogger(__name__).error(
                 "Skipping strategy module %s due to import error: %s",
                 mod_name,
                 exc,

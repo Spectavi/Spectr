@@ -1,4 +1,3 @@
-import argparse
 import asyncio
 import contextlib
 import logging
@@ -6,29 +5,24 @@ import os
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 
 import queue
-import sys
 import threading
 import traceback
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-import backtrader as bt
 import pandas as pd
-from dotenv import load_dotenv
 from textual import events
 from textual.app import App, ComposeResult
 from textual.reactive import reactive
 
-from . import agent
 from . import cache
-from . import metrics
+from .strategies import metrics
 from . import utils
 from .agent import VoiceAgent
-from .fetch.broker_interface import OrderSide, OrderType
+from .fetch.broker_interface import OrderSide
 from .scanners import load_scanner, list_scanners
 from .strategies import load_strategy, list_strategies
 from .utils import (
-    play_sound,
     get_historical_data,
     get_live_data,
 )
@@ -42,7 +36,6 @@ from .views.splash_screen import SplashScreen
 from .views.strategy_screen import StrategyScreen
 from .views.symbol_view import SymbolView
 from .views.ticker_input_dialog import TickerInputDialog
-from .views.setup_app import SetupApp
 from .views.top_overlay import TopOverlay
 from .views.trades_screen import TradesScreen
 
@@ -286,6 +279,27 @@ class SpectrApp(App):
         reason = signal_dict.get("reason")
         log.debug(f"Signal detected for {symbol}. Reason: {reason}")
         df.at[df.index[-1], "trade"] = signal
+        if self.auto_trading_enabled:
+            log.info(f"AUTO-TRADE: Submitting order for {symbol} at {curr_price} with side {signal}")
+            # Skip auto-ordering if there's already an open order
+            if BROKER_API.has_pending_order(symbol):
+                log.warning(f"Pending order for {symbol}; ignoring signal!")
+                self.signal_detected.remove(signal)
+                self.voice_agent.say(f"Ignoring {signal.capitalize()} signal for {symbol}, pending order already exists.")
+                return
+            self.signal_detected.remove(signal)
+            broker_tools.submit_order(
+                BROKER_API,
+                symbol,
+                OrderSide.BUY if signal.lower() == "buy" else OrderSide.SELL,
+                curr_price,
+                self.trade_amount,
+                self.auto_trading_enabled,
+                data_api=DATA_API,
+                voice_agent=self.voice_agent,
+                buy_sound_path=BUY_SOUND_PATH,
+                sell_sound_path=SELL_SOUND_PATH,
+            )
         self.call_from_thread(self.signal_detected.append, (symbol, curr_price, signal, reason))
         self.call_from_thread(
             cache.record_signal,
@@ -355,8 +369,6 @@ class SpectrApp(App):
                     self.voice_agent.say("Welcome to Spectr", wait=True)
                 # refresh the active view from the UI thread
                 self.call_from_thread(self.update_view, self.ticker_symbols[self.active_symbol_index])
-
-
         except Exception:
             log.error(f"[poll] {symbol}: {traceback.format_exc()}")
 
@@ -942,7 +954,6 @@ class SpectrApp(App):
                 )
                 return self.ticker_symbols
 
-            index = self.ticker_symbols.index(sym)
             self.ticker_symbols.remove(sym)
             self.df_cache.pop(sym, None)
             if self.active_symbol_index >= len(self.ticker_symbols):

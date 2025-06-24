@@ -8,10 +8,11 @@ from tzlocal import get_localzone
 import pandas as pd
 import threading
 
+from .strategies import metrics
+
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 import pygame
 
-from . import metrics
 from .fetch import data_interface
 
 LOG_FILE = 'signal_log.csv'

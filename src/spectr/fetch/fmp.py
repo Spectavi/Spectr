@@ -72,7 +72,7 @@ class FMPInterface(DataInterface):
                     return self.fetch_quote(symbol, not afterhours)
                 except Exception as e:
                     raise ValueError(f"No quote data returned for {symbol}")
-            log.debug(f"Fetched quote for {symbol}: {data[0]}")
+            log.debug(f"Fetched quote for {symbol}.")
             return data[0]  # return the first (and only) quote object
         except Exception as e:
             log.error(f"Failed to fetch quote for {symbol}: {e}")
