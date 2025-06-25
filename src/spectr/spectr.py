@@ -180,6 +180,7 @@ class SpectrApp(App):
         self._poll_worker = None
         self._scanner_worker = None
         self._equity_worker = None
+        self._voice_worker = None
         self.df_cache = {symbol: pd.DataFrame() for symbol in self.ticker_symbols}
         if not os.path.exists(cache.CACHE_DIR):
             os.mkdir(cache.CACHE_DIR)
@@ -744,7 +745,13 @@ class SpectrApp(App):
     def action_ask_agent(self) -> None:
         if self._is_splash_active():
             return
-        self.run_worker(self._ask_agent, thread=True)
+        if self._voice_worker and self._voice_worker.is_running:
+            self.voice_agent.stop()
+            self._voice_worker.cancel()
+            self.query_one("#overlay-text", TopOverlay).clear_prompt()
+            self.update_status_bar()
+            return
+        self._voice_worker = self.run_worker(self._ask_agent, thread=True)
 
     def _ask_agent(self) -> None:
         """Run the voice assistant and display errors in the overlay."""
@@ -761,6 +768,7 @@ class SpectrApp(App):
         finally:
             self.call_from_thread(overlay.clear_prompt)
             self.call_from_thread(self.update_status_bar)
+            self._voice_worker = None
 
     # ------------ Order Dialog Submit Logic -------------
 

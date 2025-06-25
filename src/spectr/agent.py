@@ -56,6 +56,8 @@ class VoiceAgent:
         self._on_speech_start = on_speech_start
         self._on_speech_end = on_speech_end
         pygame.mixer.init()
+        self._stop_event = threading.Event()
+        self._current_channel: pygame.mixer.Channel | None = None
         self._queue: queue.Queue[tuple[str, threading.Event | None]] = queue.Queue()
         self._worker = threading.Thread(target=self._speech_worker, daemon=True)
         self._worker.start()
@@ -587,9 +589,37 @@ class VoiceAgent:
         if wait:
             done.wait()
 
+    def stop(self) -> None:
+        """Immediately stop speaking and clear any queued speech."""
+        self._stop_event.set()
+        if self._current_channel is not None:
+            try:
+                self._current_channel.stop()
+            except Exception:
+                pass
+        while not self._queue.empty():
+            try:
+                _, done = self._queue.get_nowait()
+                if done is not None:
+                    done.set()
+                self._queue.task_done()
+            except Exception:
+                break
+        if self._on_speech_end:
+            try:
+                self._on_speech_end()
+            except Exception:
+                pass
+
     def _speech_worker(self) -> None:
         while True:
             text, done = self._queue.get()
+            if self._stop_event.is_set():
+                if done is not None:
+                    done.set()
+                self._queue.task_done()
+                self._stop_event.clear()
+                continue
             self._speak(text)
             if done is not None:
                 done.set()
@@ -624,11 +654,23 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
             fname = f.name
         sound = pygame.mixer.Sound(fname)
         channel = sound.play()
+        self._current_channel = channel
         while channel.get_busy():
+            if self._stop_event.is_set():
+                channel.stop()
+                break
             time.sleep(0.5)
+        self._current_channel = None
+        self._stop_event.clear()
 
-    def listen_and_answer(self) -> str:
-        """Record a short audio question and reply with a spoken answer."""
+    def listen_and_answer(self, cancel_event: threading.Event | None = None) -> str:
+        """Record a short audio question and reply with a spoken answer.
+
+        If ``cancel_event`` is set while recording or generating a response the
+        method will abort early.
+        """
+        if cancel_event is None:
+            cancel_event = self._stop_event
         if sd is None or sf is None:
             raise RuntimeError(
                 "sounddevice and soundfile are required for voice features"
@@ -642,6 +684,8 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
         start_time = time.time()
         with sd.InputStream(samplerate=sample_rate, channels=1) as stream:
             while True:
+                if cancel_event.is_set():
+                    return ""
                 data, _ = stream.read(int(sample_rate * 0.1))
                 buffers.append(data.copy())
                 # compute RMS amplitude to detect silence
@@ -654,6 +698,8 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
                 else:
                     silence_start = None
 
+                if cancel_event.is_set():
+                    return ""
                 if time.time() - start_time > max_duration:
                     break
 
@@ -661,6 +707,8 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as f:
             sf.write(f.name, rec, sample_rate)
             wav_path = f.name
+        if cancel_event.is_set():
+            return ""
         with open(wav_path, "rb") as audio_file:
             transcription = self.client.audio.transcriptions.create(
                 model="whisper-1",
@@ -672,12 +720,16 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
         self.chat_history.append({"role": "user", "content": user_text})
         tools = self.tools
 
+        if cancel_event.is_set():
+            return ""
         completion = self.client.chat.completions.create(
             model=self.chat_model,
             messages=self.chat_history,
             tools=tools,
         )
 
+        if cancel_event.is_set():
+            return ""
         message = completion.choices[0].message
         if message.tool_calls:
             self.chat_history.append(message.model_dump())
@@ -701,6 +753,8 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
                             "content": result,
                         }
                     )
+            if cancel_event.is_set():
+                return ""
             completion = self.client.chat.completions.create(
                 model=self.chat_model,
                 messages=self.chat_history,
@@ -712,6 +766,8 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
             reply = message.content
             self.chat_history.append({"role": "assistant", "content": reply})
 
+        if cancel_event.is_set():
+            return ""
         self.say(reply)
         return reply
 
