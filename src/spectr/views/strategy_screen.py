@@ -3,7 +3,7 @@ import inspect
 
 from textual.screen import Screen
 from textual.widgets import DataTable, Header, Footer, Static, Select
-from textual.containers import Vertical
+from textual.containers import Vertical, VerticalScroll
 from textual.reactive import reactive
 
 from rich.syntax import Syntax
@@ -71,14 +71,16 @@ class StrategyScreen(Screen):
             value=self.current,
             options=[(name, name) for name in self.strategy_names],
         )
-        self.code_widget = Static(
-            Syntax(self.code_str, "python"), id="strategy-code"
+        self.code_widget = Static(Syntax(self.code_str, "python"), id="strategy-code-content")
+        code_scroll = VerticalScroll(
+            self.code_widget,
+            id="strategy-code",
         )
         yield Vertical(
             Static("Strategy Info", id="strategy-title"),
             select,
             table,
-            self.code_widget,
+            code_scroll,
             id="strategy-screen",
         )
 
