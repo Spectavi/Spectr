@@ -39,6 +39,8 @@ class VoiceAgent:
         add_symbol: Optional[Callable[[str], list]] | None = None,
         remove_symbol: Optional[Callable[[str], list]] | None = None,
         get_strategy_code: Optional[Callable[[], str]] | None = None,
+        on_speech_start: Optional[Callable[[], None]] | None = None,
+        on_speech_end: Optional[Callable[[], None]] | None = None,
     ) -> None:
         """Initialize the voice agent and OpenAI client."""
         self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -51,6 +53,8 @@ class VoiceAgent:
         self._add_symbol = add_symbol
         self._remove_symbol = remove_symbol
         self._get_strategy_code = get_strategy_code
+        self._on_speech_start = on_speech_start
+        self._on_speech_end = on_speech_end
         pygame.mixer.init()
         self._queue: queue.Queue[tuple[str, threading.Event | None]] = queue.Queue()
         self._worker = threading.Thread(target=self._speech_worker, daemon=True)
@@ -575,6 +579,11 @@ class VoiceAgent:
         """
         done = threading.Event() if wait else None
         self._queue.put((text, done))
+        if self._queue.qsize() == 1 and self._on_speech_start:
+            try:
+                self._on_speech_start()
+            except Exception:
+                pass
         if wait:
             done.wait()
 
@@ -585,6 +594,11 @@ class VoiceAgent:
             if done is not None:
                 done.set()
             self._queue.task_done()
+            if self._queue.empty() and self._on_speech_end:
+                try:
+                    self._on_speech_end()
+                except Exception:
+                    pass
 
     def _speak(self, text: str) -> None:
         """Speak *text* using OpenAI text-to-speech."""

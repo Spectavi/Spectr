@@ -1,12 +1,18 @@
 from textual.widgets import Static
 from textual.reactive import reactive
 
+
+VOICE_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+
 class TopOverlay(Static):
     symbol: reactive[str] = reactive("")
     status_text: reactive[str] = reactive("")        # The main persistent text
     alert_text: reactive[str] = reactive("")         # Temporary alerts (flash)
     live_icon: reactive[str] = reactive("🧪")         # Icon for live/paper trading
+    voice_frame: reactive[str] = reactive("")        # Spinner frames while speaking
     _timer = None
+    _voice_timer = None
+    _frame_index = 0
 
     def update_symbol(self, symbol):
         self.symbol = symbol
@@ -28,6 +34,25 @@ class TopOverlay(Static):
             self._timer.stop()
         self._timer = self.set_timer(duration, self._clear_flash)
 
+    def start_voice_animation(self) -> None:
+        """Begin spinner animation indicating the voice agent is speaking."""
+        if self._voice_timer:
+            self._voice_timer.stop()
+        self.voice_frame = VOICE_FRAMES[0]
+        self._frame_index = 0
+        self._voice_timer = self.set_interval(0.1, self._spin)
+
+    def stop_voice_animation(self) -> None:
+        """Stop the spinner animation."""
+        if self._voice_timer:
+            self._voice_timer.stop()
+            self._voice_timer = None
+        self.voice_frame = ""
+
+    def _spin(self) -> None:
+        self._frame_index = (self._frame_index + 1) % len(VOICE_FRAMES)
+        self.voice_frame = VOICE_FRAMES[self._frame_index]
+
     def show_prompt(self, msg: str, style: str = "bold yellow"):
         """Display *msg* without auto clearing."""
         if self._timer:
@@ -47,5 +72,5 @@ class TopOverlay(Static):
 
     def render(self):
         if self.alert_text:
-            return f"{self.live_icon} {self.alert_text}"
-        return f"{self.live_icon} {self.status_text}"
+            return f"{self.live_icon} {self.voice_frame} {self.alert_text}"
+        return f"{self.live_icon} {self.voice_frame} {self.status_text}"
