@@ -6,7 +6,7 @@ from typing import Type
 
 import backtrader as bt
 
-__all__ = ["load_strategy", "list_strategies"]
+__all__ = ["load_strategy", "list_strategies", "get_strategy_code"]
 
 
 def list_strategies() -> dict[str, Type[bt.Strategy]]:
@@ -35,3 +35,16 @@ def load_strategy(name: str) -> Type[bt.Strategy]:
     if name not in strategies:
         raise ValueError(f"Strategy '{name}' not found")
     return strategies[name]
+
+
+def get_strategy_code(name: str) -> str:
+    """Return the source code for the ``detect_signals`` method of *name* strategy."""
+    try:
+        cls = load_strategy(name)
+        func = getattr(cls, "detect_signals")
+        return inspect.getsource(func)
+    except Exception as exc:  # pragma: no cover - best effort
+        logging.getLogger(__name__).error(
+            "Unable to load strategy code for %s: %s", name, exc
+        )
+        return f"Unable to load strategy code: {exc}"

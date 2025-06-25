@@ -21,7 +21,7 @@ from . import utils
 from .agent import VoiceAgent
 from .fetch.broker_interface import OrderSide
 from .scanners import load_scanner, list_scanners
-from .strategies import load_strategy, list_strategies
+from .strategies import load_strategy, list_strategies, get_strategy_code
 from .utils import (
     get_historical_data,
     get_live_data,
@@ -206,6 +206,7 @@ class SpectrApp(App):
             get_cached_orders=lambda: self._portfolio_orders_cache,
             add_symbol=self.add_symbol,
             remove_symbol=self.remove_symbol,
+            get_strategy_code=lambda: get_strategy_code(self.strategy_name),
         )
         if getattr(args, "listen", False):
             self.voice_agent.start_wake_word_listener(
