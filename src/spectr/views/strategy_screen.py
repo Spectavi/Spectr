@@ -1,9 +1,14 @@
 from datetime import datetime
+import inspect
 
 from textual.screen import Screen
 from textual.widgets import DataTable, Header, Footer, Static, Select
 from textual.containers import Vertical
 from textual.reactive import reactive
+
+from rich.syntax import Syntax
+
+from ..strategies import load_strategy
 
 class StrategyScreen(Screen):
     """Modal screen listing live strategy signals."""
@@ -20,9 +25,19 @@ class StrategyScreen(Screen):
         self.strategy_names = strategies
         self.current = current
         self.callback = callback
+        self.code_str = self._get_strategy_code(current)
+
+    def _get_strategy_code(self, name: str) -> str:
+        """Return the source code of detect_signals for *name* strategy."""
+        try:
+            cls = load_strategy(name)
+            func = getattr(cls, "detect_signals")
+            return inspect.getsource(func)
+        except Exception as exc:  # pragma: no cover - best effort
+            return f"Unable to load strategy code: {exc}"
 
     def compose(self):
-        table = DataTable(zebra_stripes=True)
+        table = DataTable(zebra_stripes=True, id="signals-table")
         table.add_columns(
             "Date/Time",
             "Symbol",
@@ -56,15 +71,21 @@ class StrategyScreen(Screen):
             value=self.current,
             options=[(name, name) for name in self.strategy_names],
         )
+        self.code_widget = Static(
+            Syntax(self.code_str, "python"), id="strategy-code"
+        )
         yield Vertical(
             Static("Strategy Info", id="strategy-title"),
             select,
             table,
+            self.code_widget,
             id="strategy-screen",
         )
 
     async def on_select_changed(self, event: Select.Changed):
         if event.select.id == "strategy-select":
             self.current = event.value
+            self.code_str = self._get_strategy_code(self.current)
+            self.code_widget.update(Syntax(self.code_str, "python"))
             if callable(self.callback):
                 self.callback(event.value)
