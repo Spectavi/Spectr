@@ -233,13 +233,13 @@ PortfolioScreen {
 
 #portfolio-screen {
     width: 90%;
-    height: 63;
+    height: 52;
     text-align: center;
     content-align-horizontal: center;
     content-align-vertical: top;
     background: #1a1a1a;
     border: solid green;
-    padding: 1 2;
+    padding: 1 1;
 }
 #portfolio-title {
     padding: 0 1;
@@ -330,7 +330,7 @@ StrategyScreen {
 }
 
 #strategy-screen {
-    width: 75%;
+    width: 85%;
     height: 42;
     background: #1a1a1a;
     border: solid green;

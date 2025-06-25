@@ -212,8 +212,8 @@ class PortfolioScreen(Screen):
                 id="trade-amount-row",
             ),
             Input(id="trade-amount-input", placeholder="0.00"),
-            Static("Equity Curve:", id="equity-curve-title"),
-            self.equity_view,
+            #Static("Equity Curve:", id="equity-curve-title"),
+            #self.equity_view,
 
             Static("Holdings:", id="holdings-title"),
             self.holdings_table,

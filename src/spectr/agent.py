@@ -60,6 +60,7 @@ class VoiceAgent:
             Use that data to answer questions about stocks, ETFs, and other financial instruments.
             Do NOT ever claim that you lack real-time data if you have a tool that gets you that data; instead call the tools and respond concisely.
             You should always be friendly and helpful, but also sound like a professional financial news anchor.
+            Spectr should be pronounced like "Specter".
         """
         )
         # Keep track of the full chat history so conversations persist between

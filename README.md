@@ -24,28 +24,21 @@ BYOS - Bring Your Own Strategy. You must implement your own trading strategy in 
 ## ✨ Features
 
 - 📈 Real-time price monitoring with interactive charts.
-- 📈 Advanced hot-keys for quick sells of current position: 100% - `Ctrl+Z`, 50% - `Ctrl+X`, and 25% - `Ctrl+C`.
--  ⌨ Cycle through unlimited # of symbols with 0-9 keys or + / - keys.
-- 🤖 Arm / dis-arm auto-trading with `Ctrl+A`
-- 🔄 Change symbols list with `~` or `T`
-- 💾 Symbols list automatically saved between sessions
-- 📌 Any stocks you currently own are automatically prepended to the watchlist
-- 🔄 Click symbols in Top Gainers list to add to watchlist.
-- 🔄 Scanner that filters top 50 gainers for favorable conditions.
-- 💵 See portfolio info + open / pending orders with `P`.
-- 💵 Specify a default Trade Amount from the portfolio screen to pre-fill buy orders.
+- 📈 Real-time data API support (FMP)
+- 👁️ Broker API support (Alpaca, Robinhood (in progress))
 - 🧠 Supports MACD, Bollinger Bands, and Volume / VWAP.
+- 📈 Advanced hot-keys for quick sells of current position: 100% - `Ctrl+Z`, 50% - `Ctrl+X`, and 25% - `Ctrl+C`.
+- 💾 Symbols list automatically saved between sessions
+- 📌 Any stocks you currently own are automatically kept in the watchlist
+- 🔄 Scanner that filters top 50 gainers for favorable conditions.
+- 💵 Specify a default Trade Amount from the portfolio screen to pre-fill buy orders.
 - 💵 Live trading based on your custom strategy.
 - 💵 Paper trading based on your custom strategy. (Alpaca-only)
-- 📈 Real-time data API support (FMP)
-- 👁️ Broker API support (Alpaca, Robinhood (currently broken))
 - 🔁 Backtest mode with visual result playback with `b`.
 - 🎤 Experimental voice agent that can answer questions and fetch recent news
   articles for a stock symbol.
-- 🗣 Use the voice agent to add or remove symbols from your watch list
-  (it won't remove symbols you currently hold).
-- 🎤 Optional real-time mode listens for the wake word "spectr". Enable with
-  `--listen`.
+- 🗣 Use the voice agent to add or remove symbols from your watch list.
+- 🎤 Optional real-time mode listens for the wake word "spectr".
 
 ---
 
@@ -62,17 +55,20 @@ Currently focusing on Alpaca for broker and FMP for data. Robinhood currently br
 
 ## ⌨️ Keyboard Shortcuts
 
-| Shortcut | Action                              |
-|----------|-------------------------------------|
-| `Esc`    | Quit the app                        |
+| Shortcut | Action                         |
+|----------|--------------------------------|
+| `Esc`    | Quit the app                   |
 | `~ / T`  | Open ticker select + scanner dialog |
-| `0-9`    | Select ticker by index              |
-| `+ / -`  | Cycle through symbols list          |
-| `Ctrl+A` | Arm auto-trading mode               |
-| `Ctrl+Q` | Buy current ticker                  |
-| `Ctrl+Z` | Sell 100% of position               |
-| `Ctrl+X` | Sell 50% of position                |
-| `Ctrl+C` | Sell 25% of position                |
+| `0-9`    | Select ticker by index         |
+| `+ / -`  | Cycle through symbols list     |
+| `P`      | Show portfolio info            |
+| `B`      | Perform backtest               |
+| `S`      | Show strategy info             |
+| `Ctrl+A` | Arm auto-trading mode          |
+| `Ctrl+Q` | Buy current ticker             |
+| `Ctrl+Z` | Sell 100% of position          |
+| `Ctrl+X` | Sell 50% of position           |
+| `Ctrl+C` | Sell 25% of position           |
 
 
 ## 📦 Installation
@@ -116,8 +112,15 @@ PYTHONPATH=src python -m spectr.spectr --broker alpaca --data_api fmp --scale 0.
 | `--voice_agent_wake_word` | Word that triggers the voice agent (default: spectr). |
 
 ---------------
+
+### Portfolio Dialog. Shows cash, positions, and pending orders:
+![Portfolio Dialog](src/spectr/res/portfolio.png)
+
 ### Ticker Select Dialog with Scanner. Select rows to add to watchlist:
 ![Ticker Dialog](src/spectr/res/ticker_select_scanner.png)
+
+### Strategy Info Dialog. Shows strategy signal info:
+![Strategy Dialog](src/spectr/res/strategy_screen.png)
 
 ---------------
 
