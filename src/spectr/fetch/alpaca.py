@@ -280,10 +280,10 @@ class AlpacaInterface(BrokerInterface):
     def get_position(self, symbol: str):
         try:
             pos = self.get_api().get_open_position(symbol.upper())
-            log.debug(f"get_position for {symbol}: {len(pos)}")
+            log.debug(f"get_position for {symbol}: {pos}")
             return pos
-        except Exception:
-            log.debug("No position")
+        except Exception as exc:
+            log.debug(f"No position for {symbol}: {exc}")
             return None
 
     # ------------------------------------------------------------------ #
