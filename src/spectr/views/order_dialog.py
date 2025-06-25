@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 from ..fetch.broker_interface import OrderType, OrderSide
 
 """OrderDialog with dynamic Limit‑Price field.
@@ -205,10 +207,10 @@ class OrderDialog(ModalScreen):
             self.pos_qty   = float(pos.qty)
             self.pos_value = float(pos.market_value)
             if self.side == OrderSide.SELL and self.pos_pct > 0:
-                self.qty = round(self.pos_qty * (self.pos_pct / 100.0), 5)
+                self.qty = self.pos_qty * (self.pos_pct / 100.0)
                 qty_input = self.query_one("#dlg_qty_in", Input)
                 if is_initial_load:
-                    qty_input.value = f"{self.qty:.5f}"
+                    qty_input.value = f"{self.qty}"
         else:
             # When there's no position on the symbol, keep the BUY button
             # active and show "NO POSITION" instead of "N/A".
@@ -232,7 +234,7 @@ class OrderDialog(ModalScreen):
                     and not self._qty_modified
             ):
                 self.qty = round(self.trade_amount / self.price, 5)
-                self.query_one("#dlg_qty_in", Input).value = f"{self.qty:.5f}"
+                self.query_one("#dlg_qty_in", Input).value = f"{self.qty}"
             self._update_total()
 
     async def on_select_changed(self, event: Select.Changed):

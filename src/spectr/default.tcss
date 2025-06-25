@@ -159,7 +159,7 @@ OrderDialog {
 }
 
 #dlg_qty_in {
-    width: 25%
+    width: 50%
 }
 
 #dlg_buttons_row {
@@ -331,10 +331,10 @@ StrategyScreen {
 
 #strategy-screen {
     width: 85%;
-    height: 42;
+    height: 52;
     background: #1a1a1a;
     border: solid green;
-    padding: 1 2;
+    padding: 1 1;
     content-align-horizontal: center;
     content-align-vertical: top;
 }
@@ -357,7 +357,7 @@ StrategyScreen {
 
 #strategy-code {
     width: 100%;
-    height: 20;
+    height: 30;
     padding: 1 0;
-    overflow-y: auto;
+    overflow: auto;
 }

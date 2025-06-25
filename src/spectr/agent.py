@@ -1,3 +1,4 @@
+import logging
 import os
 import tempfile
 import json
@@ -23,6 +24,8 @@ import numpy as np
 from .news import get_latest_news, get_recent_news
 from . import cache
 from .fetch.broker_interface import BrokerInterface, OrderSide, OrderType
+
+log = logging.getLogger(__name__)
 
 
 class VoiceAgent:
@@ -676,9 +679,9 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
                 "sounddevice and soundfile are required for voice features"
             )
         sample_rate = 16_000
-        max_duration = 30  # safety valve to avoid runaway recording
+        max_duration = 60  # safety valve to avoid runaway recording
         silence_threshold = 0.01
-        silence_secs = 1.0
+        silence_secs = 1.5
         buffers: list[np.ndarray] = []
         silence_start: float | None = None
         start_time = time.time()
@@ -689,7 +692,7 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
                 data, _ = stream.read(int(sample_rate * 0.1))
                 buffers.append(data.copy())
                 # compute RMS amplitude to detect silence
-                amp = float(np.linalg.norm(data) / len(data))
+                amp = float(np.sqrt(np.mean(data ** 2)))
                 if amp < silence_threshold:
                     if silence_start is None:
                         silence_start = time.time()
@@ -711,13 +714,14 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
             return ""
         with open(wav_path, "rb") as audio_file:
             transcription = self.client.audio.transcriptions.create(
-                model="whisper-1",
+                model="gpt-4o-mini-transcribe",
                 file=audio_file,
             )
             user_text = transcription.text
 
         # Append the user's question so future calls retain context
         self.chat_history.append({"role": "user", "content": user_text})
+        log.info(f"User asked: {user_text}")
         tools = self.tools
 
         if cancel_event.is_set():

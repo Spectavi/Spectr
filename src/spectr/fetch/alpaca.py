@@ -29,12 +29,10 @@ DATA_PROVIDER = os.getenv("DATA_PROVIDER")
 API_KEY = (
     os.getenv("BROKER_API_KEY")
     or (os.getenv("DATA_API_KEY") if DATA_PROVIDER == "alpaca" else None)
-    or os.getenv("ALPACA_API_KEY")
 )
 SECRET_KEY = (
     os.getenv("BROKER_SECRET")
     or (os.getenv("DATA_SECRET") if DATA_PROVIDER == "alpaca" else None)
-    or os.getenv("ALPACA_SECRET_KEY")
 )
 PAPER_KEY = os.getenv("PAPER_API_KEY") or API_KEY
 PAPER_SECRET = os.getenv("PAPER_SECRET") or SECRET_KEY
