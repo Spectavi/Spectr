@@ -4,6 +4,7 @@ import json
 import threading
 import queue
 import time
+import logging
 from typing import Callable, Optional
 
 from openai import OpenAI
@@ -19,6 +20,8 @@ import requests
 import pandas as pd
 import numpy as np
 
+
+log = logging.getLogger(__name__)
 
 from .news import get_latest_news, get_recent_news
 from . import cache
@@ -715,6 +718,7 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
                 file=audio_file,
             )
             user_text = transcription.text
+        log.info(f"Voice agent received question: {user_text}")
 
         # Append the user's question so future calls retain context
         self.chat_history.append({"role": "user", "content": user_text})
