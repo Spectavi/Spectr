@@ -38,6 +38,7 @@ class VoiceAgent:
         get_cached_orders: Optional[Callable[[], list]] | None = None,
         add_symbol: Optional[Callable[[str], list]] | None = None,
         remove_symbol: Optional[Callable[[str], list]] | None = None,
+        get_strategy_code: Optional[Callable[[], str]] | None = None,
     ) -> None:
         """Initialize the voice agent and OpenAI client."""
         self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -49,6 +50,7 @@ class VoiceAgent:
         self._get_cached_orders = get_cached_orders
         self._add_symbol = add_symbol
         self._remove_symbol = remove_symbol
+        self._get_strategy_code = get_strategy_code
         pygame.mixer.init()
         self._queue: queue.Queue[tuple[str, threading.Event | None]] = queue.Queue()
         self._worker = threading.Thread(target=self._speech_worker, daemon=True)
@@ -302,6 +304,18 @@ class VoiceAgent:
                 }
             )
 
+        if self._get_strategy_code:
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_strategy_code",
+                        "description": "Return the source code of the active trading strategy",
+                        "parameters": {"type": "object", "properties": {}, "required": []},
+                    },
+                }
+            )
+
         if self.broker:
             tools.extend([
                 {
@@ -514,6 +528,11 @@ class VoiceAgent:
         if self._get_cached_orders:
             funcs["get_cached_orders"] = lambda: json.dumps(
                 self._serialize(self._get_cached_orders() or [])
+            )
+
+        if self._get_strategy_code:
+            funcs["get_strategy_code"] = lambda: json.dumps(
+                self._get_strategy_code()
             )
 
         if self.broker:
