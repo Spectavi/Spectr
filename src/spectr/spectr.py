@@ -321,6 +321,10 @@ class SpectrApp(App):
         await self.push_screen(SplashScreen(id="splash"), wait_for_dismiss=False)
         self.refresh()
 
+        overlay = self.query_one("#overlay-text", TopOverlay)
+        self.voice_agent._on_speech_start = overlay.start_voice_animation
+        self.voice_agent._on_speech_end = overlay.stop_voice_animation
+
         # Set symbols and active symbol
         self.ticker_symbols = self.args.symbols
         # Ensure any open positions are at the start of the watchlist.
