@@ -637,12 +637,11 @@ class VoiceAgent:
 
     def _speak(self, text: str) -> None:
         """Speak *text* using OpenAI text-to-speech."""
-        response = self.client.audio.speech.create(
+        params = dict(
             model=self.tts_model,
             voice=self.voice,
             input=text,
             speed=0.95,
-            stream=self.stream_voice,
             instructions="""
             Voice: Warm, upbeat, and reassuring, with a steady and confident cadence that keeps the conversation calm and productive.
 
@@ -653,12 +652,37 @@ Dialect: Neutral and professional, avoiding overly casual speech but maintaining
 Pronunciation: Clear and precise, with a natural rhythm that emphasizes key words to instill confidence and keep the customer engaged.
 
 Features: Uses empathetic phrasing, gentle reassurance, and proactive language to shift the focus from frustration to resolution.
-            """
+            """,
         )
-        if self.stream_voice:
-            audio_bytes = b"".join(chunk.content for chunk in response)
-        else:
-            audio_bytes = response.content
+        audio_bytes = b""
+        try:
+            if self.stream_voice:
+                # Newer openai clients use ``with_streaming_response``
+                if hasattr(self.client.audio.speech, "with_streaming_response"):
+                    resp = self.client.audio.speech.with_streaming_response.create(
+                        **params,
+                        stream_format="audio",
+                    )
+                    audio_bytes = b"".join(resp.iter_bytes())
+                else:
+                    resp = self.client.audio.speech.create(
+                        **params,
+                        stream=True,
+                    )
+                    audio_bytes = b"".join(chunk.content for chunk in resp)
+            else:
+                resp = self.client.audio.speech.create(**params)
+                audio_bytes = resp.content
+        except TypeError:
+            # Fallback for older openai clients expecting ``stream`` parameter
+            resp = self.client.audio.speech.create(
+                **params,
+                stream=self.stream_voice,
+            )
+            if self.stream_voice:
+                audio_bytes = b"".join(chunk.content for chunk in resp)
+            else:
+                audio_bytes = resp.content
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
             f.write(audio_bytes)
             fname = f.name
