@@ -58,6 +58,11 @@ def main() -> None:
     parser.add_argument(
         "--wake_word", default="spectr", help="Wake word that triggers the voice agent"
     )
+    parser.add_argument(
+        "--voice-streaming",
+        action="store_true",
+        help="Enable streaming text-to-speech for the voice agent",
+    )
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
 

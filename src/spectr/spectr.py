@@ -208,6 +208,7 @@ class SpectrApp(App):
             add_symbol=self.add_symbol,
             remove_symbol=self.remove_symbol,
             get_strategy_code=lambda: get_strategy_code(self.strategy_name),
+            stream_voice=getattr(args, "voice_streaming", False),
         )
         if getattr(args, "listen", False):
             self.voice_agent.start_wake_word_listener(

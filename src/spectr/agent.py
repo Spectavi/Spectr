@@ -44,6 +44,7 @@ class VoiceAgent:
         get_strategy_code: Optional[Callable[[], str]] | None = None,
         on_speech_start: Optional[Callable[[], None]] | None = None,
         on_speech_end: Optional[Callable[[], None]] | None = None,
+        stream_voice: bool = False,
     ) -> None:
         """Initialize the voice agent and OpenAI client."""
         self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -58,6 +59,7 @@ class VoiceAgent:
         self._get_strategy_code = get_strategy_code
         self._on_speech_start = on_speech_start
         self._on_speech_end = on_speech_end
+        self.stream_voice = stream_voice
         pygame.mixer.init()
         self._stop_event = threading.Event()
         self._current_channel: pygame.mixer.Channel | None = None
@@ -640,6 +642,7 @@ class VoiceAgent:
             voice=self.voice,
             input=text,
             speed=0.95,
+            stream=self.stream_voice,
             instructions="""
             Voice: Warm, upbeat, and reassuring, with a steady and confident cadence that keeps the conversation calm and productive.
 
@@ -652,8 +655,12 @@ Pronunciation: Clear and precise, with a natural rhythm that emphasizes key word
 Features: Uses empathetic phrasing, gentle reassurance, and proactive language to shift the focus from frustration to resolution.
             """
         )
+        if self.stream_voice:
+            audio_bytes = b"".join(chunk.content for chunk in response)
+        else:
+            audio_bytes = response.content
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
-            f.write(response.content)
+            f.write(audio_bytes)
             fname = f.name
         sound = pygame.mixer.Sound(fname)
         channel = sound.play()
