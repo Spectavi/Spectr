@@ -2,12 +2,12 @@ import logging
 from typing import Optional
 
 import pandas as pd
-import backtrader as bt
+from .trading_strategy import TradingStrategy
 
 log = logging.getLogger(__name__)
 
 
-class ShootingStar(bt.Strategy):
+class ShootingStar(TradingStrategy):
     """Shooting Star candlestick pattern strategy."""
 
     params = (
@@ -72,28 +72,18 @@ class ShootingStar(bt.Strategy):
             }
         return None
 
-    # ----- Backtesting -----
-    def next(self) -> None:
-        N = 10
-        data = {
-            "close": [self.datas[0].close[-i] for i in reversed(range(N))],
-            "open": [self.datas[0].open[-i] for i in reversed(range(N))],
-            "high": [self.datas[0].high[-i] for i in reversed(range(N))],
-            "low": [self.datas[0].low[-i] for i in reversed(range(N))],
-            "volume": [self.datas[0].volume[-i] for i in reversed(range(N))],
+    def get_lookback(self) -> int:
+        return 10
+
+    def get_signal_args(self) -> dict:
+        return {
+            "lower_bound": self.p.lower_bound,
+            "body_size": self.p.body_size,
+            "stop_threshold": self.p.stop_threshold,
+            "holding_period": self.p.holding_period,
         }
-        df = pd.DataFrame(data)
 
-        signal = self.detect_signals(
-            df,
-            self.p.symbol,
-            position=self.position,
-            lower_bound=self.p.lower_bound,
-            body_size=self.p.body_size,
-            stop_threshold=self.p.stop_threshold,
-            holding_period=self.p.holding_period,
-        )
-
+    def handle_signal(self, signal: Optional[dict]) -> None:
         if signal:
             log.debug(f"Signal detected: {signal}")
         else:

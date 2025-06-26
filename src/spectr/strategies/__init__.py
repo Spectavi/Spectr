@@ -5,6 +5,7 @@ import pkgutil
 from typing import Type
 
 import backtrader as bt
+from .trading_strategy import TradingStrategy
 
 __all__ = ["load_strategy", "list_strategies", "get_strategy_code"]
 
@@ -24,7 +25,10 @@ def list_strategies() -> dict[str, Type[bt.Strategy]]:
             )
             continue
         for name, obj in inspect.getmembers(module, inspect.isclass):
-            if issubclass(obj, bt.Strategy) and obj is not bt.Strategy:
+            if (
+                issubclass(obj, bt.Strategy)
+                and obj not in (bt.Strategy, TradingStrategy)
+            ):
                 strategies[name] = obj
     return strategies
 

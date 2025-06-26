@@ -1,12 +1,12 @@
 import logging
 
 import pandas as pd
-import backtrader as bt
+from .trading_strategy import TradingStrategy
 
 log = logging.getLogger(__name__)
 
 
-class CustomStrategy(bt.Strategy):
+class CustomStrategy(TradingStrategy):
     """Simple strategy used for both live signals and backtesting."""
 
     params = (
@@ -64,49 +64,15 @@ class CustomStrategy(bt.Strategy):
             }
         return None
 
-    # ----- Backtesting -----
-    def next(self):
-        # Build a DataFrame from the most recent N bars
-        N = 200  # Enough for MACD and BB
-        data = {
-            'close': [self.datas[0].close[-i] for i in reversed(range(N))],
-            'open': [self.datas[0].open[-i] for i in reversed(range(N))],
-            'high': [self.datas[0].high[-i] for i in reversed(range(N))],
-            'low': [self.datas[0].low[-i] for i in reversed(range(N))],
-            'volume': [self.datas[0].volume[-i] for i in reversed(range(N))],
+    def get_lookback(self) -> int:
+        return 200
+
+    def get_signal_args(self) -> dict:
+        return {
+            "stop_loss_pct": self.p.stop_loss_pct,
+            "take_profit_pct": self.p.take_profit_pct,
+            "bb_period": self.p.bb_period,
+            "bb_dev": self.p.bb_dev,
+            "macd_thresh": self.p.macd_thresh,
         }
-        df = pd.DataFrame(data)
-
-        signal = self.detect_signals(
-            df,
-            self.p.symbol,
-            position=self.position,
-            stop_loss_pct=self.p.stop_loss_pct,
-            take_profit_pct=self.p.take_profit_pct,
-            bb_period=self.p.bb_period,
-            bb_dev=self.p.bb_dev,
-            macd_thresh=self.p.macd_thresh,
-        )
-        if not signal:
-            log.debug("No signal detected, skipping this bar.")
-            return
-        else:
-            log.debug(f"Signal detected: {signal}")
-
-        if signal.get('signal') == 'buy' and not self.position.get(self.symbol):
-            log.debug(f"BACKTEST: Buy signal detected: {signal['reason']}")
-            self.buy()
-            self.buy_signals.append({
-                'type': 'buy',
-                'time': self.datas[0].datetime.datetime(0),
-                'price': self.datas[0].close[0],
-            })
-        elif signal.get('signal') == 'sell' and self.position.get(self.symbol):
-            log.debug(f"BACKTEST: Sell signal detected: {signal['reason']}")
-            self.sell()
-            self.sell_signals.append({
-                'type': 'sell',
-                'time': self.datas[0].datetime.datetime(0),
-                'price': self.datas[0].close[0],
-            })
 
