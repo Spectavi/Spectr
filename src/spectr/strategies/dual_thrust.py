@@ -4,12 +4,12 @@ from datetime import datetime
 
 import pandas as pd
 import numpy as np
-import backtrader as bt
+from .trading_strategy import TradingStrategy
 
 log = logging.getLogger(__name__)
 
 
-class DualThrust(bt.Strategy):
+class DualThrust(TradingStrategy):
     """Dual Thrust breakout strategy."""
 
     params = (
@@ -112,51 +112,26 @@ class DualThrust(bt.Strategy):
             }
         return None
 
-    # ----- Backtesting -----
-    def next(self) -> None:
-        N = (self.p.window + 1) * 390 + 5
+    def get_lookback(self) -> int:
+        return (self.p.window + 1) * 390 + 5
+
+    def build_dataframe(self, lookback: int) -> pd.DataFrame:
         data = {
-            "close": [self.datas[0].close[-i] for i in reversed(range(N))],
-            "open": [self.datas[0].open[-i] for i in reversed(range(N))],
-            "high": [self.datas[0].high[-i] for i in reversed(range(N))],
-            "low": [self.datas[0].low[-i] for i in reversed(range(N))],
-            "volume": [self.datas[0].volume[-i] for i in reversed(range(N))],
+            "close": [self.datas[0].close[-i] for i in reversed(range(lookback))],
+            "open": [self.datas[0].open[-i] for i in reversed(range(lookback))],
+            "high": [self.datas[0].high[-i] for i in reversed(range(lookback))],
+            "low": [self.datas[0].low[-i] for i in reversed(range(lookback))],
+            "volume": [self.datas[0].volume[-i] for i in reversed(range(lookback))],
         }
-        index = [self.datas[0].datetime.datetime(-i) for i in reversed(range(N))]
-        df = pd.DataFrame(data, index=index)
+        index = [self.datas[0].datetime.datetime(-i) for i in reversed(range(lookback))]
+        return pd.DataFrame(data, index=index)
 
-        signal = self.detect_signals(
-            df,
-            self.p.symbol,
-            position=self.position,
-            k=self.p.k,
-            window=self.p.window,
-            start_time=self.p.start_time,
-            end_time=self.p.end_time,
-            stop_loss_pct=self.p.stop_loss_pct,
-            take_profit_pct=self.p.take_profit_pct,
-        )
-        if not signal:
-            log.debug("No signal detected, skipping this bar.")
-            return
-        else:
-            log.debug(f"Signal detected: {signal}")
-
-        if signal.get("signal") == "buy" and not self.position.get(self.p.symbol):
-            self.buy()
-            self.buy_signals.append(
-                {
-                    "type": "buy",
-                    "time": self.datas[0].datetime.datetime(0),
-                    "price": self.datas[0].close[0],
-                }
-            )
-        elif signal.get("signal") == "sell" and self.position.get(self.p.symbol):
-            self.sell()
-            self.sell_signals.append(
-                {
-                    "type": "sell",
-                    "time": self.datas[0].datetime.datetime(0),
-                    "price": self.datas[0].close[0],
-                }
-            )
+    def get_signal_args(self) -> dict:
+        return {
+            "k": self.p.k,
+            "window": self.p.window,
+            "start_time": self.p.start_time,
+            "end_time": self.p.end_time,
+            "stop_loss_pct": self.p.stop_loss_pct,
+            "take_profit_pct": self.p.take_profit_pct,
+        }
