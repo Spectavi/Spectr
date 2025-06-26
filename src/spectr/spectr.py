@@ -538,39 +538,44 @@ class SpectrApp(App):
 
     async def _shutdown(self) -> None:
         """Stop background tasks and exit the application."""
-        log.debug("on_shutdown start")
-        self.exit_event.set()
-        self._exit_backtest()
-        self.auto_trading_enabled = False
-        self._shutting_down = True
+        log.info("on_shutdown start")
+        try:
+            self.exit_event.set()
+            self._exit_backtest()
+            self.auto_trading_enabled = False
+            self._shutting_down = True
 
-        cache.save_symbols_cache(self.ticker_symbols)
+            cache.save_symbols_cache(self.ticker_symbols)
 
-        if self._scanner_worker:
-            log.debug("cancelling scanner worker")
-            self._scanner_worker.cancel()
-            self._scanner_worker = None
+            if self._scanner_worker:
+                log.debug("cancelling scanner worker")
+                self._scanner_worker.cancel()
+                self._scanner_worker = None
 
-        if self._poll_worker:
-            log.debug("cancelling poll worker")
-            self._poll_worker.cancel()
-            self._poll_worker = None
+            if self._poll_worker:
+                log.debug("cancelling poll worker")
+                self._poll_worker.cancel()
+                self._poll_worker = None
 
-        if self._equity_worker:
-            log.debug("cancelling equity worker")
-            self._equity_worker.cancel()
-            self._equity_worker = None
+            if self._equity_worker:
+                log.debug("cancelling equity worker")
+                self._equity_worker.cancel()
+                self._equity_worker = None
 
-        if self._consumer_task:
-            log.debug("cancelling consumer task")
-            self._update_queue.put_nowait(None)
-            self._consumer_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                self._consumer_task = None
+            if self._consumer_task:
+                log.debug("cancelling consumer task")
+                self._update_queue.put_nowait(None)
+                self._consumer_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    self._consumer_task = None
 
-        self.voice_agent.stop_wake_word_listener()
+            self.voice_agent.stop_wake_word_listener()
 
-        log.debug("on_shutdown complete")
+        except Exception:
+            log.exception("on_shutdown encountered an error")
+            os._exit(1)
+
+        log.info("on_shutdown complete")
         self.exit(return_code=0)
 
     async def action_quit(self):
