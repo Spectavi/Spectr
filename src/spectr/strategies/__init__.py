@@ -15,6 +15,8 @@ def list_strategies() -> dict[str, Type[bt.Strategy]]:
     strategies: dict[str, Type[bt.Strategy]] = {}
     package = __name__
     for _, mod_name, _ in pkgutil.iter_modules(__path__):
+        if mod_name == "trading_strategy":
+            continue
         try:
             module = importlib.import_module(f"{package}.{mod_name}")
         except Exception as exc:  # pragma: no cover - import failures
