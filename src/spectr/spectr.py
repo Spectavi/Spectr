@@ -1018,6 +1018,9 @@ class SpectrApp(App):
             df, _ = await asyncio.to_thread(
                 get_historical_data,
                 DATA_API,
+                self.config.bb_period,
+                self.config.bb_dev,
+                self.config.macd_thresh,
                 symbol,
                 from_date=form["from"],
                 to_date=form["to"],
