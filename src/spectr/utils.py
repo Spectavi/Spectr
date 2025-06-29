@@ -7,10 +7,17 @@ from tzlocal import get_localzone
 
 import pandas as pd
 import threading
+import warnings
 
 from .strategies import metrics
 
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
+warnings.filterwarnings(
+    "ignore",
+    message="pkg_resources is deprecated as an API.*",
+    category=UserWarning,
+    module="pygame.pkgdata",
+)
 import pygame
 
 from .fetch import data_interface

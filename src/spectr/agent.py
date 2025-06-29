@@ -8,6 +8,14 @@ import time
 from typing import Callable, Optional
 
 from openai import OpenAI
+import warnings
+os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
+warnings.filterwarnings(
+    "ignore",
+    message="pkg_resources is deprecated as an API.*",
+    category=UserWarning,
+    module="pygame.pkgdata",
+)
 import pygame
 try:  # optional voice dependencies
     import sounddevice as sd
