@@ -466,7 +466,7 @@ class SpectrApp(App):
         """Periodically update portfolio equity using cached quotes."""
         while not self.exit_event.is_set():
             try:
-                self._update_portfolio_equity()
+                await asyncio.to_thread(self._update_portfolio_equity)
             except Exception as exc:
                 log.error(f"[equity] {exc}")
 
