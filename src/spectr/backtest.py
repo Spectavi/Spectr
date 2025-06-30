@@ -39,13 +39,16 @@ def run_backtest(
     # Band settings).  Only parameters defined on the strategy are forwarded.
     params = {"symbol": symbol}
 
-    if hasattr(strategy_class, "params"):
-        try:
-            keys = list(strategy_class.params._getkeys())
-        except Exception:  # pragma: no cover - very unlikely
-            keys = []
-    else:  # pragma: no cover - fallback for unusual classes
-        keys = []
+    keys = []
+    params_obj = getattr(strategy_class, "params", None)
+    if params_obj is not None:
+        if hasattr(params_obj, "_getkeys"):
+            try:
+                keys = list(params_obj._getkeys())
+            except Exception:  # pragma: no cover - very unlikely
+                keys = []
+        elif isinstance(params_obj, dict):  # pragma: no cover - alternative form
+            keys = list(params_obj.keys())
 
     for key in keys:
         if key == "symbol":
