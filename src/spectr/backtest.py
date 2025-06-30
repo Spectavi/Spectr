@@ -3,6 +3,9 @@ import logging
 import backtrader as bt
 import pandas as pd
 
+from . import utils
+from .strategies import metrics
+
 log = logging.getLogger(__name__)
 
 
@@ -14,14 +17,24 @@ class CommInfoFractional(bt.CommissionInfo):
 
 
 def run_backtest(
-    df: pd.DataFrame, symbol: str, config, strategy_class, starting_cash: float = 1000.0
+    df: pd.DataFrame | None,
+    symbol: str,
+    config,
+    strategy_class,
+    starting_cash: float = 1000.0,
+    *,
+    data_api=None,
+    from_date: str | None = None,
+    to_date: str | None = None,
 ):
     """Execute a backtest using ``backtrader``.
 
     Parameters
     ----------
-    df : pd.DataFrame
-        Historical price data with indicators already computed.
+    df : pd.DataFrame | None
+        Historical price data. If ``None``, ``data_api`` along with
+        ``from_date`` and ``to_date`` must be provided and the data will be
+        fetched using :func:`spectr.utils.get_historical_data`.
     symbol : str
         Ticker symbol for the strategy.
     config : object
@@ -30,7 +43,35 @@ def run_backtest(
         Strategy class compatible with ``backtrader``.
     starting_cash : float, optional
         Initial account value, by default ``1000.0``.
+    data_api : DataInterface, optional
+        Data provider used to fetch historical bars when ``df`` is ``None``.
+    from_date, to_date : str, optional
+        Inclusive date range for the backtest when data must be fetched.
     """
+
+    if df is None:
+        if not all([data_api, from_date, to_date]):
+            raise ValueError(
+                "df is None but data_api/from_date/to_date were not provided"
+            )
+        df, _ = utils.get_historical_data(
+            data_api,
+            config.bb_period,
+            config.bb_dev,
+            config.macd_thresh,
+            symbol,
+            from_date=from_date,
+            to_date=to_date,
+        )
+
+    # Ensure indicators are present
+    if "macd" not in df.columns or "bb_mid" not in df.columns:
+        df = metrics.analyze_indicators(
+            df,
+            config.bb_period,
+            config.bb_dev,
+            config.macd_thresh,
+        )
 
     cerebro = bt.Cerebro()
     # Dynamically map ``config`` attributes onto the strategy parameters.  This
