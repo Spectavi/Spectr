@@ -57,7 +57,7 @@ class AwesomeOscillator(TradingStrategy):
 
         in_position = False
         if position is not None:
-            qty = getattr(position, "qty", 0)
+            qty = getattr(position, "qty", getattr(position, "size", 0))
             try:
                 in_position = float(qty) != 0
             except Exception:

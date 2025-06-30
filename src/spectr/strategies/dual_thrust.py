@@ -75,11 +75,13 @@ class DualThrust(TradingStrategy):
         reason = None
         price = float(curr.get("close", 0))
 
-        qty = getattr(position, "qty", 0) if position is not None else 0
-        try:
-            qty = float(qty)
-        except Exception:
-            qty = 0.0
+        qty = 0
+        if position is not None:
+            qty = getattr(position, "qty", getattr(position, "size", 0))
+            try:
+                qty = float(qty)
+            except Exception:
+                qty = 0.0
         in_pos = qty != 0
         pos_dir = 1 if qty > 0 else -1 if qty < 0 else 0
 
