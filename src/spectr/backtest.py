@@ -13,7 +13,9 @@ class CommInfoFractional(bt.CommissionInfo):
         return self.p.leverage * (cash / price)
 
 
-def run_backtest(df: pd.DataFrame, symbol: str, config, strategy_class, starting_cash: float = 1000.0):
+def run_backtest(
+    df: pd.DataFrame, symbol: str, config, strategy_class, starting_cash: float = 1000.0
+):
     """Execute a backtest using ``backtrader``.
 
     Parameters
@@ -31,13 +33,27 @@ def run_backtest(df: pd.DataFrame, symbol: str, config, strategy_class, starting
     """
 
     cerebro = bt.Cerebro()
-    cerebro.addstrategy(
-        strategy_class,
-        symbol=symbol,
-        bb_period=config.bb_period,
-        bb_dev=config.bb_dev,
-        macd_thresh=config.macd_thresh,
-    )
+    # Dynamically map ``config`` attributes onto the strategy parameters.  This
+    # allows running backtests with different strategy classes that may not
+    # accept the same keywords (e.g. ``MACDOscillator`` doesn't use Bollinger
+    # Band settings).  Only parameters defined on the strategy are forwarded.
+    params = {"symbol": symbol}
+
+    if hasattr(strategy_class, "params"):
+        try:
+            keys = list(strategy_class.params._getkeys())
+        except Exception:  # pragma: no cover - very unlikely
+            keys = []
+    else:  # pragma: no cover - fallback for unusual classes
+        keys = []
+
+    for key in keys:
+        if key == "symbol":
+            continue
+        if hasattr(config, key):
+            params[key] = getattr(config, key)
+
+    cerebro.addstrategy(strategy_class, **params)
 
     data = bt.feeds.PandasData(dataname=df)
     cerebro.adddata(data)
