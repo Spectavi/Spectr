@@ -186,12 +186,13 @@ class RobinhoodInterface(BrokerInterface, DataInterface):
             log.error(f"Failed to fetch closed orders: {exc}")
             return pd.DataFrame()
 
-    def get_all_orders(self) -> list:
+    def get_all_orders(self) -> pd.DataFrame:
         try:
-            return r.orders.get_all_stock_orders()
+            orders = r.orders.get_all_stock_orders()
+            return pd.DataFrame(orders)
         except Exception as exc:
             log.error(f"Failed to fetch orders: {exc}")
-            return []
+            return pd.DataFrame()
 
     def get_orders_for_symbol(self, symbol: str) -> pd.DataFrame:
         try:
