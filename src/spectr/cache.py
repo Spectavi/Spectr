@@ -12,12 +12,21 @@ log = logging.getLogger(__name__)
 CACHE_DIR = "cache"
 CACHE_PATH_STR = ".{}.cache"
 
-SYMBOLS_CACHE_PATH = pathlib.Path.home() / ".spectr_symbols_cache.json"
-SCANNER_CACHE_FILE = pathlib.Path.home() / ".spectr_scanner_cache.json"
-GAINERS_CACHE_FILE = pathlib.Path.home() / ".spectr_gainers_cache.json"
-STRATEGY_CACHE_FILE = pathlib.Path.home() / ".spectr_strategy_cache.json"
-STRATEGY_NAME_FILE = pathlib.Path.home() / ".spectr_selected_strategy.json"
-SCANNER_NAME_FILE = pathlib.Path.home() / ".spectr_selected_scanner.json"
+CACHE_FILE = pathlib.Path.home() / ".spectr_cache.json"
+
+
+def _load_cache(path: pathlib.Path = CACHE_FILE) -> dict:
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return {}
+
+
+def _save_cache(data: dict, path: pathlib.Path = CACHE_FILE) -> None:
+    try:
+        path.write_text(json.dumps(data, indent=0))
+    except Exception as exc:
+        log.error(f"cache write failed: {exc}")
 
 
 def save_cache(symbol: str, df: pd.DataFrame) -> None:
@@ -43,59 +52,50 @@ def load_cache(symbol: str) -> pd.DataFrame:
     return pd.DataFrame()
 
 
-def save_scanner_cache(rows: list[dict], path: pathlib.Path = SCANNER_CACHE_FILE) -> None:
-    try:
-        path.write_text(json.dumps({"t": time.time(), "rows": rows}, indent=0))
-    except Exception as exc:
-        log.error(f"cache write failed: {exc}")
+def save_scanner_cache(rows: list[dict], path: pathlib.Path = CACHE_FILE) -> None:
+    data = _load_cache(path)
+    data["scanner_cache"] = {"t": time.time(), "rows": rows}
+    _save_cache(data, path)
 
 
-def load_scanner_cache(path: pathlib.Path = SCANNER_CACHE_FILE) -> list[dict]:
-    try:
-        blob = json.loads(path.read_text())
-        if time.time() - blob.get("t", 0) > 900:
-            return []
-        return blob.get("rows", [])
-    except Exception:
+def load_scanner_cache(path: pathlib.Path = CACHE_FILE) -> list[dict]:
+    data = _load_cache(path)
+    blob = data.get("scanner_cache", {})
+    if time.time() - blob.get("t", 0) > 900:
         return []
+    return blob.get("rows", [])
 
 
-def save_gainers_cache(rows: list[dict], path: pathlib.Path = GAINERS_CACHE_FILE) -> None:
-    try:
-        path.write_text(json.dumps({"t": time.time(), "rows": rows}, indent=0))
-    except Exception as exc:
-        log.error(f"gainers cache write failed: {exc}")
+def save_gainers_cache(rows: list[dict], path: pathlib.Path = CACHE_FILE) -> None:
+    data = _load_cache(path)
+    data["gainers_cache"] = {"t": time.time(), "rows": rows}
+    _save_cache(data, path)
 
 
-def load_gainers_cache(path: pathlib.Path = GAINERS_CACHE_FILE) -> list[dict]:
-    try:
-        blob = json.loads(path.read_text())
-        if time.time() - blob.get("t", 0) > 900:
-            return []
-        return blob.get("rows", [])
-    except Exception:
+def load_gainers_cache(path: pathlib.Path = CACHE_FILE) -> list[dict]:
+    data = _load_cache(path)
+    blob = data.get("gainers_cache", {})
+    if time.time() - blob.get("t", 0) > 900:
         return []
+    return blob.get("rows", [])
 
 
-def save_strategy_cache(rows: list[dict], path: pathlib.Path = STRATEGY_CACHE_FILE) -> None:
-    try:
-        out = []
-        for rec in rows:
-            out_rec = dict(rec)
-            ts = out_rec.get("time")
-            if isinstance(ts, datetime):
-                out_rec["time"] = ts.isoformat()
-            out.append(out_rec)
-        path.write_text(json.dumps(out, indent=0))
-    except Exception as exc:
-        log.error(f"strategy cache write failed: {exc}")
+def save_strategy_cache(rows: list[dict], path: pathlib.Path = CACHE_FILE) -> None:
+    out = []
+    for rec in rows:
+        out_rec = dict(rec)
+        ts = out_rec.get("time")
+        if isinstance(ts, datetime):
+            out_rec["time"] = ts.isoformat()
+        out.append(out_rec)
+    data = _load_cache(path)
+    data["strategy_cache"] = out
+    _save_cache(data, path)
 
 
-def load_strategy_cache(path: pathlib.Path = STRATEGY_CACHE_FILE) -> list[dict]:
-    try:
-        rows = json.loads(path.read_text())
-    except Exception:
-        return []
+def load_strategy_cache(path: pathlib.Path = CACHE_FILE) -> list[dict]:
+    data = _load_cache(path)
+    rows = data.get("strategy_cache", [])
     out = []
     for rec in rows:
         if isinstance(rec, dict):
@@ -109,7 +109,7 @@ def load_strategy_cache(path: pathlib.Path = STRATEGY_CACHE_FILE) -> list[dict]:
     return out
 
 
-def record_signal(cache_list: list[dict], sig: dict, path: pathlib.Path = STRATEGY_CACHE_FILE) -> None:
+def record_signal(cache_list: list[dict], sig: dict, path: pathlib.Path = CACHE_FILE) -> None:
     cache_list.append(sig)
     save_strategy_cache(cache_list, path)
 
@@ -119,7 +119,7 @@ def attach_order_to_last_signal(
     symbol: str,
     side: str,
     order: object | None,
-    path: pathlib.Path = STRATEGY_CACHE_FILE,
+    path: pathlib.Path = CACHE_FILE,
 ) -> None:
     """Attach order details to the most recent matching signal."""
     if order is None:
@@ -153,7 +153,7 @@ def attach_order_to_last_signal(
 def update_order_statuses(
     cache_list: list[dict],
     orders: list,
-    path: pathlib.Path = STRATEGY_CACHE_FILE,
+    path: pathlib.Path = CACHE_FILE,
 ) -> None:
     """Refresh order status values in the strategy cache."""
 
@@ -191,63 +191,58 @@ def update_order_statuses(
         save_strategy_cache(cache_list, path)
 
 
-def save_symbols_cache(symbols: list[str], path: pathlib.Path = SYMBOLS_CACHE_PATH) -> None:
-    try:
-        path.write_text(json.dumps(symbols))
-    except Exception as exc:
-        log.error(f"symbols cache write failed: {exc}")
+def save_symbols_cache(symbols: list[str], path: pathlib.Path = CACHE_FILE) -> None:
+    data = _load_cache(path)
+    data["symbols_cache"] = symbols
+    _save_cache(data, path)
 
 
-def load_symbols_cache(path: pathlib.Path = SYMBOLS_CACHE_PATH) -> list[str]:
-    try:
-        return json.loads(path.read_text())
-    except Exception:
-        return []
+def load_symbols_cache(path: pathlib.Path = CACHE_FILE) -> list[str]:
+    data = _load_cache(path)
+    return data.get("symbols_cache", [])
 
-def save_selected_strategy(name: str, path: pathlib.Path = STRATEGY_NAME_FILE) -> None:
+def save_selected_strategy(name: str, path: pathlib.Path = CACHE_FILE) -> None:
     """Persist the currently selected strategy name."""
     try:
-        path.write_text(json.dumps(name))
+        data = _load_cache(path)
+        data["selected_strategy"] = name
+        _save_cache(data, path)
     except Exception as exc:
         log.error(f"strategy name cache write failed: {exc}")
 
 
-def load_selected_strategy(path: pathlib.Path = STRATEGY_NAME_FILE) -> str | None:
+def load_selected_strategy(path: pathlib.Path = CACHE_FILE) -> str | None:
     """Load the last selected strategy name from cache."""
-    try:
-        return json.loads(path.read_text())
-    except Exception:
-        return None
+    data = _load_cache(path)
+    return data.get("selected_strategy")
 
 
-def save_selected_scanner(name: str, path: pathlib.Path = SCANNER_NAME_FILE) -> None:
+def save_selected_scanner(name: str, path: pathlib.Path = CACHE_FILE) -> None:
     """Persist the currently selected scanner name."""
     try:
-        path.write_text(json.dumps(name))
+        data = _load_cache(path)
+        data["selected_scanner"] = name
+        _save_cache(data, path)
     except Exception as exc:
         log.error(f"scanner name cache write failed: {exc}")
 
 
-def load_selected_scanner(path: pathlib.Path = SCANNER_NAME_FILE) -> str | None:
+def load_selected_scanner(path: pathlib.Path = CACHE_FILE) -> str | None:
     """Load the last selected scanner name from cache."""
-    try:
-        return json.loads(path.read_text())
-    except Exception:
-        return None
-ONBOARD_FILE = pathlib.Path.home() / ".spectr_onboard.json"
-
-
-def save_onboarding_config(config: dict, path: pathlib.Path = ONBOARD_FILE) -> None:
+    data = _load_cache(path)
+    return data.get("selected_scanner")
+def save_onboarding_config(config: dict, path: pathlib.Path = CACHE_FILE) -> None:
     """Persist onboarding configuration."""
     try:
-        path.write_text(json.dumps(config))
+        data = _load_cache(path)
+        data["onboarding_config"] = config
+        _save_cache(data, path)
     except Exception as exc:
         log.error(f"onboarding cache write failed: {exc}")
 
 
-def load_onboarding_config(path: pathlib.Path = ONBOARD_FILE) -> dict | None:
+def load_onboarding_config(path: pathlib.Path = CACHE_FILE) -> dict | None:
     """Load onboarding configuration if present."""
-    try:
-        return json.loads(path.read_text())
-    except Exception:
-        return None
+    data = _load_cache(path)
+    cfg = data.get("onboarding_config")
+    return cfg if isinstance(cfg, dict) else None
