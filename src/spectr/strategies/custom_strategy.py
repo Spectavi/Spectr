@@ -19,6 +19,7 @@ class CustomStrategy(TradingStrategy):
         ("bb_dev", 2.0),
         ("stop_loss_pct", 0.01),
         ("take_profit_pct", 0.05),
+        ("is_backtest", False),
     )
 
     def __init__(self):
@@ -29,7 +30,7 @@ class CustomStrategy(TradingStrategy):
     def detect_signals(df: pd.DataFrame, symbol: str, position=None,
                        stop_loss_pct: float = 0.01, take_profit_pct: float = 0.05,
                        bb_period: int = 20, bb_dev: float = 2.0,
-                       macd_thresh: float = 0.005):
+                       macd_thresh: float = 0.005, is_backtest = False):
         """Return a signal dictionary when conditions trigger."""
         if df.empty:
             return None
@@ -39,8 +40,9 @@ class CustomStrategy(TradingStrategy):
         reason = None
         signal = None
 
-        if df.iloc[-1].get('bb_upper') is None or df.iloc[-1].get('bb_upper').isnan():
-            df = metrics.analyze_indicators(df, bb_period, bb_dev, macd_thresh)
+        if is_backtest:
+            if df.iloc[-1].get('bb_upper') is None or df.iloc[-1].get('bb_upper').isnan():
+                df = metrics.analyze_indicators(df, bb_period, bb_dev, macd_thresh)
 
         macd_cross = curr.get("macd_crossover")
         above_bb = curr.get("close", 0) > curr.get("bb_upper", 0)
