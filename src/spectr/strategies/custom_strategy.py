@@ -40,7 +40,15 @@ class CustomStrategy(TradingStrategy):
         above_bb = curr.get("close", 0) > curr.get("bb_upper", 0)
         below_bb = curr.get("close", 0) < curr.get("bb_mid", 0)
 
-        if position is None or float(getattr(position, "qty", 0)) == 0:
+        qty = 0
+        if position is not None:
+            qty = getattr(position, "qty", getattr(position, "size", 0))
+            try:
+                qty = float(qty)
+            except Exception:
+                qty = 0.0
+
+        if position is None or qty == 0:
             if macd_cross == "buy":
                 signal = "buy"
                 reason = "MACD crossover"

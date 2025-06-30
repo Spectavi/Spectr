@@ -58,8 +58,11 @@ class MACDOscillator(TradingStrategy):
 
         in_position = False
         if position is not None:
-            qty = getattr(position, "qty", 0)
-            in_position = float(qty) != 0
+            qty = getattr(position, "qty", getattr(position, "size", 0))
+            try:
+                in_position = float(qty) != 0
+            except Exception:
+                in_position = bool(qty)
 
         if not in_position:
             if curr_osc > 0 and prev_osc <= 0:

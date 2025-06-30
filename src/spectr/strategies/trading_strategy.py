@@ -37,7 +37,7 @@ class TradingStrategy(bt.Strategy):
 
         log.debug(f"Signal detected: {signal}")
 
-        if signal.get("signal") == "buy" and not self.position.get(self.p.symbol):
+        if signal.get("signal") == "buy" and not self.position:
             self.buy()
             self.buy_signals.append(
                 {
@@ -46,7 +46,7 @@ class TradingStrategy(bt.Strategy):
                     "price": self.datas[0].close[0],
                 }
             )
-        elif signal.get("signal") == "sell" and self.position.get(self.p.symbol):
+        elif signal.get("signal") == "sell" and self.position:
             self.sell()
             self.sell_signals.append(
                 {

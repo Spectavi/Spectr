@@ -46,7 +46,9 @@ class ShootingStar(TradingStrategy):
         prev2 = df.iloc[-4]
 
         cond1 = cand["open"] >= cand["close"]
-        cond2 = (cand["close"] - cand["low"]) < lower_bound * abs(cand["close"] - cand["open"])
+        cond2 = (cand["close"] - cand["low"]) < lower_bound * abs(
+            cand["close"] - cand["open"]
+        )
         avg_body = abs(df["open"] - df["close"]).mean()
         cond3 = abs(cand["open"] - cand["close"]) < abs(avg_body) * body_size
         cond4 = (cand["high"] - cand["open"]) >= 2 * (cand["open"] - cand["close"])
@@ -57,13 +59,15 @@ class ShootingStar(TradingStrategy):
 
         in_position = False
         if position is not None:
-            qty = getattr(position, "qty", 0)
+            qty = getattr(position, "qty", getattr(position, "size", 0))
             try:
                 in_position = float(qty) != 0
             except Exception:
                 in_position = bool(qty)
 
-        if not in_position and all([cond1, cond2, cond3, cond4, cond5, cond6, cond7, cond8]):
+        if not in_position and all(
+            [cond1, cond2, cond3, cond4, cond5, cond6, cond7, cond8]
+        ):
             return {
                 "signal": "sell",
                 "price": float(curr.get("close", 0)),
@@ -89,7 +93,9 @@ class ShootingStar(TradingStrategy):
         else:
             log.debug("No signal detected, skipping this bar.")
 
-        if signal and signal.get("signal") == "sell" and not self.position.get(self.p.symbol):
+        current_position = self.getposition(self.datas[0])
+        qty = getattr(current_position, "size", getattr(current_position, "qty", 0))
+        if signal and signal.get("signal") == "sell" and not qty:
             log.debug(f"BACKTEST: Sell signal detected: {signal['reason']}")
             self.sell()
             self.sell_signals.append(
@@ -103,12 +109,17 @@ class ShootingStar(TradingStrategy):
             self.bars_since_entry = 0
             return
 
-        if self.position.get(self.p.symbol):
+        current_position = self.getposition(self.datas[0])
+        qty = getattr(current_position, "size", getattr(current_position, "qty", 0))
+        if qty < 0:
             self.bars_since_entry += 1
             if self.entry_price is None:
                 self.entry_price = float(self.datas[0].close[0])
             change = abs(self.datas[0].close[0] / self.entry_price - 1)
-            if change > self.p.stop_threshold or self.bars_since_entry >= self.p.holding_period:
+            if (
+                change > self.p.stop_threshold
+                or self.bars_since_entry >= self.p.holding_period
+            ):
                 log.debug("BACKTEST: Exiting short position")
                 self.buy()
                 self.buy_signals.append(
@@ -120,4 +131,3 @@ class ShootingStar(TradingStrategy):
                 )
                 self.entry_price = None
                 self.bars_since_entry = 0
-
