@@ -115,7 +115,7 @@ PYTHONPATH=src python -m spectr.spectr --broker alpaca --data_api fmp --scale 0.
 ---------------
 
 ### Setup Screen. Shows on initial startup or via Portfolio dialog.
-~[Setup Screen](src/spectr/res/setup.png)
+![Setup Screen](src/spectr/res/setup.png)
 
 ### Portfolio Dialog (P key). Shows cash, positions, and pending orders:
 ![Portfolio Dialog](src/spectr/res/portfolio.png)
