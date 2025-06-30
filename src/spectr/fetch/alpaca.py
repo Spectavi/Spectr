@@ -113,7 +113,8 @@ class AlpacaInterface(BrokerInterface):
 
         Returns
         -------
-        list[alpaca.trading.models.Order]   (empty list if none or on error)
+        pandas.DataFrame
+            A DataFrame of open orders. Empty on error or when none exist.
         """
         try:
             tc = self.get_api()
@@ -122,11 +123,22 @@ class AlpacaInterface(BrokerInterface):
                 status=QueryOrderStatus.OPEN,     # "open" orders only
                 symbols=[symbol.upper()] if symbol else None,
             )
-            return tc.get_orders(req)
+            orders = tc.get_orders(req)
+
+            if not orders:
+                return pd.DataFrame()
+
+            df = pd.DataFrame([o.model_dump() for o in orders])
+            for col in ("created_at", "filled_at", "submitted_at",
+                        "updated_at", "canceled_at"):
+                if col in df.columns:
+                    df[col] = pd.to_datetime(df[col], utc=True, errors="ignore")
+
+            return df
 
         except Exception as exc:
             log.error(f"get_pending_orders error: {exc}")
-            return []
+            return pd.DataFrame()
 
     # ------------------------------------------------------------------ #
     #  Returns ALL closed orders on the account.
@@ -199,7 +211,17 @@ class AlpacaInterface(BrokerInterface):
             # Empty request object => no filters → returns every order
             orders = api.get_orders(GetOrdersRequest(status=QueryOrderStatus.ALL))
             log.debug(f"get_all_orders returned {len(orders)} orders")
-            return orders
+
+            if not orders:
+                return pd.DataFrame()
+
+            df = pd.DataFrame([o.model_dump() for o in orders])
+            for col in ("created_at", "filled_at", "submitted_at",
+                        "updated_at", "canceled_at"):
+                if col in df.columns:
+                    df[col] = pd.to_datetime(df[col], utc=True, errors="ignore")
+
+            return df
         except Exception as exc:
             log.error(f"get_all_orders error: {exc}")
             return pd.DataFrame()
