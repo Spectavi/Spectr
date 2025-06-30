@@ -65,7 +65,7 @@ class TickerInputDialog(ModalScreen):
                 Label("Scanner:", id="scanner-label"),
                 Select(
                     id="scanner-select",
-                    prompt="Scanner",
+                    prompt="",
                     value=self.current_scanner,
                     options=[(name, name) for name in self.scanner_names],
                 ),

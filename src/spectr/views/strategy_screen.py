@@ -67,7 +67,7 @@ class StrategyScreen(Screen):
 
         select = Select(
             id="strategy-select",
-            prompt="Strategy",
+            prompt="",
             value=self.current,
             options=[(name, name) for name in self.strategy_names],
         )

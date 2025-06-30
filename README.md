@@ -114,13 +114,16 @@ PYTHONPATH=src python -m spectr.spectr --broker alpaca --data_api fmp --scale 0.
 
 ---------------
 
-### Portfolio Dialog. Shows cash, positions, and pending orders:
+### Setup Screen. Shows on initial startup or via Portfolio dialog.
+~[Setup Screen](src/spectr/res/setup.png)
+
+### Portfolio Dialog (P key). Shows cash, positions, and pending orders:
 ![Portfolio Dialog](src/spectr/res/portfolio.png)
 
-### Ticker Select Dialog with Scanner. Select rows to add to watchlist:
+### Ticker Select Dialog with Scanner (T key). Select rows to add to watchlist:
 ![Ticker Dialog](src/spectr/res/ticker_select_scanner.png)
 
-### Strategy Info Dialog. Shows strategy signal info:
+### Strategy Info Dialog (S key). Shows strategy signal info:
 ![Strategy Dialog](src/spectr/res/strategy_screen.png)
 
 ---------------
