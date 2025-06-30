@@ -8,7 +8,6 @@ log = logging.getLogger(__name__)
 
 
 class TradingStrategy(bt.Strategy):
-    """Common ``next`` implementation shared by many strategies."""
 
     params = (("symbol", ""),)
 
@@ -31,22 +30,15 @@ class TradingStrategy(bt.Strategy):
         return pd.DataFrame(data)
 
     def handle_signal(self, signal: Optional[dict]) -> None:
-        if not signal:
+        if signal:
+            log.debug(f"Signal detected: {signal}")
+        else:
             log.debug("No signal detected, skipping this bar.")
-            return
 
-        log.debug(f"Signal detected: {signal}")
-
-        if signal.get("signal") == "buy" and not self.position:
-            self.buy()
-            self.buy_signals.append(
-                {
-                    "type": "buy",
-                    "time": self.datas[0].datetime.datetime(0),
-                    "price": self.datas[0].close[0],
-                }
-            )
-        elif signal.get("signal") == "sell" and self.position:
+        current_position = self.getposition(self.datas[0])
+        qty = getattr(current_position, "size", getattr(current_position, "qty", 0))
+        if signal and signal.get("signal") == "sell" and qty:
+            log.debug(f"BACKTEST: Sell signal detected: {signal['reason']}")
             self.sell()
             self.sell_signals.append(
                 {
@@ -55,6 +47,20 @@ class TradingStrategy(bt.Strategy):
                     "price": self.datas[0].close[0],
                 }
             )
+            self.entry_price = self.datas[0].close[0]
+            return
+
+        if signal and signal.get("signal") == "buy":
+            log.debug("BACKTEST: Exiting position")
+            self.buy()
+            self.buy_signals.append(
+                {
+                    "type": "buy",
+                    "time": self.datas[0].datetime.datetime(0),
+                    "price": self.datas[0].close[0],
+                }
+            )
+            self.entry_price = None
 
     def next(self) -> None:
         lookback = self.get_lookback()

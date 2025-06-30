@@ -1,6 +1,9 @@
 import logging
+from typing import Optional
 
 import pandas as pd
+
+from . import metrics
 from .trading_strategy import TradingStrategy
 
 log = logging.getLogger(__name__)
@@ -35,6 +38,9 @@ class CustomStrategy(TradingStrategy):
         price = float(curr.get("close", 0))
         reason = None
         signal = None
+
+        if df.iloc[-1].get('bb_upper') is None or df.iloc[-1].get('bb_upper').isnan():
+            df = metrics.analyze_indicators(df, bb_period, bb_dev, macd_thresh)
 
         macd_cross = curr.get("macd_crossover")
         above_bb = curr.get("close", 0) > curr.get("bb_upper", 0)
@@ -83,4 +89,3 @@ class CustomStrategy(TradingStrategy):
             "bb_dev": self.p.bb_dev,
             "macd_thresh": self.p.macd_thresh,
         }
-
