@@ -15,7 +15,7 @@ authors = [
 
 dependencies = [
   "backtrader>=1.9.78.123",
-  "textual>=0.59",
+  "textual[syntax]>=0.59",
   "pandas>=2.2",
   "requests>=2.32",
   "tzlocal>=5.0",

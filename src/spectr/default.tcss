@@ -361,3 +361,17 @@ StrategyScreen {
     padding: 1 0;
     overflow: auto;
 }
+
+#strategy-toolbar {
+    width: 100%;
+    height: 3;
+    padding: 0 1;
+    content-align-horizontal: left;
+}
+
+#strategy-toolbar {
+    width: 100%;
+    height: 3;
+    padding: 0 1;
+    content-align-horizontal: left;
+}
