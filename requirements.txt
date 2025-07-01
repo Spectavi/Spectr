@@ -27,3 +27,4 @@ textual-web
 openai
 soundfile
 sounddevice
+black
