@@ -79,6 +79,7 @@ class StrategyScreen(Screen):
         self.code_widget = TextArea(
             self.code_str,
             language="python",
+            theme="monokai",
             show_line_numbers=True,
             id="strategy-code-content",
         )
@@ -91,6 +92,7 @@ class StrategyScreen(Screen):
             Button("Save", id="strategy-save", variant="success"),
             id="strategy-toolbar",
         )
+        code_scroll = VerticalScroll(self.code_widget, id="strategy-code")
         code_scroll = VerticalScroll(self.code_widget, id="strategy-code")
         yield Vertical(
             Static("Strategy Info", id="strategy-title"),
@@ -107,6 +109,7 @@ class StrategyScreen(Screen):
             self.file_path = self._get_strategy_file(self.current)
             self.code_str = self.file_path.read_text(encoding="utf-8")
             self.code_widget.text = self.code_str
+            self.code_widget.language = "python"
             if callable(self.callback):
                 self.callback(event.value)
 
@@ -158,10 +161,10 @@ class StrategyScreen(Screen):
                 if line.startswith("\t"):
                     new_line = line[1:]
                 elif line.startswith(indent):
-                    new_line = line[len(indent) :]
+                    new_line = line[len(indent):]
                 else:
                     prefix = len(line) - len(line.lstrip())
-                    new_line = line[min(prefix, len(indent)) :]
+                    new_line = line[min(prefix, len(indent)):]
             else:
                 new_line = indent + line
             widget.replace(new_line, (line_no, 0), (line_no, len(line)))

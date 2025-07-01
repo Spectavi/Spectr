@@ -13,7 +13,7 @@ numpy~=2.2.5
 ta~=0.11.0
 python-dotenv~=1.1.0
 tzlocal~=5.2
-textual
+textual[syntax]
 plotext
 requests
 rich
