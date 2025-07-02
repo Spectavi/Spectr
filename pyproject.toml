@@ -26,6 +26,7 @@ dependencies = [
   "ta>=0.11",
   "openai>=1.0",
   "python-dotenv>=1.0",
+  "robin_stocks>=2.1",
 ]
 
 [project.urls]
