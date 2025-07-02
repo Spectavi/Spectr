@@ -11,6 +11,8 @@ from alpaca.trading import (
     GetOrdersRequest,
     QueryOrderStatus,
 )
+from alpaca.data.historical import StockHistoricalDataClient
+from alpaca.data.requests import StockLatestQuoteRequest
 from dotenv import load_dotenv
 
 from .broker_interface import BrokerInterface, OrderType
@@ -26,18 +28,17 @@ load_dotenv()
 # credentials.  Otherwise we fall back to the broker-specific or legacy
 # variables.
 DATA_PROVIDER = os.getenv("DATA_PROVIDER")
-API_KEY = (
-    os.getenv("BROKER_API_KEY")
-    or (os.getenv("DATA_API_KEY") if DATA_PROVIDER == "alpaca" else None)
+API_KEY = os.getenv("BROKER_API_KEY") or (
+    os.getenv("DATA_API_KEY") if DATA_PROVIDER == "alpaca" else None
 )
-SECRET_KEY = (
-    os.getenv("BROKER_SECRET")
-    or (os.getenv("DATA_SECRET") if DATA_PROVIDER == "alpaca" else None)
+SECRET_KEY = os.getenv("BROKER_SECRET") or (
+    os.getenv("DATA_SECRET") if DATA_PROVIDER == "alpaca" else None
 )
 PAPER_KEY = os.getenv("PAPER_API_KEY") or API_KEY
 PAPER_SECRET = os.getenv("PAPER_SECRET") or SECRET_KEY
 
 log = logging.getLogger(__name__)
+
 
 class AlpacaInterface(BrokerInterface):
 
@@ -67,7 +68,9 @@ class AlpacaInterface(BrokerInterface):
             return {
                 "cash": float(acct.cash) if acct.cash else 0.00,
                 "buying_power": float(acct.buying_power) if acct.buying_power else 0.00,
-                "portfolio_value": float(acct.portfolio_value) if acct.portfolio_value else 0.00,
+                "portfolio_value": (
+                    float(acct.portfolio_value) if acct.portfolio_value else 0.00
+                ),
             }
         except Exception as exc:
             log.error(f"Failed to fetch account balance: {exc}")
@@ -80,11 +83,19 @@ class AlpacaInterface(BrokerInterface):
         """True if there is any order for ``symbol`` that is not closed."""
         try:
             tc = self.get_api()
-            req = GetOrdersRequest(status=QueryOrderStatus.ALL, symbols=[symbol.upper()])
+            req = GetOrdersRequest(
+                status=QueryOrderStatus.ALL, symbols=[symbol.upper()]
+            )
             orders = tc.get_orders(req)
             for o in orders:
                 status = getattr(o, "status", "").lower()
-                if status not in {"filled", "canceled", "cancelled", "expired", "rejected"}:
+                if status not in {
+                    "filled",
+                    "canceled",
+                    "cancelled",
+                    "expired",
+                    "rejected",
+                }:
                     return True
             return False
         except Exception as exc:
@@ -120,7 +131,7 @@ class AlpacaInterface(BrokerInterface):
             tc = self.get_api()
 
             req = GetOrdersRequest(
-                status=QueryOrderStatus.OPEN,     # "open" orders only
+                status=QueryOrderStatus.OPEN,  # "open" orders only
                 symbols=[symbol.upper()] if symbol else None,
             )
             orders = tc.get_orders(req)
@@ -129,8 +140,13 @@ class AlpacaInterface(BrokerInterface):
                 return pd.DataFrame()
 
             df = pd.DataFrame([o.model_dump() for o in orders])
-            for col in ("created_at", "filled_at", "submitted_at",
-                        "updated_at", "canceled_at"):
+            for col in (
+                "created_at",
+                "filled_at",
+                "submitted_at",
+                "updated_at",
+                "canceled_at",
+            ):
                 if col in df.columns:
                     df[col] = pd.to_datetime(df[col], utc=True, errors="ignore")
 
@@ -216,8 +232,13 @@ class AlpacaInterface(BrokerInterface):
                 return pd.DataFrame()
 
             df = pd.DataFrame([o.model_dump() for o in orders])
-            for col in ("created_at", "filled_at", "submitted_at",
-                        "updated_at", "canceled_at"):
+            for col in (
+                "created_at",
+                "filled_at",
+                "submitted_at",
+                "updated_at",
+                "canceled_at",
+            ):
                 if col in df.columns:
                     df[col] = pd.to_datetime(df[col], utc=True, errors="ignore")
 
@@ -230,9 +251,7 @@ class AlpacaInterface(BrokerInterface):
     #  Returns ALL orders (open + closed) for a single symbol
     # ------------------------------------------------------------------ #
     def get_orders_for_symbol(
-            self,
-            symbol: str,
-            real_trades: bool = False
+        self, symbol: str, real_trades: bool = False
     ) -> pd.DataFrame:
         """
         Return **every order** (open, partially-filled, filled, cancelled …)
@@ -264,8 +283,13 @@ class AlpacaInterface(BrokerInterface):
             df = pd.DataFrame([o.model_dump() for o in orders])
 
             # parse ISO timestamps into true datetimes
-            for col in ("created_at", "filled_at", "submitted_at",
-                        "updated_at", "canceled_at"):
+            for col in (
+                "created_at",
+                "filled_at",
+                "submitted_at",
+                "updated_at",
+                "canceled_at",
+            ):
                 if col in df.columns:
                     df[col] = pd.to_datetime(df[col], utc=True, errors="ignore")
 
@@ -307,6 +331,27 @@ class AlpacaInterface(BrokerInterface):
             return None
 
     # ------------------------------------------------------------------ #
+    #  Fetch the latest quote from the broker
+    # ------------------------------------------------------------------ #
+    def fetch_quote(self, symbol: str) -> dict:
+        try:
+            client = StockHistoricalDataClient(
+                api_key=API_KEY if self.real_trades else PAPER_KEY,
+                secret_key=SECRET_KEY if self.real_trades else PAPER_SECRET,
+            )
+            req = StockLatestQuoteRequest(symbol_or_symbols=symbol.upper())
+            resp = client.get_stock_latest_quote(req)
+            quote = resp[symbol.upper()]
+            return {
+                "ask": float(quote.ask_price) if quote.ask_price is not None else None,
+                "bid": float(quote.bid_price) if quote.bid_price is not None else None,
+                "price": float(quote.ask_price or quote.bid_price or 0),
+            }
+        except Exception as exc:
+            log.error(f"Failed to fetch quote for {symbol}: {exc}")
+            return {}
+
+    # ------------------------------------------------------------------ #
     #  Submits an order.
     # ------------------------------------------------------------------ #
     def submit_order(
@@ -322,7 +367,11 @@ class AlpacaInterface(BrokerInterface):
         try:
             tc = self.get_api()
             tif = TimeInForce.GTC
-            if quantity is not None and not float(quantity).is_integer() and not is_crypto_symbol(symbol):
+            if (
+                quantity is not None
+                and not float(quantity).is_integer()
+                and not is_crypto_symbol(symbol)
+            ):
                 tif = TimeInForce.DAY
 
             if type == OrderType.MARKET:

@@ -12,13 +12,16 @@ log = logging.getLogger(__name__)
 # Helper for building order details
 # ----------------------------------------------------------------------
 
-def prepare_order_details(symbol: str, side: OrderSide, data_api) -> tuple[OrderType, float | None]:
+
+def prepare_order_details(
+    symbol: str, side: OrderSide, broker: BrokerInterface
+) -> tuple[OrderType, float | None]:
     """Return the order type and limit price for *symbol* based on market hours."""
     order_type = OrderType.MARKET
     limit_price: float | None = None
 
     if not is_market_open_now() and not is_crypto_symbol(symbol):
-        quote = data_api.fetch_quote(symbol)
+        quote = broker.fetch_quote(symbol)
         order_type = OrderType.LIMIT
         if side == OrderSide.BUY:
             limit_price = (
@@ -51,6 +54,7 @@ def prepare_order_details(symbol: str, side: OrderSide, data_api) -> tuple[Order
 # Submit an order via the broker interface
 # ----------------------------------------------------------------------
 
+
 def submit_order(
     broker: BrokerInterface,
     symbol: str,
@@ -59,7 +63,6 @@ def submit_order(
     trade_amount: float,
     auto_trading_enabled: bool,
     *,
-    data_api,
     voice_agent=None,
     buy_sound_path: str | None = None,
     sell_sound_path: str | None = None,
@@ -71,7 +74,7 @@ def submit_order(
     object | None
         The order object returned by ``broker.submit_order`` when available.
     """
-    order_type, limit_price = prepare_order_details(symbol, side, data_api)
+    order_type, limit_price = prepare_order_details(symbol, side, broker)
 
     qty = 1.0
     if side == OrderSide.BUY and trade_amount > 0 and price > 0:
@@ -131,10 +134,8 @@ def submit_order(
                 except Exception as exc2:  # noqa: BLE001
                     e = exc2
         if not retried:
-            log.error(
-                f"Failed to submit order for {symbol}: {traceback.format_exc()}"
-            )
+            log.error(f"Failed to submit order for {symbol}: {traceback.format_exc()}")
             if voice_agent is not None:
                 voice_agent.say(text=f"Failed to submit order for {symbol}: {e}")
             raise
-    return order if 'order' in locals() else None
+    return order if "order" in locals() else None

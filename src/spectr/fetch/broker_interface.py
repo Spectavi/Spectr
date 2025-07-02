@@ -7,16 +7,19 @@ import pandas as pd
 class OrderType(Enum):
     MARKET = 1
     LIMIT = 2
-    #STOP_LIMIT = 3  # Not implemented yet
-    #TRAILING_STOP = 4  # Not implemented yet
+    # STOP_LIMIT = 3  # Not implemented yet
+    # TRAILING_STOP = 4  # Not implemented yet
+
 
 class OrderSide(Enum):
     BUY = 1
     SELL = 2
 
+
 class OrderSubmission:
     symbol: str
     side: OrderSide
+
 
 class BrokerInterface(ABC):
 
@@ -28,7 +31,7 @@ class BrokerInterface(ABC):
 
     @abstractmethod
     def get_balance(self):
-        """ Return cash and portfolio metrics for the current amount. """
+        """Return cash and portfolio metrics for the current amount."""
         pass
 
     @abstractmethod
@@ -72,6 +75,11 @@ class BrokerInterface(ABC):
         pass
 
     @abstractmethod
+    def fetch_quote(self, symbol: str) -> dict:
+        """Fetch a real-time quote for *symbol* from the broker."""
+        pass
+
+    @abstractmethod
     def submit_order(
         self,
         symbol: str,
@@ -88,4 +96,3 @@ class BrokerInterface(ABC):
     def cancel_order(self, order_id: str) -> bool:
         """Cancel an open order by its unique id. Returns True on success."""
         pass
-    

@@ -325,7 +325,6 @@ class SpectrApp(App):
                 curr_price,
                 self.trade_amount,
                 self.auto_trading_enabled,
-                data_api=DATA_API,
                 voice_agent=self.voice_agent,
                 buy_sound_path=BUY_SOUND_PATH,
                 sell_sound_path=SELL_SOUND_PATH,
@@ -506,7 +505,6 @@ class SpectrApp(App):
                             price,
                             self.trade_amount,
                             self.auto_trading_enabled,
-                            data_api=DATA_API,
                             voice_agent=self.voice_agent,
                             buy_sound_path=BUY_SOUND_PATH,
                             sell_sound_path=SELL_SOUND_PATH,
@@ -729,7 +727,7 @@ class SpectrApp(App):
         if self._is_splash_active():
             return
         order_type, limit_price = broker_tools.prepare_order_details(
-            symbol, side, DATA_API
+            symbol, side, BROKER_API
         )
         self.push_screen(
             OrderDialog(
@@ -737,7 +735,7 @@ class SpectrApp(App):
                 symbol=symbol,
                 pos_pct=pos_pct,
                 get_pos_cb=BROKER_API.get_position,
-                get_price_cb=DATA_API.fetch_quote,
+                get_price_cb=BROKER_API.fetch_quote,
                 trade_amount=self.trade_amount if side == OrderSide.BUY else 0.0,
                 reason=reason,
                 default_order_type=order_type,

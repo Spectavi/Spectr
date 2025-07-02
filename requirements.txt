@@ -28,3 +28,4 @@ openai
 soundfile
 sounddevice
 black
+robin_stocks>=2.1
