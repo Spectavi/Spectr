@@ -4,7 +4,9 @@ import pandas as pd
 
 class DataInterface(ABC):
     @abstractmethod
-    def fetch_chart_data(self, symbol: str, from_date: str, to_date: str) -> pd.DataFrame:
+    def fetch_chart_data(
+        self, symbol: str, from_date: str, to_date: str
+    ) -> pd.DataFrame:
         """Asynchronously fetch recent market data."""
         pass
 
@@ -13,8 +15,18 @@ class DataInterface(ABC):
         """Asynchronously fetch recent quote"""
         pass
 
+    def fetch_quotes(self, symbols: list[str]) -> dict[str, dict]:
+        """Fetch recent quotes for multiple symbols.
+
+        Providers may override this for efficiency. The default implementation
+        simply calls :meth:`fetch_quote` for each symbol.
+        """
+        return {sym: self.fetch_quote(sym) for sym in symbols}
+
     @abstractmethod
-    def fetch_chart_data_for_backtest(self, symbol: str, from_date: str, to_date: str, interval=None) -> pd.DataFrame:
+    def fetch_chart_data_for_backtest(
+        self, symbol: str, from_date: str, to_date: str, interval=None
+    ) -> pd.DataFrame:
         """Fetch historical data for backtesting."""
         pass
 
@@ -25,7 +37,7 @@ class DataInterface(ABC):
 
     @abstractmethod
     def has_recent_positive_news(self, symbol: str, hours: int = 12) -> bool:
-         # True if FMP has any bullish news for *symbol* in the last *hours*.
+        # True if FMP has any bullish news for *symbol* in the last *hours*.
         pass
 
     @abstractmethod

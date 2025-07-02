@@ -18,6 +18,7 @@ FMP_API_KEY = os.getenv("DATA_API_KEY") or os.getenv("FMP_API_KEY")
 
 log = logging.getLogger(__name__)
 
+
 # FMP only provides data, no broker services.
 class FMPInterface(DataInterface):
     def __init__(self):
@@ -29,7 +30,9 @@ class FMPInterface(DataInterface):
         if resp.status_code == 429:
             raise DataApiRateLimitError("FMP API rate limit exceeded")
 
-    def fetch_chart_data(self, symbol: str, from_date: str, to_date: str, interval: str = "1min") -> pd.DataFrame:
+    def fetch_chart_data(
+        self, symbol: str, from_date: str, to_date: str, interval: str = "1min"
+    ) -> pd.DataFrame:
         # Fetch intraday data
         url = f"https://financialmodelingprep.com/api/v3/historical-chart/{interval}/{symbol}?from_date={from_date}&to_date={to_date}&extended=true&timeseries=390&apikey={FMP_API_KEY}"
         resp = requests.get(url)
@@ -40,21 +43,24 @@ class FMPInterface(DataInterface):
             raise ValueError(f"No data returned from FMP for {symbol}")
 
         df = pd.DataFrame(data)
-        df['datetime'] = pd.to_datetime(df['date'], utc=False)
-        df.set_index('datetime', inplace=True)
+        df["datetime"] = pd.to_datetime(df["date"], utc=False)
+        df.set_index("datetime", inplace=True)
         # Set timezone to US/Eastern
         df.index = df.index.tz_localize("America/New_York").tz_convert(get_localzone())
         df = df.sort_index()
 
-        df.rename(columns={
-            'open': 'open',
-            'high': 'high',
-            'low': 'low',
-            'close': 'close',
-            'volume': 'volume'
-        }, inplace=True)
+        df.rename(
+            columns={
+                "open": "open",
+                "high": "high",
+                "low": "low",
+                "close": "close",
+                "volume": "volume",
+            },
+            inplace=True,
+        )
 
-        return df[['open', 'high', 'low', 'close', 'volume']]
+        return df[["open", "high", "low", "close", "volume"]]
 
     def fetch_quote(self, symbol: str, afterhours: bool = False) -> dict:
         """Fetch the latest quote for a symbol from FMP."""
@@ -78,7 +84,34 @@ class FMPInterface(DataInterface):
             log.error(f"Failed to fetch quote for {symbol}: {e}")
             return None
 
-    def fetch_chart_data_for_backtest(self, symbol: str, from_date: str, to_date: str, interval="1min") -> pd.DataFrame:
+    def fetch_quotes(
+        self, symbols: list[str], afterhours: bool = False
+    ) -> dict[str, dict | None]:
+        """Fetch quotes for multiple symbols using FMP's batch endpoint."""
+        if not symbols:
+            return {}
+
+        joined = ",".join(symbols)
+        if afterhours:
+            url = f"https://financialmodelingprep.com/api/v4/pre-post-market/{joined}?apikey={FMP_API_KEY}"
+        else:
+            url = f"https://financialmodelingprep.com/api/v3/quote/{joined}?apikey={FMP_API_KEY}"
+        try:
+            resp = requests.get(url)
+            self._check_rate_limit(resp)
+            resp.raise_for_status()
+            data = resp.json()
+            if not isinstance(data, list):
+                raise ValueError("Invalid batch quote response")
+            quotes = {item.get("symbol", "").upper(): item for item in data}
+            return {sym.upper(): quotes.get(sym.upper()) for sym in symbols}
+        except Exception as exc:
+            log.error(f"Failed to fetch quotes for {symbols}: {exc}")
+            return {sym.upper(): None for sym in symbols}
+
+    def fetch_chart_data_for_backtest(
+        self, symbol: str, from_date: str, to_date: str, interval="1min"
+    ) -> pd.DataFrame:
         # Fetch intraday data (limited history on free tier)
         url = f"https://financialmodelingprep.com/api/v3/historical-chart/{interval}/{symbol}?from={from_date}&to={to_date}&apikey={FMP_API_KEY}"
         resp = requests.get(url)
@@ -89,21 +122,24 @@ class FMPInterface(DataInterface):
             raise ValueError(f"No data returned from FMP for {symbol}")
 
         df = pd.DataFrame(data)
-        df['datetime'] = pd.to_datetime(df['date'], utc=True)
-        df.set_index('datetime', inplace=True)
+        df["datetime"] = pd.to_datetime(df["date"], utc=True)
+        df.set_index("datetime", inplace=True)
         # Set timezone to US/Eastern
-        #df.index = df.index.tz_localize("US/Eastern")
+        # df.index = df.index.tz_localize("US/Eastern")
         df = df.sort_index()
 
-        df.rename(columns={
-            'open': 'open',
-            'high': 'high',
-            'low': 'low',
-            'close': 'close',
-            'volume': 'volume'
-        }, inplace=True)
+        df.rename(
+            columns={
+                "open": "open",
+                "high": "high",
+                "low": "low",
+                "close": "close",
+                "volume": "volume",
+            },
+            inplace=True,
+        )
 
-        return df[['open', 'high', 'low', 'close', 'volume']]
+        return df[["open", "high", "low", "close", "volume"]]
 
     def fetch_top_movers(self, limit: int = 10) -> list[dict]:
         """
@@ -117,7 +153,9 @@ class FMPInterface(DataInterface):
             data = resp.json()
             log.debug(f"Fetched {len(data)} gainers.")
             # sort numerically just in case
-            data = sorted(data, key=lambda d: float(d["changesPercentage"]), reverse=True)
+            data = sorted(
+                data, key=lambda d: float(d["changesPercentage"]), reverse=True
+            )
             log.debug(f"fetched {len(data)} gainers.")
             return data[:limit]
         except Exception as exc:
@@ -126,15 +164,15 @@ class FMPInterface(DataInterface):
 
     def has_recent_positive_news(self, symbol: str, hours: int = 12) -> bool:
         """
-            Return True if the News-Sentiment endpoint contains at least one
-            article with *overall_sentiment_score* > 0 in the last *hours*.
+        Return True if the News-Sentiment endpoint contains at least one
+        article with *overall_sentiment_score* > 0 in the last *hours*.
         """
 
-        since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%d")
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        url = (
-            f"https://financialmodelingprep.com/api/v3/stock_news?tickers={symbol.upper()}&from_date={since}&to_date={now}&apikey={FMP_API_KEY}"
+        since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime(
+            "%Y-%m-%d"
         )
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        url = f"https://financialmodelingprep.com/api/v3/stock_news?tickers={symbol.upper()}&from_date={since}&to_date={now}&apikey={FMP_API_KEY}"
 
         try:
             resp = requests.get(url, timeout=10)

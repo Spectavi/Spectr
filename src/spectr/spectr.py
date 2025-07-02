@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import logging
 import os
+
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 
 import queue
@@ -24,7 +25,6 @@ from .scanners import load_scanner, list_scanners
 from .strategies import load_strategy, list_strategies, get_strategy_code
 from .utils import (
     get_historical_data,
-    get_live_data,
 )
 from . import broker_tools
 from .backtest import run_backtest
@@ -51,8 +51,8 @@ from .views.trades_screen import TradesScreen
 
 
 # --- SOUND PATHS ---
-BUY_SOUND_PATH = 'res/buy.mp3'
-SELL_SOUND_PATH = 'res/sell.mp3'
+BUY_SOUND_PATH = "res/buy.mp3"
+SELL_SOUND_PATH = "res/sell.mp3"
 
 REFRESH_INTERVAL = 60  # seconds
 SCANNER_INTERVAL = REFRESH_INTERVAL
@@ -64,7 +64,7 @@ logging.basicConfig(
     filename=log_path,
     filemode="w",
     level=logging.DEBUG,
-    format="%(asctime)s [%(levelname)s] %(message)s"
+    format="%(asctime)s [%(levelname)s] %(message)s",
 )
 log = logging.getLogger(__name__)
 
@@ -91,6 +91,7 @@ class OrderSignal:
         self.side = side
         self.pos_pct = pos_pct
 
+
 class SpectrApp(App):
     CSS_PATH = "default.tcss"
     BINDINGS = [
@@ -99,9 +100,21 @@ class SpectrApp(App):
         ("`", "prompt_symbol", "Change Ticker"),  # ~ key
         ("ctrl+a", "arm_auto_trading", "Arms Auto-Trading - REAL trades will occur!"),
         ("ctrl+q", "buy_current_symbol", "Opens buy dialog for current symbol."),
-        ("ctrl+z", "sell_current_symbol", "Opens sell dialog for current symbol, set to 100% of position"),
-        ("ctrl+x", "sell_half_current_symbol", "Opens sell dialog for current symbol, set to 50% of position"),
-        ("ctrl+c", "sell_quarter_current_symbol", "Opens sell dialog for current symbol, set to 25% of position"),
+        (
+            "ctrl+z",
+            "sell_current_symbol",
+            "Opens sell dialog for current symbol, set to 100% of position",
+        ),
+        (
+            "ctrl+x",
+            "sell_half_current_symbol",
+            "Opens sell dialog for current symbol, set to 50% of position",
+        ),
+        (
+            "ctrl+c",
+            "sell_quarter_current_symbol",
+            "Opens sell dialog for current symbol, set to 25% of position",
+        ),
         ("1", "select_symbol('1')", "Symbol 1"),
         ("2", "select_symbol('2')", "Symbol 2"),
         ("3", "select_symbol('3')", "Symbol 3"),
@@ -143,7 +156,9 @@ class SpectrApp(App):
 
     def _is_splash_active(self) -> bool:
         """Return ``True`` if the splash screen is currently visible."""
-        return bool(self.screen_stack and isinstance(self.screen_stack[-1], SplashScreen))
+        return bool(
+            self.screen_stack and isinstance(self.screen_stack[-1], SplashScreen)
+        )
 
     def _prepend_open_positions(self) -> None:
         """Ensure open position symbols are at the start of ``ticker_symbols``."""
@@ -248,10 +263,16 @@ class SpectrApp(App):
         yield TopOverlay(id="overlay-text")
         yield SymbolView(id="symbol-view")
 
-    def _fetch_data(self, symbol: str):
+    def _fetch_data(self, symbol: str, quote: dict | None = None):
         """Fetch the latest data and inject the most recent quote."""
         log.debug(f"Fetching live data for {symbol}...")
-        df, quote = get_live_data(DATA_API, symbol)
+        df = DATA_API.fetch_chart_data(
+            symbol,
+            from_date=datetime.now().date().strftime("%Y-%m-%d"),
+            to_date=datetime.now().date().strftime("%Y-%m-%d"),
+        )
+        if quote is None:
+            quote = DATA_API.fetch_quote(symbol)
         if df.empty or quote is None:
             return pd.DataFrame(), None
 
@@ -275,7 +296,9 @@ class SpectrApp(App):
         df["signal"] = None
         return df
 
-    def _handle_signal(self, symbol: str, df: pd.DataFrame, quote: dict, signal_dict: dict) -> None:
+    def _handle_signal(
+        self, symbol: str, df: pd.DataFrame, quote: dict, signal_dict: dict
+    ) -> None:
         """Record signals and queue order events."""
         signal = signal_dict.get("signal")
         curr_price = quote.get("price")
@@ -283,12 +306,16 @@ class SpectrApp(App):
         log.debug(f"Signal detected for {symbol}. Reason: {reason}")
         df.at[df.index[-1], "trade"] = signal
         if self.auto_trading_enabled:
-            log.info(f"AUTO-TRADE: Submitting order for {symbol} at {curr_price} with side {signal}")
+            log.info(
+                f"AUTO-TRADE: Submitting order for {symbol} at {curr_price} with side {signal}"
+            )
             # Skip auto-ordering if there's already an open order
             if BROKER_API.has_pending_order(symbol):
                 log.warning(f"Pending order for {symbol}; ignoring signal!")
                 self.signal_detected.remove(signal)
-                self.voice_agent.say(f"Ignoring {signal.capitalize()} signal for {symbol}, pending order already exists.")
+                self.voice_agent.say(
+                    f"Ignoring {signal.capitalize()} signal for {symbol}, pending order already exists."
+                )
                 return
             self.signal_detected.remove(signal)
             broker_tools.submit_order(
@@ -303,7 +330,9 @@ class SpectrApp(App):
                 buy_sound_path=BUY_SOUND_PATH,
                 sell_sound_path=SELL_SOUND_PATH,
             )
-        self.call_from_thread(self.signal_detected.append, (symbol, curr_price, signal, reason))
+        self.call_from_thread(
+            self.signal_detected.append, (symbol, curr_price, signal, reason)
+        )
         self.call_from_thread(
             cache.record_signal,
             self.strategy_signals,
@@ -350,9 +379,9 @@ class SpectrApp(App):
         log.debug("starting consumer task")
         self._consumer_task = asyncio.create_task(self._process_updates())
 
-    def _poll_one_symbol(self, symbol: str):
+    def _poll_one_symbol(self, symbol: str, quote: dict | None = None):
         try:
-            df, quote = self._fetch_data(symbol)
+            df, quote = self._fetch_data(symbol, quote)
             if df.empty or quote is None:
                 return
 
@@ -375,7 +404,9 @@ class SpectrApp(App):
                     self.call_from_thread(self.pop_screen)
                     self.voice_agent.say("Welcome to Spectr", wait=True)
                 # refresh the active view from the UI thread
-                self.call_from_thread(self.update_view, self.ticker_symbols[self.active_symbol_index])
+                self.call_from_thread(
+                    self.update_view, self.ticker_symbols[self.active_symbol_index]
+                )
         except Exception:
             log.error(f"[poll] {symbol}: {traceback.format_exc()}")
 
@@ -385,7 +416,20 @@ class SpectrApp(App):
             return
 
         while not self.exit_event.is_set():
-            tasks = [asyncio.to_thread(self._poll_one_symbol, sym) for sym in self.ticker_symbols]
+            try:
+                quotes = DATA_API.fetch_quotes(list(self.ticker_symbols))
+            except Exception as exc:
+                log.error(f"[poll] batch quote error: {exc}")
+                quotes = {sym: None for sym in self.ticker_symbols}
+
+            tasks = [
+                asyncio.to_thread(
+                    self._poll_one_symbol,
+                    sym,
+                    quotes.get(sym.upper()),
+                )
+                for sym in self.ticker_symbols
+            ]
             if tasks:
                 await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -393,7 +437,6 @@ class SpectrApp(App):
                 await asyncio.wait_for(self.exit_event.wait(), timeout=REFRESH_INTERVAL)
             except asyncio.TimeoutError:
                 pass
-
 
     async def _process_updates(self) -> None:
         """Runs in Textual’s event loop; applies any fresh data to the UI."""
@@ -413,10 +456,10 @@ class SpectrApp(App):
                     msg = f"{sym} @ {price} 🚀"
                     log.debug(f"Signal for {sym}: {msg} ({sig})")
                     side = None
-                    if sig == 'buy':
+                    if sig == "buy":
                         msg = f"BUY {msg}"
                         side = OrderSide.BUY
-                    if sig == 'sell':
+                    if sig == "sell":
                         msg = f"SELL {msg}"
                         side = OrderSide.SELL
 
@@ -427,11 +470,17 @@ class SpectrApp(App):
                             self.signal_detected.remove(signal)
                             continue
                         self.signal_detected.remove(signal)
-                        if self.screen_stack and not isinstance(self.screen_stack[-1], OrderDialog):
-                            self.open_order_dialog(side=side, pos_pct=100.0, symbol=sym, reason=reason)
+                        if self.screen_stack and not isinstance(
+                            self.screen_stack[-1], OrderDialog
+                        ):
+                            self.open_order_dialog(
+                                side=side, pos_pct=100.0, symbol=sym, reason=reason
+                            )
                         continue
                     elif self.auto_trading_enabled and sig and side:
-                        log.info(f"AUTO-TRADE: Submitting order for {sym} at {price} with side {side}")
+                        log.info(
+                            f"AUTO-TRADE: Submitting order for {sym} at {price} with side {side}"
+                        )
                         # Skip auto-ordering if there's already an open order
                         if BROKER_API.has_pending_order(sym):
                             log.warning(f"Pending order for {sym}; ignoring signal!")
@@ -582,7 +631,9 @@ class SpectrApp(App):
         """Prompt the user for confirmation before quitting."""
         if not self.confirm_quit:
             self.confirm_quit = True
-            self.query_one("#overlay-text", TopOverlay).show_prompt("Quit Y/N?", style="bold red")
+            self.query_one("#overlay-text", TopOverlay).show_prompt(
+                "Quit Y/N?", style="bold red"
+            )
             return
 
         # Second ESC cancels the prompt
@@ -660,8 +711,9 @@ class SpectrApp(App):
         symbol = self.ticker_symbols[self.active_symbol_index]
         self.open_order_dialog(OrderSide.SELL, 25.0, symbol)
 
-
-    def open_order_dialog(self, side: OrderSide, pos_pct: float, symbol: str, reason: str | None = None):
+    def open_order_dialog(
+        self, side: OrderSide, pos_pct: float, symbol: str, reason: str | None = None
+    ):
         if self._is_splash_active():
             return
         order_type, limit_price = broker_tools.prepare_order_details(
@@ -711,7 +763,7 @@ class SpectrApp(App):
     def on_ticker_submit(self, symbols: str):
         if symbols:
             log.debug(f"on_ticker_submit: {symbols}")
-            self.ticker_symbols = [x.strip().upper() for x in symbols.split(',')]
+            self.ticker_symbols = [x.strip().upper() for x in symbols.split(",")]
             self._prepend_open_positions()
             self.args.symbols = self.ticker_symbols
             log.debug(f"on_ticker_submit: {self.ticker_symbols}")
@@ -811,10 +863,12 @@ class SpectrApp(App):
 
             # add / update the helper columns used by GraphView
             if msg.side == OrderSide.BUY:
-                if "buy_signals" not in df.columns: df["buy_signals"] = None
+                if "buy_signals" not in df.columns:
+                    df["buy_signals"] = None
                 df.at[last_ts, "buy_signals"] = True
             elif msg.side == OrderSide.SELL:
-                if "sell_signals" not in df.columns: df["sell_signals"] = None
+                if "sell_signals" not in df.columns:
+                    df["sell_signals"] = None
                 df.at[last_ts, "sell_signals"] = True
 
             # cache the modified frame
@@ -856,7 +910,8 @@ class SpectrApp(App):
                     self.args.real_trades,
                     self.set_real_trades,
                     self.args.broker == "robinhood" and self.args.real_trades,
-                    os.getenv("PAPER_API_KEY", "") == "" or os.getenv("PAPER_SECRET", "") == "",
+                    os.getenv("PAPER_API_KEY", "") == ""
+                    or os.getenv("PAPER_SECRET", "") == "",
                     self.auto_trading_enabled,
                     self.set_auto_trading,
                     BROKER_API.get_balance,
@@ -884,7 +939,9 @@ class SpectrApp(App):
     def update_status_bar(self):
         live_icon = "🤖" if self.auto_trading_enabled else "🚫"
         if self.auto_trading_enabled:
-            auto_trade_state = f"Auto-Trades: [BOLD GREEN]ENABLED[/BOLD GREEN] {live_icon}"
+            auto_trade_state = (
+                f"Auto-Trades: [BOLD GREEN]ENABLED[/BOLD GREEN] {live_icon}"
+            )
         else:
             auto_trade_state = f"Auto-Trades: [BOLD RED]DISABLED[/BOLD RED] {live_icon}"
 
@@ -1054,16 +1111,19 @@ class SpectrApp(App):
             trades = []
             for rec in result.get("buy_signals", []) + result.get("sell_signals", []):
                 t = rec["time"]
-                trades.append({
-                    **rec,
-                    "value": equity_lookup.get(t),
-                })
+                trades.append(
+                    {
+                        **rec,
+                        "value": equity_lookup.get(t),
+                    }
+                )
             trades.sort(key=lambda r: r["time"])
             self._last_backtest_trades = trades
             log.debug(f"trades: {trades}")
 
             overlay.update_status(
-                f"Backtest completed. Final portfolio value: ${result['final_value']:,.2f} | Buy count: {num_buys}")
+                f"Backtest completed. Final portfolio value: ${result['final_value']:,.2f} | Buy count: {num_buys}"
+            )
             price_df = result["price_data"].copy()
 
             buy_times = {sig["time"] for sig in result["buy_signals"]}
@@ -1105,7 +1165,6 @@ class SpectrApp(App):
 
             current = self.ticker_symbols[self.active_symbol_index]
             self.update_view(current)
-
 
 
 BROKER_API = None
