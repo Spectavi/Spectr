@@ -32,8 +32,6 @@ class TradingStrategy(bt.Strategy):
     def handle_signal(self, signal: Optional[dict]) -> None:
         if signal:
             log.debug(f"Signal detected: {signal}")
-        else:
-            log.debug("No signal detected, skipping this bar.")
 
         current_position = self.getposition(self.datas[0])
         qty = getattr(current_position, "size", getattr(current_position, "qty", 0))

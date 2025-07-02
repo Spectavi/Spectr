@@ -97,6 +97,9 @@ def run_backtest(
         if hasattr(config, key):
             params[key] = getattr(config, key)
 
+    if "is_backtest" in keys:
+        params["is_backtest"] = True
+
     cerebro.addstrategy(strategy_class, **params)
 
     data = bt.feeds.PandasData(dataname=df)

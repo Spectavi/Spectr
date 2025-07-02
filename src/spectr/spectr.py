@@ -56,7 +56,7 @@ SELL_SOUND_PATH = "res/sell.mp3"
 
 REFRESH_INTERVAL = 60  # seconds
 SCANNER_INTERVAL = REFRESH_INTERVAL
-EQUITY_INTERVAL = 30  # portfolio equity update frequency
+EQUITY_INTERVAL = 60  # portfolio equity update frequency
 
 # Setup logging to file
 log_path = "debug.log"
