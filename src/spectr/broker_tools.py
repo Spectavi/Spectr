@@ -29,6 +29,7 @@ def prepare_order_details(symbol: str, side: OrderSide, data_api) -> tuple[Order
             )
             if limit_price:
                 limit_price *= 1.003
+                limit_price = round(limit_price, 2)
         else:
             limit_price = (
                 quote.get("bid")
@@ -38,6 +39,7 @@ def prepare_order_details(symbol: str, side: OrderSide, data_api) -> tuple[Order
             )
             if limit_price:
                 limit_price *= 0.997
+                limit_price = round(limit_price, 2)
 
     log.debug(
         f"Order details for {symbol}: type={order_type}, limit_price={limit_price}"

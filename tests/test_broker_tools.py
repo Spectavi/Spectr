@@ -51,9 +51,11 @@ def test_prepare_order_details_equity(monkeypatch, side, is_open, expected_type,
     if expected_price_key is None:
         assert limit_price is None
     elif expected_price_key == "ask":
-        assert limit_price == pytest.approx(quote["ask"] * 1.003)
+        expected = round(quote["ask"] * 1.003, 2)
+        assert limit_price == expected
     else:
-        assert limit_price == pytest.approx(quote["bid"] * 0.997)
+        expected = round(quote["bid"] * 0.997, 2)
+        assert limit_price == expected
 
 
 @pytest.mark.parametrize("side,is_open", [(OrderSide.BUY, True), (OrderSide.SELL, True), (OrderSide.BUY, False), (OrderSide.SELL, False)])
@@ -95,10 +97,10 @@ def test_submit_order_equity(monkeypatch, side, is_open, expected_type):
         assert broker.submitted["limit_price"] is None
     else:
         if side == OrderSide.BUY:
-            exp = quote["ask"] * 1.003
+            exp = round(quote["ask"] * 1.003, 2)
         else:
-            exp = quote["bid"] * 0.997
-        assert broker.submitted["limit_price"] == pytest.approx(exp)
+            exp = round(quote["bid"] * 0.997, 2)
+        assert broker.submitted["limit_price"] == exp
 
 
 @pytest.mark.parametrize("is_open", [True, False])
