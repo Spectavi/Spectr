@@ -379,7 +379,7 @@ class SpectrApp(App):
         log.debug("starting consumer task")
         self._consumer_task = asyncio.create_task(self._process_updates())
 
-    def _poll_one_symbol(self, symbol: str, quote: dict | None = None):
+    def _poll_one_symbol(self, symbol: str, quote: dict | None = None, position=None):
         try:
             df, quote = self._fetch_data(symbol, quote)
             if df.empty or quote is None:
@@ -387,10 +387,13 @@ class SpectrApp(App):
 
             df = self._analyze_indicators(df)
 
+            if position is None:
+                position = BROKER_API.get_position(symbol)
+
             signal_dict = self.strategy_class.detect_signals(
                 df,
                 symbol,
-                position=BROKER_API.get_position(symbol),
+                position=position,
             )
 
             # Check for signal
@@ -422,11 +425,20 @@ class SpectrApp(App):
                 log.error(f"[poll] batch quote error: {exc}")
                 quotes = {sym: None for sym in self.ticker_symbols}
 
+            try:
+                positions = BROKER_API.get_positions() or []
+            except Exception as exc:
+                log.warning(f"Failed to fetch positions: {exc}")
+                positions = []
+
+            pos_map = {getattr(pos, "symbol", "").upper(): pos for pos in positions}
+
             tasks = [
                 asyncio.to_thread(
                     self._poll_one_symbol,
                     sym,
                     quotes.get(sym.upper()),
+                    pos_map.get(sym.upper()),
                 )
                 for sym in self.ticker_symbols
             ]
