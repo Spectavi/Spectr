@@ -4,12 +4,13 @@ from textual.reactive import reactive
 
 VOICE_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
+
 class TopOverlay(Static):
     symbol: reactive[str] = reactive("")
-    status_text: reactive[str] = reactive("")        # The main persistent text
-    alert_text: reactive[str] = reactive("")         # Temporary alerts (flash)
-    live_icon: reactive[str] = reactive("🧪")         # Icon for live/paper trading
-    voice_frame: reactive[str] = reactive("")        # Spinner frames while speaking
+    status_text: reactive[str] = reactive("")  # The main persistent text
+    alert_text: reactive[str] = reactive("")  # Temporary alerts (flash)
+    live_icon: reactive[str] = reactive("🧪")  # Icon for live/paper trading
+    voice_frame: reactive[str] = reactive("")  # Spinner frames while speaking
     _timer = None
     _voice_timer = None
     _frame_index = 0
@@ -74,3 +75,17 @@ class TopOverlay(Static):
         if self.alert_text:
             return f"{self.live_icon} {self.voice_frame} {self.alert_text}"
         return f"{self.live_icon} {self.voice_frame} {self.status_text}"
+
+    # Watchers to force redraw when reactive attributes change
+
+    def watch_voice_frame(self, old: str, new: str) -> None:  # type: ignore[override]
+        self.refresh()
+
+    def watch_alert_text(self, old: str, new: str) -> None:  # type: ignore[override]
+        self.refresh()
+
+    def watch_status_text(self, old: str, new: str) -> None:  # type: ignore[override]
+        self.refresh()
+
+    def watch_live_icon(self, old: str, new: str) -> None:  # type: ignore[override]
+        self.refresh()
