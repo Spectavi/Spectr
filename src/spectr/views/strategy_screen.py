@@ -12,6 +12,7 @@ from textual.reactive import reactive
 
 class StrategyScreen(Screen):
     """Modal screen listing live strategy signals."""
+
     BINDINGS = [
         ("s", "app.pop_screen", "Back"),
         ("escape", "app.pop_screen", "Back"),
@@ -19,7 +20,9 @@ class StrategyScreen(Screen):
 
     signals: reactive[list] = reactive([])
 
-    def __init__(self, signals: list[dict], strategies: list[str], current: str, callback=None):
+    def __init__(
+        self, signals: list[dict], strategies: list[str], current: str, callback=None
+    ):
         super().__init__()
         self.signals = signals
         self.strategy_names = strategies
@@ -93,11 +96,11 @@ class StrategyScreen(Screen):
             id="strategy-toolbar",
         )
         code_scroll = VerticalScroll(self.code_widget, id="strategy-code")
-        code_scroll = VerticalScroll(self.code_widget, id="strategy-code")
         yield Vertical(
             Static("Strategy Info", id="strategy-title"),
             select,
             table,
+            Static("", id="strategy-spacer"),
             toolbar,
             code_scroll,
             id="strategy-screen",
@@ -161,10 +164,10 @@ class StrategyScreen(Screen):
                 if line.startswith("\t"):
                     new_line = line[1:]
                 elif line.startswith(indent):
-                    new_line = line[len(indent):]
+                    new_line = line[len(indent) :]
                 else:
                     prefix = len(line) - len(line.lstrip())
-                    new_line = line[min(prefix, len(indent)):]
+                    new_line = line[min(prefix, len(indent)) :]
             else:
                 new_line = indent + line
             widget.replace(new_line, (line_no, 0), (line_no, len(line)))
