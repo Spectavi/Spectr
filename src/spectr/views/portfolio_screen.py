@@ -1,6 +1,8 @@
 import logging
 
 from typing import Optional
+from types import SimpleNamespace
+import pandas as pd
 
 from textual.screen import Screen
 from textual.widgets import Static, DataTable, Switch, Input, Button
@@ -19,11 +21,12 @@ from .setup_app import SetupApp
 
 log = logging.getLogger(__name__)
 
+
 class PortfolioScreen(Screen):
     """Modal screen that shows cash, invested value, and current holdings."""
 
     BINDINGS = [
-        ("p",      "app.pop_screen", "Back"),   # allow P to close, too
+        ("p", "app.pop_screen", "Back"),  # allow P to close, too
         ("escape", "app.pop_screen", "Back"),
     ]
 
@@ -31,10 +34,10 @@ class PortfolioScreen(Screen):
 
     # reactive so the table can be refreshed later if you want
     positions = reactive(list)
-    cash      = reactive(0.0)
+    cash = reactive(0.0)
     buying_power = reactive(0.0)
     portfolio_value = reactive(0.0)
-    real_trades  = reactive(False)
+    real_trades = reactive(False)
     trade_amount = reactive(0.0)
 
     def __init__(
@@ -64,6 +67,14 @@ class PortfolioScreen(Screen):
         self.portfolio_value = portfolio_value or 0.0
         self.positions = positions or []
         self.cached_orders = orders or []
+        if isinstance(self.cached_orders, pd.DataFrame):
+            if not self.cached_orders.empty:
+                self.cached_orders = [
+                    SimpleNamespace(**rec)
+                    for rec in self.cached_orders.to_dict(orient="records")
+                ]
+            else:
+                self.cached_orders = []
         if self.cached_orders:
             self.cached_orders.sort(key=self._order_date, reverse=True)
         self.real_trades = real_trades
@@ -71,27 +82,39 @@ class PortfolioScreen(Screen):
         self.hide_live_switch = hide_live_switch
         self._has_cached_balance = cash is not None
         self._has_cached_positions = positions is not None
-        self._has_cached_orders = orders is not None
+        self._has_cached_orders = bool(self.cached_orders)
         self._set_real_trades_cb = set_real_trades_cb
         self.auto_trading_enabled = auto_trading
         self._set_auto_trading_cb = set_auto_trading_cb
         self._cancel_order_cb = cancel_order_callback
         self.trade_amount = trade_amount
         self._set_trade_amount_cb = set_trade_amount_cb
-        self.top_title = Static(id="portfolio-title") # gets filled in on_mount
+        self.top_title = Static(id="portfolio-title")  # gets filled in on_mount
 
         # Equity curve graph
         self.equity_view = EquityCurveView(id="equity-curve")
 
         # Holdings Table
         self.holdings_table = DataTable(zebra_stripes=True, id="holdings-table")
-        self.holdings_table_columns = self.holdings_table.add_columns("Symbol", "Qty", "Value", "Avg Cost", "Profit")
+        self.holdings_table_columns = self.holdings_table.add_columns(
+            "Symbol", "Qty", "Value", "Avg Cost", "Profit"
+        )
         self.holdings_table.cursor_type = "row"
         self.holdings_table.show_cursor = True
 
-        #Orders Table
+        # Orders Table
         self.order_table = DataTable(zebra_stripes=True, id="orders-table")
-        self.order_table_columns = self.order_table.add_columns("Date/Time", "Symbol", "Side", "Qty", "Value", "Type", "Status", "Cancel?", "Order ID")
+        self.order_table_columns = self.order_table.add_columns(
+            "Date/Time",
+            "Symbol",
+            "Side",
+            "Qty",
+            "Value",
+            "Type",
+            "Status",
+            "Cancel?",
+            "Order ID",
+        )
         self._cancel_col = self.order_table_columns[-2]
         self._order_id_col = self.order_table_columns[-1]
         self.order_table.cursor_type = "cell"
@@ -99,7 +122,9 @@ class PortfolioScreen(Screen):
 
         self.mode_switch = Switch(value=self.real_trades, id="trade-mode-switch")
         self.mode_switch.disabled = self.disable_live_switch
-        self.auto_switch = Switch(value=self.auto_trading_enabled, id="auto-trade-switch")
+        self.auto_switch = Switch(
+            value=self.auto_trading_enabled, id="auto-trade-switch"
+        )
         self.orders_callback = orders_callback
         self.balance_callback = balance_callback
         self.positions_callback = positions_callback
@@ -161,9 +186,9 @@ class PortfolioScreen(Screen):
                     value = 0.0
 
                 dt = (
-                        getattr(order, "submitted_at", None)
-                        or getattr(order, "created_at", None)
-                        or getattr(order, "filled_at", None)
+                    getattr(order, "submitted_at", None)
+                    or getattr(order, "created_at", None)
+                    or getattr(order, "filled_at", None)
                 )
                 if hasattr(dt, "strftime"):
                     dt_str = dt.strftime("%Y-%m-%d %H:%M")
@@ -184,8 +209,6 @@ class PortfolioScreen(Screen):
         else:
             self.order_table.add_row("Loading...", "", "", "", "", "", "", "")
 
-
-
     def compose(self):
         yield Vertical(
             self.top_title,
@@ -202,9 +225,8 @@ class PortfolioScreen(Screen):
                     ]
                 ),
                 Container(
-                    Static("Auto Trades"),
-                    self.auto_switch,
-                    id="trade-switch-container"),
+                    Static("Auto Trades"), self.auto_switch, id="trade-switch-container"
+                ),
                 id="trade-mode-container",
             ),
             Horizontal(
@@ -212,9 +234,8 @@ class PortfolioScreen(Screen):
                 id="trade-amount-row",
             ),
             Input(id="trade-amount-input", placeholder="0.00"),
-            #Static("Equity Curve:", id="equity-curve-title"),
-            #self.equity_view,
-
+            # Static("Equity Curve:", id="equity-curve-title"),
+            # self.equity_view,
             Static("Holdings:", id="holdings-title"),
             self.holdings_table,
             Static("Order History:", id="orders-title"),
@@ -314,9 +335,14 @@ class PortfolioScreen(Screen):
         except Exception:
             log.warning("Account orders fetch failed! get_all_orders()")
             top_title_widget = self.query_one("#portfolio-title", Static)
-            top_title_widget.update(
-                "[b]ACCOUNT ACCESS FAILED![/b]"
-            )
+            top_title_widget.update("[b]ACCOUNT ACCESS FAILED![/b]")
+        if isinstance(orders, pd.DataFrame):
+            if not orders.empty:
+                orders = [
+                    SimpleNamespace(**rec) for rec in orders.to_dict(orient="records")
+                ]
+            else:
+                orders = []
 
         if orders:
             log.debug(f"Order History fetched.")
@@ -327,10 +353,10 @@ class PortfolioScreen(Screen):
             for order in orders:
                 log.debug(f"Order: {order}")
                 price = (
-                        getattr(order, "filled_avg_price", None)
-                        or getattr(order, "limit_price", None)
-                        or getattr(order, "price", None)
-                        or 0.0
+                    getattr(order, "filled_avg_price", None)
+                    or getattr(order, "limit_price", None)
+                    or getattr(order, "price", None)
+                    or 0.0
                 )
                 try:
                     value = float(order.qty) * float(price)
@@ -339,9 +365,9 @@ class PortfolioScreen(Screen):
 
                 # Determine a readable timestamp
                 dt = (
-                        getattr(order, "submitted_at", None)
-                        or getattr(order, "created_at", None)
-                        or getattr(order, "filled_at", None)
+                    getattr(order, "submitted_at", None)
+                    or getattr(order, "created_at", None)
+                    or getattr(order, "filled_at", None)
                 )
                 if hasattr(dt, "strftime"):
                     dt_str = dt.strftime("%Y-%m-%d %H:%M")
@@ -349,7 +375,7 @@ class PortfolioScreen(Screen):
                     dt_str = str(dt) if dt else ""
 
                 table.add_row(
-                        dt_str,
+                    dt_str,
                     order.symbol,
                     order.side,
                     order.qty,
@@ -397,8 +423,8 @@ class PortfolioScreen(Screen):
             event.input.blur()
 
     async def on_data_table_row_selected(
-            self,
-            event: DataTable.RowSelected,
+        self,
+        event: DataTable.RowSelected,
     ) -> None:
         """Open an order dialog to sell when a holdings row is clicked."""
         table_id = event.data_table.id
@@ -409,7 +435,15 @@ class PortfolioScreen(Screen):
         symbol = None
         try:
             if table_id == "holdings-table":
-                symbol = str(event.data_table.get_cell(event.row_key, self.holdings_table_columns[0])).strip().upper()
+                symbol = (
+                    str(
+                        event.data_table.get_cell(
+                            event.row_key, self.holdings_table_columns[0]
+                        )
+                    )
+                    .strip()
+                    .upper()
+                )
         except CellDoesNotExist:
             log.debug("Selected row no longer exists")
             return
@@ -426,7 +460,9 @@ class PortfolioScreen(Screen):
         if event.cell_key.column_key != self._cancel_col:
             return
 
-        order_id = str(event.data_table.get_cell(event.cell_key.row_key, self._order_id_col))
+        order_id = str(
+            event.data_table.get_cell(event.cell_key.row_key, self._order_id_col)
+        )
         cell_val = event.value
         if str(cell_val).lower() != "cancel" or not order_id:
             return
@@ -462,7 +498,9 @@ class PortfolioScreen(Screen):
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "setup-button":
-            result = await self.app.push_screen(SetupConfirmDialog(), wait_for_dismiss=True)
+            result = await self.app.push_screen(
+                SetupConfirmDialog(), wait_for_dismiss=True
+            )
             if result:
                 setup = SetupApp()
                 setup.run()
