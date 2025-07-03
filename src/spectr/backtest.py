@@ -65,13 +65,10 @@ def run_backtest(
         )
 
     # Ensure indicators are present
-    if "macd" not in df.columns or "bb_mid" not in df.columns:
-        df = metrics.analyze_indicators(
-            df,
-            config.bb_period,
-            config.bb_dev,
-            config.macd_thresh,
-        )
+    df = metrics.analyze_indicators(
+        df,
+        strategy_class.get_indicators(),
+    )
 
     cerebro = bt.Cerebro()
     # Dynamically map ``config`` attributes onto the strategy parameters.  This

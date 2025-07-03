@@ -288,9 +288,7 @@ class SpectrApp(App):
         log.debug("Analyzing indicators")
         df = metrics.analyze_indicators(
             df,
-            self.config.bb_period,
-            self.config.bb_dev,
-            self.config.macd_thresh,
+            self.strategy_class.get_indicators(),
         )
         df["trade"] = None
         df["signal"] = None

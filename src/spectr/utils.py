@@ -1,4 +1,3 @@
-
 import logging
 import os
 from datetime import datetime, timedelta, time as dtime
@@ -22,7 +21,7 @@ import pygame
 
 from .fetch import data_interface
 
-LOG_FILE = 'signal_log.csv'
+LOG_FILE = "signal_log.csv"
 
 log = logging.getLogger(__name__)
 
@@ -97,10 +96,11 @@ def is_crypto_symbol(symbol: str) -> bool:
     sym = symbol.upper()
     return any(sym.endswith(sfx) and len(sym) > len(sfx) for sfx in CRYPTO_SUFFIXES)
 
+
 def inject_quote_into_df(
     df: pd.DataFrame,
     quote: dict,
-    tz=get_localzone(),                        # default to system zone
+    tz=get_localzone(),  # default to system zone
 ) -> pd.DataFrame:
     """
     Append the latest quote as a new bar and guarantee the entire frame
@@ -120,10 +120,7 @@ def inject_quote_into_df(
     if isinstance(ts_raw, (int, float)):
         ts = pd.to_datetime(ts_raw, unit="s", utc=True).tz_convert(tz)
     else:  # ISO string from FMP
-        ts = (
-            pd.to_datetime(ts_raw, utc=True, errors="coerce")
-            .tz_convert(tz)
-        )
+        ts = pd.to_datetime(ts_raw, utc=True, errors="coerce").tz_convert(tz)
 
     ts = ts.floor("T")  # align to minute grid
 
@@ -148,8 +145,19 @@ def inject_quote_into_df(
     log.debug("Injected quote row:\n%s", out.tail(3))
     return out
 
+
 # Grabs 1-day more than requested, calculates indicators, then trims to requested range.
-def get_historical_data(data_api: data_interface, bb_period, bb_dev, macd_thresh, symbol: str, from_date: str, to_date: str):
+def get_historical_data(
+    data_api: data_interface,
+    bb_period,
+    bb_dev,
+    macd_thresh,
+    symbol: str,
+    from_date: str,
+    to_date: str,
+    *,
+    indicators: list[metrics.IndicatorSpec] | None = None,
+):
     """
     Fetch OHLCV + quote for *symbol* in [from_date .. to_date] **inclusive**,
     but ensure that indicators that need a look-back window are fully
@@ -164,14 +172,29 @@ def get_historical_data(data_api: data_interface, bb_period, bb_dev, macd_thresh
     log.debug(f"extended_from: {extended_from}")
 
     # Pull the data and quote
-    df = data_api.fetch_chart_data_for_backtest(symbol, from_date=extended_from, to_date=to_date)
+    df = data_api.fetch_chart_data_for_backtest(
+        symbol, from_date=extended_from, to_date=to_date
+    )
 
     # Fallback to 5min data if 1min isn't present.
     if df.empty:
-        df = data_api.fetch_chart_data_for_backtest(symbol, from_date=extended_from, to_date=to_date,
-                                                    interval="5min")
+        df = data_api.fetch_chart_data_for_backtest(
+            symbol, from_date=extended_from, to_date=to_date, interval="5min"
+        )
     # Compute indicators on the *full* frame (needs the extra bar)
-    df = metrics.analyze_indicators(df, bb_period, bb_dev, macd_thresh)
+    if indicators is None:
+        indicators = [
+            metrics.IndicatorSpec(
+                name="MACD",
+                params={"window_fast": 12, "window_slow": 26, "threshold": macd_thresh},
+            ),
+            metrics.IndicatorSpec(
+                name="BollingerBands",
+                params={"window": bb_period, "window_dev": bb_dev},
+            ),
+            metrics.IndicatorSpec(name="VWAP", params={}),
+        ]
+    df = metrics.analyze_indicators(df, indicators)
     quote = None
     try:
         quote = data_api.fetch_quote(symbol)
@@ -185,7 +208,10 @@ def get_historical_data(data_api: data_interface, bb_period, bb_dev, macd_thresh
 
 
 def get_live_data(data_api: data_interface, symbol: str):
-    df = data_api.fetch_chart_data(symbol, from_date=datetime.now().date().strftime("%Y-%m-%d"),
-                                   to_date=datetime.now().date().strftime("%Y-%m-%d"))
+    df = data_api.fetch_chart_data(
+        symbol,
+        from_date=datetime.now().date().strftime("%Y-%m-%d"),
+        to_date=datetime.now().date().strftime("%Y-%m-%d"),
+    )
     quote = data_api.fetch_quote(symbol)
     return df, quote
