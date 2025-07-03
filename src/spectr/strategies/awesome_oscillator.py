@@ -2,7 +2,7 @@ import logging
 from typing import Optional
 
 import pandas as pd
-from .trading_strategy import TradingStrategy
+from .trading_strategy import TradingStrategy, IndicatorSpec
 
 log = logging.getLogger(__name__)
 
@@ -118,3 +118,15 @@ class AwesomeOscillator(TradingStrategy):
             "take_profit_pct": self.p.take_profit_pct,
         }
 
+    @classmethod
+    def get_indicators(cls) -> list[IndicatorSpec]:
+        return [
+            IndicatorSpec(
+                name="SMA",
+                params={"window": cls.params.fast_period, "type": "fast"},
+            ),
+            IndicatorSpec(
+                name="SMA",
+                params={"window": cls.params.slow_period, "type": "slow"},
+            ),
+        ]
