@@ -239,7 +239,7 @@ def test_indicator_specs():
     assert any(spec.name == "MACD" for spec in CustomStrategy.get_indicators())
 
     mo_inds = MACDOscillator.get_indicators()
-    assert any(spec.params.get("type") == "fast" for spec in mo_inds)
+    assert len(mo_inds) == 1 and mo_inds[0].name == "MACD"
 
     ao_inds = AwesomeOscillator.get_indicators()
     assert len(ao_inds) == 2
