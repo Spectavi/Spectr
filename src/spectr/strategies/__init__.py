@@ -27,9 +27,9 @@ def list_strategies() -> dict[str, Type[bt.Strategy]]:
             )
             continue
         for name, obj in inspect.getmembers(module, inspect.isclass):
-            if (
-                issubclass(obj, bt.Strategy)
-                and obj not in (bt.Strategy, TradingStrategy)
+            if issubclass(obj, bt.Strategy) and obj not in (
+                bt.Strategy,
+                TradingStrategy,
             ):
                 strategies[name] = obj
     return strategies
@@ -44,11 +44,12 @@ def load_strategy(name: str) -> Type[bt.Strategy]:
 
 
 def get_strategy_code(name: str) -> str:
-    """Return the source code for the ``detect_signals`` method of *name* strategy."""
+    """Return the full source for the given strategy class."""
     try:
         cls = load_strategy(name)
-        func = getattr(cls, "detect_signals")
-        return inspect.getsource(func)
+        module = inspect.getmodule(cls)
+        assert module is not None
+        return pathlib.Path(module.__file__).read_text(encoding="utf-8")
     except Exception as exc:  # pragma: no cover - best effort
         logging.getLogger(__name__).error(
             "Unable to load strategy code for %s: %s", name, exc
