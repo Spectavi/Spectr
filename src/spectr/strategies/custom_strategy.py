@@ -52,7 +52,10 @@ class CustomStrategy(TradingStrategy):
                 df.iloc[-1].get("bb_upper") is None
                 or df.iloc[-1].get("bb_upper").isnan()
             ):
-                df = metrics.analyze_indicators(df, bb_period, bb_dev, macd_thresh)
+                df = metrics.analyze_indicators(
+                    df,
+                    CustomStrategy.get_indicators(),
+                )
 
         macd_cross = curr.get("macd_crossover")
         above_bb = curr.get("close", 0) > curr.get("bb_upper", 0)

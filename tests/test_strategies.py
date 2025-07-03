@@ -6,6 +6,7 @@ from spectr.strategies.macd_oscillator import MACDOscillator
 from spectr.strategies.awesome_oscillator import AwesomeOscillator
 from spectr.strategies.dual_thrust import DualThrust
 from spectr.strategies.trading_strategy import IndicatorSpec
+from spectr.strategies import metrics
 
 
 def _stub_analyze(df: pd.DataFrame, *args, **kwargs) -> pd.DataFrame:
@@ -245,3 +246,21 @@ def test_indicator_specs():
 
     dt_inds = DualThrust.get_indicators()
     assert dt_inds and dt_inds[0].name == "DualThrustRange"
+
+
+def test_analyze_indicators_from_specs():
+    idx = pd.date_range("2021-01-01", periods=3, freq="D")
+    df = pd.DataFrame(
+        {
+            "open": [1, 2, 3],
+            "high": [1, 2, 3],
+            "low": [1, 2, 3],
+            "close": [1, 2, 3],
+            "volume": [1, 1, 1],
+        },
+        index=idx,
+    )
+    specs = [IndicatorSpec(name="VWAP", params={})]
+    out = metrics.analyze_indicators(df, specs)
+    assert "vwap" in out.columns
+    assert "macd" not in out.columns
