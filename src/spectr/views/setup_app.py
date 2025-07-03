@@ -1,10 +1,13 @@
 from pathlib import Path
 from textual.app import App
 
+from .. import cache
 from .setup_dialog import SetupDialog
+
 
 class SetupApp(App):
     """Temporary app to collect setup information."""
+
     CSS_PATH = Path(__file__).resolve().parent.parent / "default.tcss"
 
     def __init__(self) -> None:
@@ -12,6 +15,11 @@ class SetupApp(App):
         self.result = None
 
     async def on_mount(self) -> None:
+        cfg = cache.load_onboarding_config()
+        if cfg:
+            self.result = cfg
+            self.exit()
+            return
         await self.push_screen(SetupDialog(self._on_submit), wait_for_dismiss=False)
 
     def _on_submit(
