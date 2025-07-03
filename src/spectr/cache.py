@@ -18,6 +18,7 @@ GAINERS_CACHE_FILE = pathlib.Path.home() / ".spectr_gainers_cache.json"
 STRATEGY_CACHE_FILE = pathlib.Path.home() / ".spectr_strategy_cache.json"
 STRATEGY_NAME_FILE = pathlib.Path.home() / ".spectr_selected_strategy.json"
 SCANNER_NAME_FILE = pathlib.Path.home() / ".spectr_selected_scanner.json"
+TRADE_AMOUNT_FILE = pathlib.Path.home() / ".spectr_trade_amount.json"
 
 
 def save_cache(symbol: str, df: pd.DataFrame) -> None:
@@ -27,7 +28,10 @@ def save_cache(symbol: str, df: pd.DataFrame) -> None:
         cache_path = os.path.join(CACHE_DIR, CACHE_PATH_STR.format(symbol))
 
         df_to_save = df.copy()
-        if isinstance(df_to_save.index, pd.DatetimeIndex) and df_to_save.index.tz is not None:
+        if (
+            isinstance(df_to_save.index, pd.DatetimeIndex)
+            and df_to_save.index.tz is not None
+        ):
             df_to_save.index = df_to_save.index.tz_convert("UTC").tz_localize(None)
 
         df_to_save.to_parquet(cache_path)
@@ -43,7 +47,9 @@ def load_cache(symbol: str) -> pd.DataFrame:
     return pd.DataFrame()
 
 
-def save_scanner_cache(rows: list[dict], path: pathlib.Path = SCANNER_CACHE_FILE) -> None:
+def save_scanner_cache(
+    rows: list[dict], path: pathlib.Path = SCANNER_CACHE_FILE
+) -> None:
     try:
         path.write_text(json.dumps({"t": time.time(), "rows": rows}, indent=0))
     except Exception as exc:
@@ -60,7 +66,9 @@ def load_scanner_cache(path: pathlib.Path = SCANNER_CACHE_FILE) -> list[dict]:
         return []
 
 
-def save_gainers_cache(rows: list[dict], path: pathlib.Path = GAINERS_CACHE_FILE) -> None:
+def save_gainers_cache(
+    rows: list[dict], path: pathlib.Path = GAINERS_CACHE_FILE
+) -> None:
     try:
         path.write_text(json.dumps({"t": time.time(), "rows": rows}, indent=0))
     except Exception as exc:
@@ -77,7 +85,9 @@ def load_gainers_cache(path: pathlib.Path = GAINERS_CACHE_FILE) -> list[dict]:
         return []
 
 
-def save_strategy_cache(rows: list[dict], path: pathlib.Path = STRATEGY_CACHE_FILE) -> None:
+def save_strategy_cache(
+    rows: list[dict], path: pathlib.Path = STRATEGY_CACHE_FILE
+) -> None:
     try:
         out = []
         for rec in rows:
@@ -109,7 +119,9 @@ def load_strategy_cache(path: pathlib.Path = STRATEGY_CACHE_FILE) -> list[dict]:
     return out
 
 
-def record_signal(cache_list: list[dict], sig: dict, path: pathlib.Path = STRATEGY_CACHE_FILE) -> None:
+def record_signal(
+    cache_list: list[dict], sig: dict, path: pathlib.Path = STRATEGY_CACHE_FILE
+) -> None:
     cache_list.append(sig)
     save_strategy_cache(cache_list, path)
 
@@ -140,7 +152,11 @@ def attach_order_to_last_signal(
         status = order.get("status") or order.get("state")
 
     for rec in reversed(cache_list):
-        if rec.get("symbol") == symbol and rec.get("side") == side and "order_status" not in rec:
+        if (
+            rec.get("symbol") == symbol
+            and rec.get("side") == side
+            and "order_status" not in rec
+        ):
             if order_id:
                 rec["order_id"] = order_id
             if status:
@@ -191,7 +207,9 @@ def update_order_statuses(
         save_strategy_cache(cache_list, path)
 
 
-def save_symbols_cache(symbols: list[str], path: pathlib.Path = SYMBOLS_CACHE_PATH) -> None:
+def save_symbols_cache(
+    symbols: list[str], path: pathlib.Path = SYMBOLS_CACHE_PATH
+) -> None:
     try:
         path.write_text(json.dumps(symbols))
     except Exception as exc:
@@ -203,6 +221,7 @@ def load_symbols_cache(path: pathlib.Path = SYMBOLS_CACHE_PATH) -> list[str]:
         return json.loads(path.read_text())
     except Exception:
         return []
+
 
 def save_selected_strategy(name: str, path: pathlib.Path = STRATEGY_NAME_FILE) -> None:
     """Persist the currently selected strategy name."""
@@ -234,6 +253,8 @@ def load_selected_scanner(path: pathlib.Path = SCANNER_NAME_FILE) -> str | None:
         return json.loads(path.read_text())
     except Exception:
         return None
+
+
 ONBOARD_FILE = pathlib.Path.home() / ".spectr_onboard.json"
 
 
@@ -249,5 +270,21 @@ def load_onboarding_config(path: pathlib.Path = ONBOARD_FILE) -> dict | None:
     """Load onboarding configuration if present."""
     try:
         return json.loads(path.read_text())
+    except Exception:
+        return None
+
+
+def save_trade_amount(amount: float, path: pathlib.Path = TRADE_AMOUNT_FILE) -> None:
+    """Persist the last trade amount value."""
+    try:
+        path.write_text(json.dumps(float(amount)))
+    except Exception as exc:
+        log.error(f"trade amount cache write failed: {exc}")
+
+
+def load_trade_amount(path: pathlib.Path = TRADE_AMOUNT_FILE) -> float | None:
+    """Load the cached trade amount if available."""
+    try:
+        return float(json.loads(path.read_text()))
     except Exception:
         return None

@@ -215,6 +215,9 @@ class SpectrApp(App):
         self._shutting_down = False
 
         self.trade_amount = 0.0
+        cached_amount = cache.load_trade_amount()
+        if cached_amount is not None:
+            self.trade_amount = cached_amount
 
         self.voice_agent = VoiceAgent(
             broker_api=BROKER_API,
@@ -981,6 +984,7 @@ class SpectrApp(App):
             self.trade_amount = float(amount)
         except ValueError:
             self.trade_amount = 0.0
+        cache.save_trade_amount(self.trade_amount)
 
     def set_strategy(self, name: str) -> None:
         """Change the active trading strategy."""
