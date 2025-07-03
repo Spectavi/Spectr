@@ -9,7 +9,7 @@ SymbolView expects the hosting app to:
 1. Construct it once (typically in `on_mount`) and dock it like any other
    Textual widget.
 
-2. Call ``load_df(df, args)`` whenever the DataFrame for the *active* symbol
+2. Call ``load_df(df, args, indicators)`` whenever the DataFrame for the *active* symbol
    changes.  All three sub‑views share the same DataFrame instance, so they
    stay in perfect sync.
 """
@@ -20,7 +20,7 @@ from textual.containers import Vertical
 from textual.app import ComposeResult
 
 from .graph_view import GraphView
-from .macd_view   import MACDView
+from .macd_view import MACDView
 from .volume_view import VolumeView
 
 __all__ = ["SymbolView"]
@@ -54,14 +54,14 @@ class SymbolView(Widget):
         super().__init__(id=id)
 
         # child widgets are created in compose()
-        self.graph  : GraphView  | None = None
-        self.macd   : MACDView   | None = None
-        self.volume : VolumeView | None = None
+        self.graph: GraphView | None = None
+        self.macd: MACDView | None = None
+        self.volume: VolumeView | None = None
 
     def compose(self) -> ComposeResult:  # noqa: D401
         """Create and arrange the three sub‑views."""
-        self.graph  = GraphView()
-        self.macd   = MACDView()
+        self.graph = GraphView()
+        self.macd = MACDView()
         self.volume = VolumeView()
 
         with Vertical():
@@ -69,15 +69,18 @@ class SymbolView(Widget):
             yield self.macd
             yield self.volume
 
-    def load_df(self, symbol, df, args) -> None:
+    def load_df(self, symbol, df, args, indicators=None) -> None:
         """Push *df* + *args* down to every child view and refresh them."""
         if not (self.graph and self.macd and self.volume):
             log.debug("SymbolView.load_df called before compose finished")
             return
 
         self.graph.symbol = symbol
-        self.graph.load_df(df, args)
-        self.macd.load_df(df, args)
+        self.graph.load_df(df, args, indicators)
+        has_macd = any(spec.name.lower() == "macd" for spec in (indicators or []))
+        self.macd.display = has_macd
+        if has_macd:
+            self.macd.load_df(df, args)
         self.volume.load_df(df, args)
 
         # Request a refresh so the composite itself re‑renders promptly

@@ -17,6 +17,7 @@ class BacktestResultScreen(Screen):
         df,
         args,
         *,
+        indicators=None,
         symbol: str,
         start_date: str,
         end_date: str,
@@ -26,7 +27,9 @@ class BacktestResultScreen(Screen):
         num_sells: int,
     ) -> None:
         super().__init__()
-        self._graph = GraphView(df=df, args=args, id="backtest-graph")
+        self._graph = GraphView(
+            df=df, args=args, indicators=indicators, id="backtest-graph"
+        )
         self._graph.is_backtest = True
         self.report = Static(id="backtest-report")
         self.symbol = symbol
@@ -55,4 +58,3 @@ class BacktestResultScreen(Screen):
             f"Buys: {self.num_buys}\n"
             f"Sells: {self.num_sells}"
         )
-
