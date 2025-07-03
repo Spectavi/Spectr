@@ -93,11 +93,10 @@ class MACDOscillator(TradingStrategy):
     def get_indicators(cls) -> list[IndicatorSpec]:
         return [
             IndicatorSpec(
-                name="SMA",
-                params={"window": cls.params.fast_period, "type": "fast"},
-            ),
-            IndicatorSpec(
-                name="SMA",
-                params={"window": cls.params.slow_period, "type": "slow"},
-            ),
+                name="MACD",
+                params={
+                    "window_fast": cls.params.fast_period,
+                    "window_slow": cls.params.slow_period,
+                },
+            )
         ]
