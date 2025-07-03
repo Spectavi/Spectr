@@ -938,7 +938,8 @@ class SpectrApp(App):
         df = self.df_cache.get(symbol)
         if df is not None and not self.is_backtest:
             self.symbol_view = self.query_one("#symbol-view", SymbolView)
-            self.symbol_view.load_df(symbol, df, self.args)
+            indicators = self.strategy_class.get_indicators()
+            self.symbol_view.load_df(symbol, df, self.args, indicators)
 
         self.update_status_bar()
         if self.query("#splash") and df is not None and not df.empty:
@@ -1147,6 +1148,7 @@ class SpectrApp(App):
                 BacktestResultScreen(
                     df,
                     self.args,
+                    indicators=self.strategy_class.get_indicators(),
                     symbol=symbol,
                     start_date=form["from"],
                     end_date=form["to"],
