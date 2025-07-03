@@ -2,7 +2,7 @@ import logging
 from typing import Optional
 
 import pandas as pd
-from .trading_strategy import TradingStrategy
+from .trading_strategy import TradingStrategy, IndicatorSpec
 
 log = logging.getLogger(__name__)
 
@@ -38,12 +38,8 @@ class MACDOscillator(TradingStrategy):
             return None
 
         df = df.copy()
-        df["ma_fast"] = (
-            df["close"].rolling(window=fast_period, min_periods=1).mean()
-        )
-        df["ma_slow"] = (
-            df["close"].rolling(window=slow_period, min_periods=1).mean()
-        )
+        df["ma_fast"] = df["close"].rolling(window=fast_period, min_periods=1).mean()
+        df["ma_slow"] = df["close"].rolling(window=slow_period, min_periods=1).mean()
         df["osc"] = df["ma_fast"] - df["ma_slow"]
 
         if len(df) < 2:
@@ -92,3 +88,16 @@ class MACDOscillator(TradingStrategy):
             "stop_loss_pct": self.p.stop_loss_pct,
             "take_profit_pct": self.p.take_profit_pct,
         }
+
+    @classmethod
+    def get_indicators(cls) -> list[IndicatorSpec]:
+        return [
+            IndicatorSpec(
+                name="SMA",
+                params={"window": cls.params.fast_period, "type": "fast"},
+            ),
+            IndicatorSpec(
+                name="SMA",
+                params={"window": cls.params.slow_period, "type": "slow"},
+            ),
+        ]

@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass
 from typing import Optional, Any
 
 import pandas as pd
@@ -7,9 +8,22 @@ import backtrader as bt
 log = logging.getLogger(__name__)
 
 
+@dataclass
+class IndicatorSpec:
+    """Specification for an indicator used by a strategy."""
+
+    name: str
+    params: dict[str, Any]
+
+
 class TradingStrategy(bt.Strategy):
 
     params = (("symbol", ""),)
+
+    @classmethod
+    def get_indicators(cls) -> list[IndicatorSpec]:
+        """Return a list of indicator specifications used by this strategy."""
+        return []
 
     def get_lookback(self) -> int:
         """Return how many bars to include in the DataFrame."""

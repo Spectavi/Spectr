@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pandas as pd
 import numpy as np
-from .trading_strategy import TradingStrategy
+from .trading_strategy import TradingStrategy, IndicatorSpec
 
 log = logging.getLogger(__name__)
 
@@ -55,7 +55,9 @@ class DualThrust(TradingStrategy):
         curr_date = curr_dt.normalize()
         prev_close = df.iloc[-2]["close"]
 
-        daily = df.resample("1D").agg({"open": "first", "high": "max", "low": "min", "close": "last"})
+        daily = df.resample("1D").agg(
+            {"open": "first", "high": "max", "low": "min", "close": "last"}
+        )
         if curr_date not in daily.index or len(daily.loc[:curr_date]) <= window:
             return None
 
@@ -137,3 +139,12 @@ class DualThrust(TradingStrategy):
             "stop_loss_pct": self.p.stop_loss_pct,
             "take_profit_pct": self.p.take_profit_pct,
         }
+
+    @classmethod
+    def get_indicators(cls) -> list[IndicatorSpec]:
+        return [
+            IndicatorSpec(
+                name="DualThrustRange",
+                params={"k": cls.params.k, "window": cls.params.window},
+            )
+        ]
