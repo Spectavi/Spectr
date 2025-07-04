@@ -1,12 +1,36 @@
 import logging
 from dataclasses import dataclass
-from typing import Optional, Any
+from typing import Optional, Any, Iterable
 
 import pandas as pd
 import backtrader as bt
 import inspect
 
 log = logging.getLogger(__name__)
+
+
+def get_order_sides(orders: Optional[Iterable]) -> set[str]:
+    """Return the lowercase order sides present in *orders*."""
+    sides: set[str] = set()
+    if orders is None:
+        return sides
+
+    try:
+        if isinstance(orders, pd.DataFrame):
+            if "side" in orders.columns:
+                sides.update(str(s).lower() for s in orders["side"].dropna())
+        else:
+            for order in orders:
+                side = None
+                if isinstance(order, dict):
+                    side = order.get("side")
+                else:
+                    side = getattr(order, "side", None)
+                if side:
+                    sides.add(str(side).lower())
+    except Exception:
+        pass
+    return sides
 
 
 @dataclass
@@ -80,10 +104,10 @@ class TradingStrategy(bt.Strategy):
         df = self.build_dataframe(lookback)
         kwargs = self.get_signal_args()
         params = inspect.signature(self.detect_signals).parameters
-        allowed = set(params) - {"self", "df", "symbol", "position"}
+        allowed = set(params) - {"self", "df", "symbol", "position", "orders"}
         filtered = {k: v for k, v in kwargs.items() if k in allowed}
 
         signal = self.detect_signals(
-            df, self.p.symbol, position=self.position, **filtered
+            df, self.p.symbol, position=self.position, orders=None, **filtered
         )
         self.handle_signal(signal)
