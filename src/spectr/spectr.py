@@ -417,11 +417,17 @@ class SpectrApp(App):
                 position = BROKER_API.get_position(symbol)
 
             position = self._normalize_position(position)
+            orders = None
+            try:
+                orders = BROKER_API.get_pending_orders(symbol)
+            except Exception:
+                orders = None
 
             signal_dict = self.strategy_class.detect_signals(
                 df,
                 symbol,
                 position=position,
+                orders=orders,
             )
 
             # Check for signal

@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pandas as pd
 import numpy as np
-from .trading_strategy import TradingStrategy, IndicatorSpec
+from .trading_strategy import TradingStrategy, IndicatorSpec, get_order_sides
 
 log = logging.getLogger(__name__)
 
@@ -35,6 +35,7 @@ class DualThrust(TradingStrategy):
         df: pd.DataFrame,
         symbol: str,
         position: Optional[object] = None,
+        orders=None,
         *,
         k: float = 0.5,
         window: int = 4,
@@ -108,6 +109,9 @@ class DualThrust(TradingStrategy):
                 reason = "Reverse at upper"
 
         if signal:
+            sides = get_order_sides(orders)
+            if signal.lower() in sides:
+                return None
             return {
                 "signal": signal,
                 "price": price,

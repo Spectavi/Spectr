@@ -4,7 +4,7 @@ from typing import Optional
 import pandas as pd
 
 from . import metrics
-from .trading_strategy import TradingStrategy, IndicatorSpec
+from .trading_strategy import TradingStrategy, IndicatorSpec, get_order_sides
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +31,7 @@ class CustomStrategy(TradingStrategy):
         df: pd.DataFrame,
         symbol: str,
         position=None,
+        orders=None,
         stop_loss_pct: float = 0.01,
         take_profit_pct: float = 0.05,
         bb_period: int = 20,
@@ -85,6 +86,9 @@ class CustomStrategy(TradingStrategy):
                 reason = "Price below BB mid"
 
         if signal:
+            sides = get_order_sides(orders)
+            if signal.lower() in sides:
+                return None
             return {
                 "signal": signal,
                 "price": price,

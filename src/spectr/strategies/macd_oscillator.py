@@ -2,7 +2,7 @@ import logging
 from typing import Optional
 
 import pandas as pd
-from .trading_strategy import TradingStrategy, IndicatorSpec
+from .trading_strategy import TradingStrategy, IndicatorSpec, get_order_sides
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +27,7 @@ class MACDOscillator(TradingStrategy):
         df: pd.DataFrame,
         symbol: str,
         position: Optional[object] = None,
+        orders=None,
         *,
         fast_period: int = 12,
         slow_period: int = 26,
@@ -70,6 +71,9 @@ class MACDOscillator(TradingStrategy):
                 reason = "Oscillator crossed below zero"
 
         if signal:
+            sides = get_order_sides(orders)
+            if signal.lower() in sides:
+                return None
             return {
                 "signal": signal,
                 "price": price,
