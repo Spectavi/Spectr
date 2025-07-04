@@ -379,6 +379,32 @@ class SpectrApp(App):
         log.debug("starting consumer task")
         self._consumer_task = asyncio.create_task(self._process_updates())
 
+    def _normalize_position(self, position):
+        """Return a copy of ``position`` with numeric qty/market_value fields."""
+        if position is None:
+            return None
+        try:
+            if hasattr(position, "qty"):
+                val = getattr(position, "qty")
+                if isinstance(val, str):
+                    setattr(position, "qty", float(val))
+            elif hasattr(position, "size"):
+                val = getattr(position, "size")
+                if isinstance(val, str):
+                    setattr(position, "size", float(val))
+        except Exception:
+            pass
+
+        try:
+            if hasattr(position, "market_value"):
+                val = getattr(position, "market_value")
+                if isinstance(val, str):
+                    setattr(position, "market_value", float(val))
+        except Exception:
+            pass
+
+        return position
+
     def _poll_one_symbol(self, symbol: str, quote: dict | None = None, position=None):
         try:
             df, quote = self._fetch_data(symbol, quote)
@@ -389,6 +415,8 @@ class SpectrApp(App):
 
             if position is None:
                 position = BROKER_API.get_position(symbol)
+
+            position = self._normalize_position(position)
 
             signal_dict = self.strategy_class.detect_signals(
                 df,
