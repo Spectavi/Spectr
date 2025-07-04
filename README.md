@@ -111,6 +111,7 @@ PYTHONPATH=src python -m spectr.spectr --broker alpaca --data_api fmp --scale 0.
 | `--voice_agent_listen` | Enable real-time voice agent listening for the wake word. |
 | `--voice_agent_wake_word` | Word that triggers the voice agent (default: spectr). |
 | `--voice-streaming` | Enable streaming text-to-speech for the voice agent. |
+| `--reset-cache`     | Clear cached data on startup without removing saved credentials. |
 
 ---------------
 
