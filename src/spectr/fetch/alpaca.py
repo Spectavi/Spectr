@@ -11,8 +11,11 @@ from alpaca.trading import (
     GetOrdersRequest,
     QueryOrderStatus,
 )
-from alpaca.data.historical import StockHistoricalDataClient
-from alpaca.data.requests import StockLatestQuoteRequest
+from alpaca.data.historical import (
+    StockHistoricalDataClient,
+    CryptoHistoricalDataClient,
+)
+from alpaca.data.requests import StockLatestQuoteRequest, CryptoLatestQuoteRequest
 from dotenv import load_dotenv
 
 from .broker_interface import BrokerInterface, OrderType
@@ -347,18 +350,42 @@ class AlpacaInterface(BrokerInterface):
     # ------------------------------------------------------------------ #
     def fetch_quote(self, symbol: str) -> dict:
         try:
-            client = StockHistoricalDataClient(
-                api_key=API_KEY if self.real_trades else PAPER_KEY,
-                secret_key=SECRET_KEY if self.real_trades else PAPER_SECRET,
-            )
             sym = _format_symbol(symbol)
-            req = StockLatestQuoteRequest(symbol_or_symbols=sym)
-            resp = client.get_stock_latest_quote(req)
-            quote = resp[sym]
+            if is_crypto_symbol(symbol):
+                client = CryptoHistoricalDataClient(
+                    api_key=API_KEY if self.real_trades else PAPER_KEY,
+                    secret_key=SECRET_KEY if self.real_trades else PAPER_SECRET,
+                )
+                req = CryptoLatestQuoteRequest(symbol_or_symbols=sym)
+                resp = client.get_crypto_latest_quote(req)
+                quote = resp[sym]
+            else:
+                client = StockHistoricalDataClient(
+                    api_key=API_KEY if self.real_trades else PAPER_KEY,
+                    secret_key=SECRET_KEY if self.real_trades else PAPER_SECRET,
+                )
+                req = StockLatestQuoteRequest(symbol_or_symbols=sym)
+                resp = client.get_stock_latest_quote(req)
+                quote = resp[sym]
+
             return {
-                "ask": float(quote.ask_price) if quote.ask_price is not None else None,
-                "bid": float(quote.bid_price) if quote.bid_price is not None else None,
-                "price": float(quote.ask_price or quote.bid_price or 0),
+                "ask": (
+                    float(quote.ask_price)
+                    if getattr(quote, "ask_price", None) is not None
+                    else None
+                ),
+                "bid": (
+                    float(quote.bid_price)
+                    if getattr(quote, "bid_price", None) is not None
+                    else None
+                ),
+                "price": float(
+                    (
+                        getattr(quote, "ask_price", None)
+                        or getattr(quote, "bid_price", 0)
+                        or 0
+                    )
+                ),
             }
         except Exception as exc:
             log.error(f"Failed to fetch quote for {symbol}: {exc}")
