@@ -960,7 +960,7 @@ class SpectrApp(App):
         overlay = self.query_one("#overlay-text", TopOverlay)
         overlay.symbol = self.ticker_symbols[self.active_symbol_index]
         overlay.update_status(
-            f"{self.active_symbol_index + 1} / {len(self.ticker_symbols)} | {auto_trade_state}"
+            f"{self.active_symbol_index + 1} / {len(self.ticker_symbols)} | {self.strategy_name} | {auto_trade_state}"
         )
 
     def flash_message(self, msg: str):

@@ -4,6 +4,7 @@ from typing import Optional, Any
 
 import pandas as pd
 import backtrader as bt
+import inspect
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ class TradingStrategy(bt.Strategy):
             log.debug(f"Signal detected: {signal}")
 
         current_position = self.getposition(self.datas[0])
-        qty = getattr(current_position, "size", getattr(current_position, "qty", 0))
+        qty = getattr(current_position, "qty", getattr(current_position, "size", 0))
         if signal and signal.get("signal") == "sell" and qty:
             log.debug(f"BACKTEST: Sell signal detected: {signal['reason']}")
             self.sell()
@@ -77,7 +78,12 @@ class TradingStrategy(bt.Strategy):
     def next(self) -> None:
         lookback = self.get_lookback()
         df = self.build_dataframe(lookback)
+        kwargs = self.get_signal_args()
+        params = inspect.signature(self.detect_signals).parameters
+        allowed = set(params) - {"self", "df", "symbol", "position"}
+        filtered = {k: v for k, v in kwargs.items() if k in allowed}
+
         signal = self.detect_signals(
-            df, self.p.symbol, position=self.position, **self.get_signal_args()
+            df, self.p.symbol, position=self.position, **filtered
         )
         self.handle_signal(signal)
