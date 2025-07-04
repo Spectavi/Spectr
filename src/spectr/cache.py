@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import pathlib
+import shutil
 import time
 from datetime import datetime
 
@@ -342,6 +343,26 @@ def load_trade_amount(path: pathlib.Path = COMBINED_CACHE_FILE) -> float | None:
         return float(value)
     except Exception:
         return None
+
+
+def clear_cached_data(
+    path: pathlib.Path = COMBINED_CACHE_FILE, cache_dir: str = CACHE_DIR
+) -> None:
+    """Remove cached data while keeping onboarding credentials."""
+    data = _load_combined(path)
+    onboarding = data.get("onboarding")
+    if path.exists():
+        try:
+            path.unlink()
+        except Exception:
+            pass
+    if onboarding is not None:
+        _save_combined({"onboarding": onboarding}, path)
+    if os.path.isdir(cache_dir):
+        try:
+            shutil.rmtree(cache_dir)
+        except Exception:
+            pass
 
 
 _merge_legacy_caches()

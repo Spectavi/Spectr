@@ -23,14 +23,22 @@ def main() -> None:
     parser.add_argument(
         "--candles", action="store_true", default=True, help="Show candlestick chart."
     )
-    parser.add_argument("--macd_thresh", type=float, default=0.002, help="MACD threshold")
-    parser.add_argument("--bb_period", type=int, default=200, help="Bollinger Band period")
-    parser.add_argument("--bb_dev", type=float, default=2.0, help="Bollinger Band std dev")
+    parser.add_argument(
+        "--macd_thresh", type=float, default=0.002, help="MACD threshold"
+    )
+    parser.add_argument(
+        "--bb_period", type=int, default=200, help="Bollinger Band period"
+    )
+    parser.add_argument(
+        "--bb_dev", type=float, default=2.0, help="Bollinger Band std dev"
+    )
     parser.add_argument(
         "--real_trades", action="store_true", help="Enable live trading (vs paper)"
     )
     parser.add_argument("--interval", default="1min")
-    parser.add_argument("--stop_loss_pct", type=float, default=0.01, help="Stop loss pct")
+    parser.add_argument(
+        "--stop_loss_pct", type=float, default=0.01, help="Stop loss pct"
+    )
     parser.add_argument(
         "--take_profit_pct", type=float, default=0.05, help="Take profit pct"
     )
@@ -53,7 +61,9 @@ def main() -> None:
         help="Choose which data provider to use (Alpaca, Robinhood, or FMP)",
     )
     parser.add_argument(
-        "--listen", action="store_true", help="Enable real-time voice agent listening for a wake word"
+        "--listen",
+        action="store_true",
+        help="Enable real-time voice agent listening for a wake word",
     )
     parser.add_argument(
         "--wake_word", default="spectr", help="Wake word that triggers the voice agent"
@@ -63,8 +73,16 @@ def main() -> None:
         action="store_true",
         help="Enable streaming text-to-speech for the voice agent",
     )
+    parser.add_argument(
+        "--reset-cache",
+        action="store_true",
+        help="Clear cached data before launching the app",
+    )
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
+
+    if args.reset_cache:
+        cache.clear_cached_data()
 
     if "--symbols" not in sys.argv:
         cached = cache.load_symbols_cache()
@@ -132,7 +150,9 @@ def main() -> None:
 
         appmod.BROKER_API = RobinhoodInterface()
     elif args.broker == "fmp":
-        raise ValueError("Invalid broker: FMP does not support broker services, only data.")
+        raise ValueError(
+            "Invalid broker: FMP does not support broker services, only data."
+        )
     else:
         raise ValueError(f"Unknown broker: {args.broker}")
 
