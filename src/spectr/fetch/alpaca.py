@@ -16,7 +16,7 @@ from alpaca.data.requests import StockLatestQuoteRequest
 from dotenv import load_dotenv
 
 from .broker_interface import BrokerInterface, OrderType
-from ..utils import is_crypto_symbol
+from ..utils import CRYPTO_SUFFIXES, is_crypto_symbol
 
 # Load credentials. Prefer the generic BROKER_* or DATA_* environment variables
 # provided by the onboarding dialog. Fallback to the legacy ALPACA_* variables
@@ -38,6 +38,18 @@ PAPER_KEY = os.getenv("PAPER_API_KEY") or API_KEY
 PAPER_SECRET = os.getenv("PAPER_SECRET") or SECRET_KEY
 
 log = logging.getLogger(__name__)
+
+
+def _format_symbol(symbol: str) -> str:
+    """Return *symbol* in Alpaca's expected format."""
+    sym = symbol.upper()
+    if "/" in sym:
+        return sym
+    if is_crypto_symbol(sym):
+        for suf in CRYPTO_SUFFIXES:
+            if sym.endswith(suf):
+                return f"{sym[:-len(suf)]}/{suf}"
+    return sym
 
 
 class AlpacaInterface(BrokerInterface):
@@ -339,9 +351,10 @@ class AlpacaInterface(BrokerInterface):
                 api_key=API_KEY if self.real_trades else PAPER_KEY,
                 secret_key=SECRET_KEY if self.real_trades else PAPER_SECRET,
             )
-            req = StockLatestQuoteRequest(symbol_or_symbols=symbol.upper())
+            sym = _format_symbol(symbol)
+            req = StockLatestQuoteRequest(symbol_or_symbols=sym)
             resp = client.get_stock_latest_quote(req)
-            quote = resp[symbol.upper()]
+            quote = resp[sym]
             return {
                 "ask": float(quote.ask_price) if quote.ask_price is not None else None,
                 "bid": float(quote.bid_price) if quote.bid_price is not None else None,
