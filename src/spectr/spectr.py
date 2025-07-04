@@ -1028,6 +1028,7 @@ class SpectrApp(App):
         self.strategy_name = name
         self.strategy_class = load_strategy(name)
         cache.save_selected_strategy(name)
+        self.update_status_bar()
 
     def set_scanner(self, name: str) -> None:
         """Change the active scanner implementation."""
