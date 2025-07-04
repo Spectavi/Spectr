@@ -1028,6 +1028,18 @@ class SpectrApp(App):
         self.strategy_name = name
         self.strategy_class = load_strategy(name)
         cache.save_selected_strategy(name)
+
+        # Re-analyze any cached data using the newly selected strategy
+        specs = self.strategy_class.get_indicators()
+        for sym, df in list(self.df_cache.items()):
+            if df is not None and not df.empty:
+                try:
+                    self.df_cache[sym] = metrics.analyze_indicators(df, specs)
+                except Exception:
+                    log.error("Failed to update indicators for %s", sym)
+
+        current = self.ticker_symbols[self.active_symbol_index]
+        self.update_view(current)
         self.update_status_bar()
 
     def set_scanner(self, name: str) -> None:
