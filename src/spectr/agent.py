@@ -623,6 +623,7 @@ class VoiceAgent:
                 self._on_speech_end()
             except Exception:
                 pass
+        self._stop_event.clear()
 
     def _speech_worker(self) -> None:
         while True:
