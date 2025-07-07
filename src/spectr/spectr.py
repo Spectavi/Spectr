@@ -423,12 +423,27 @@ class SpectrApp(App):
             except Exception:
                 orders = None
 
-            signal_dict = self.strategy_class.detect_signals(
-                df,
-                symbol,
-                position=position,
-                orders=orders,
-            )
+            try:
+                signal_dict = self.strategy_class.detect_signals(
+                    df,
+                    symbol,
+                    position=position,
+                    orders=orders,
+                )
+            except Exception as exc:  # noqa: BLE001
+                log.error("[poll] signal error: %s", traceback.format_exc())
+
+                def _flash_error() -> None:
+                    self.query_one("#overlay-text", TopOverlay).flash_message(
+                        f"Strategy error: {exc}",
+                        style="bold red",
+                    )
+
+                self.call_from_thread(_flash_error)
+                self.call_from_thread(self.voice_agent.say, f"Strategy error: {exc}")
+                if self._is_splash_active():
+                    self.call_from_thread(self.pop_screen)
+                return
 
             # Check for signal
             if signal_dict and not self._is_splash_active():
