@@ -115,6 +115,11 @@ class SpectrApp(App):
             "sell_quarter_current_symbol",
             "Opens sell dialog for current symbol, set to 25% of position",
         ),
+        (
+            "ctrl+d",
+            "remove_current_symbol",
+            "Remove the active symbol from the watchlist",
+        ),
         ("1", "select_symbol('1')", "Symbol 1"),
         ("2", "select_symbol('2')", "Symbol 2"),
         ("3", "select_symbol('3')", "Symbol 3"),
@@ -777,6 +782,16 @@ class SpectrApp(App):
                 default_limit_price=limit_price,
             )
         )
+
+    def action_remove_current_symbol(self) -> None:
+        """Remove the active symbol from the watchlist."""
+        if self._is_splash_active():
+            return
+        self._exit_backtest()
+        if not self.ticker_symbols:
+            return
+        symbol = self.ticker_symbols[self.active_symbol_index]
+        self.remove_symbol(symbol)
 
     # ------------ Arm / Dis-arm -------------
 

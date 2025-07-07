@@ -28,6 +28,7 @@ BYOS - Bring Your Own Strategy. You must implement your own trading strategy in 
 - 👁️ Broker API support (Alpaca, Robinhood (in progress))
 - 🧠 Supports MACD, Bollinger Bands, and Volume / VWAP.
 - 📈 Advanced hot-keys for quick sells of current position: 100% - `Ctrl+Z`, 50% - `Ctrl+X`, and 25% - `Ctrl+C`.
+- 🗑️ Remove the current symbol from the watch list with `Ctrl+D`.
 - 💾 Symbols list automatically saved between sessions
 - 📌 Any stocks you currently own are automatically kept in the watchlist
 - 🔄 Scanner that filters top 50 gainers for favorable conditions.
@@ -69,6 +70,7 @@ Currently focusing on Alpaca for broker and FMP for data. Robinhood currently br
 | `Ctrl+Z` | Sell 100% of position          |
 | `Ctrl+X` | Sell 50% of position           |
 | `Ctrl+C` | Sell 25% of position           |
+| `Ctrl+D` | Remove current symbol from watch list |
 
 
 ## 📦 Installation
