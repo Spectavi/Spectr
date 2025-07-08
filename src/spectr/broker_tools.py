@@ -96,18 +96,30 @@ def submit_order(
             quantity=qty,
             limit_price=limit_price,
             market_price=price,
-            real_trades=auto_trading_enabled,
         )
         if buy_sound_path and sell_sound_path:
             play_sound(buy_sound_path if side == OrderSide.BUY else sell_sound_path)
         return order
     except Exception as e:  # noqa: BLE001
-        err_msg = str(e).lower()
+        err_msg = str(e)
+        msgs = [err_msg]
+        if hasattr(e, "message"):
+            msgs.append(str(getattr(e, "message")))
+        try:
+            import json
+
+            parsed = json.loads(err_msg)
+            if isinstance(parsed, dict) and "message" in parsed:
+                msgs.append(str(parsed["message"]))
+        except Exception:
+            pass
+
+        err_msg = " ".join(msgs).lower()
         retried = False
         if (
             side == OrderSide.BUY
             and not float(qty).is_integer()
-            and "fraction" in err_msg
+            and any(w in err_msg for w in {"fraction", "integer", "whole"})
         ):
             fallback_qty = math.floor(qty)
             total = fallback_qty * price

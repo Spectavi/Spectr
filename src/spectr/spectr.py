@@ -10,6 +10,7 @@ import threading
 import traceback
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 
 import pandas as pd
 from textual import events
@@ -57,6 +58,7 @@ SELL_SOUND_PATH = "res/sell.mp3"
 REFRESH_INTERVAL = 60  # seconds
 SCANNER_INTERVAL = REFRESH_INTERVAL
 EQUITY_INTERVAL = 60  # portfolio equity update frequency
+ORDER_STATUS_INTERVAL = 60  # order status refresh frequency
 
 # Setup logging to file
 log_path = "debug.log"
@@ -200,6 +202,7 @@ class SpectrApp(App):
         self._poll_worker = None
         self._scanner_worker = None
         self._equity_worker = None
+        self._order_status_worker = None
         self._voice_worker = None
         self.df_cache = {symbol: pd.DataFrame() for symbol in self.ticker_symbols}
         if not os.path.exists(cache.CACHE_DIR):
@@ -318,12 +321,12 @@ class SpectrApp(App):
             # Skip auto-ordering if there's already an open order
             if BROKER_API.has_pending_order(symbol):
                 log.warning(f"Pending order for {symbol}; ignoring signal!")
-                self.signal_detected.remove(signal)
+                #self.signal_detected.remove(signal)
                 self.voice_agent.say(
                     f"Ignoring {signal.capitalize()} signal for {symbol}, pending order already exists."
                 )
                 return
-            self.signal_detected.remove(signal)
+            #self.signal_detected.remove(signal)
             broker_tools.submit_order(
                 BROKER_API,
                 symbol,
@@ -335,9 +338,12 @@ class SpectrApp(App):
                 buy_sound_path=BUY_SOUND_PATH,
                 sell_sound_path=SELL_SOUND_PATH,
             )
-        self.call_from_thread(
-            self.signal_detected.append, (symbol, curr_price, signal, reason)
-        )
+        else:
+            # If no auto-trading, append signal to queue to show order dialog.
+            self.call_from_thread(
+                self.signal_detected.append, (symbol, curr_price, signal, reason)
+            )
+
         self.call_from_thread(
             cache.record_signal,
             self.strategy_signals,
@@ -358,8 +364,12 @@ class SpectrApp(App):
         self.refresh()
 
         overlay = self.query_one("#overlay-text", TopOverlay)
-        self.voice_agent._on_speech_start = overlay.start_voice_animation
-        self.voice_agent._on_speech_end = overlay.stop_voice_animation
+        self.voice_agent._on_speech_start = lambda: self.call_from_thread(
+            overlay.start_voice_animation
+        )
+        self.voice_agent._on_speech_end = lambda: self.call_from_thread(
+            overlay.stop_voice_animation
+        )
 
         # Set symbols and active symbol
         self.ticker_symbols = self.args.symbols
@@ -375,6 +385,9 @@ class SpectrApp(App):
         self._poll_worker = self.run_worker(self._polling_loop, thread=False)
         self._scanner_worker = self.run_worker(self.scanner.scanner_loop, thread=False)
         self._equity_worker = self.run_worker(self._equity_loop, thread=False)
+        self._order_status_worker = self.run_worker(
+            self._order_status_loop, thread=False
+        )
 
         # self.update_status_bar()
         if self.args.broker == "robinhood" and self.args.real_trades:
@@ -543,33 +556,33 @@ class SpectrApp(App):
                                 side=side, pos_pct=100.0, symbol=sym, reason=reason
                             )
                         continue
-                    elif self.auto_trading_enabled and sig and side:
-                        log.info(
-                            f"AUTO-TRADE: Submitting order for {sym} at {price} with side {side}"
-                        )
-                        # Skip auto-ordering if there's already an open order
-                        if BROKER_API.has_pending_order(sym):
-                            log.warning(f"Pending order for {sym}; ignoring signal!")
-                            self.signal_detected.remove(signal)
-                            continue
-                        self.signal_detected.remove(signal)
-                        order = broker_tools.submit_order(
-                            BROKER_API,
-                            sym,
-                            side,
-                            price,
-                            self.trade_amount,
-                            self.auto_trading_enabled,
-                            voice_agent=self.voice_agent,
-                            buy_sound_path=BUY_SOUND_PATH,
-                            sell_sound_path=SELL_SOUND_PATH,
-                        )
-                        cache.attach_order_to_last_signal(
-                            self.strategy_signals,
-                            sym.upper(),
-                            side.name.lower(),
-                            order,
-                        )
+                    # elif self.auto_trading_enabled and sig and side:
+                    #     log.info(
+                    #         f"AUTO-TRADE: Submitting order for {sym} at {price} with side {side}"
+                    #     )
+                    #     # Skip auto-ordering if there's already an open order
+                    #     if BROKER_API.has_pending_order(sym):
+                    #         log.warning(f"Pending order for {sym}; ignoring signal!")
+                    #         self.signal_detected.remove(signal)
+                    #         continue
+                    #     self.signal_detected.remove(signal)
+                    #     order = broker_tools.submit_order(
+                    #         BROKER_API,
+                    #         sym,
+                    #         side,
+                    #         price,
+                    #         self.trade_amount,
+                    #         self.auto_trading_enabled,
+                    #         voice_agent=self.voice_agent,
+                    #         buy_sound_path=BUY_SOUND_PATH,
+                    #         sell_sound_path=SELL_SOUND_PATH,
+                    #     )
+                    #     cache.attach_order_to_last_signal(
+                    #         self.strategy_signals,
+                    #         sym.upper(),
+                    #         side.name.lower(),
+                    #         order,
+                    #     )
             elif symbol == self.ticker_symbols[self.active_symbol_index]:
                 if not self.is_backtest:
                     df = self.df_cache.get(symbol)
@@ -650,6 +663,41 @@ class SpectrApp(App):
             screen.equity_view.data = list(self._equity_curve_data)
             screen.equity_view.refresh()
 
+    async def _order_status_loop(self) -> None:
+        """Periodic update of open order statuses."""
+        while not self.exit_event.is_set():
+            try:
+                # Determine if any signals need status refresh
+                open_ids = {
+                    str(rec["order_id"])
+                    for rec in self.strategy_signals
+                    if rec.get("order_id")
+                       and str(rec.get("order_status", "")).lower()
+                       not in {"filled", "canceled", "cancelled", "expired", "rejected"}
+                }
+                if open_ids:
+                    orders = BROKER_API.get_all_orders()
+                    if isinstance(orders, pd.DataFrame):
+                        if not orders.empty:
+                            orders = [
+                                SimpleNamespace(**rec)
+                                for rec in orders.to_dict(orient="records")
+                            ]
+                        else:
+                            orders = []
+                    cache.update_order_statuses(self.strategy_signals, orders)
+            except Exception as exc:  # pragma: no cover - best effort
+                log.error(f"[order_status] {exc}")
+
+            try:
+                await asyncio.wait_for(
+                    self.exit_event.wait(), timeout=ORDER_STATUS_INTERVAL
+                )
+            except asyncio.TimeoutError:
+                pass
+
+        log.debug("_order_status_loop exit")
+
     async def _shutdown(self) -> None:
         """Stop background tasks and exit the application."""
         log.info("on_shutdown start")
@@ -675,6 +723,11 @@ class SpectrApp(App):
                 log.debug("cancelling equity worker")
                 self._equity_worker.cancel()
                 self._equity_worker = None
+
+            if self._order_status_worker:
+                log.debug("cancelling order status worker")
+                self._order_status_worker.cancel()
+                self._order_status_worker = None
 
             if self._consumer_task:
                 log.debug("cancelling consumer task")
@@ -811,8 +864,7 @@ class SpectrApp(App):
     # ------------ Arm / Dis-arm -------------
 
     def action_arm_auto_trading(self):
-        self.auto_trading_enabled = not self.auto_trading_enabled
-        self.update_status_bar()
+        self.set_auto_trading(not self.auto_trading_enabled)
 
     # ------------ Select Ticker -------------
 
@@ -912,14 +964,17 @@ class SpectrApp(App):
             f"(total ${msg.total:,.2f})"
         )
         try:
-            order = BROKER_API.submit_order(
-                symbol=msg.symbol,
-                side=msg.side,
-                type=msg.order_type,
-                quantity=msg.qty,
-                limit_price=msg.limit_price,
-                market_price=msg.price,
-            )
+            order = broker_tools.submit_order(
+                            BROKER_API,
+                            msg.symbol,
+                            msg.side,
+                            msg.price,
+                            self.trade_amount,
+                            self.auto_trading_enabled,
+                            voice_agent=self.voice_agent,
+                            buy_sound_path=BUY_SOUND_PATH,
+                            sell_sound_path=SELL_SOUND_PATH,
+                        )
             cache.attach_order_to_last_signal(
                 self.strategy_signals,
                 msg.symbol.upper(),
@@ -1040,7 +1095,11 @@ class SpectrApp(App):
     def set_auto_trading(self, enabled: bool) -> None:
         """Enable or disable auto trading mode."""
         self.auto_trading_enabled = enabled
-        self.update_status_bar()
+        # Update the portfolio screen toggle if it's currently visible
+        if self.screen_stack and isinstance(self.screen_stack[-1], PortfolioScreen):
+            screen = self.screen_stack[-1]
+            screen.auto_trading_enabled = enabled
+            screen.auto_switch.value = enabled
 
     def set_trade_amount(self, amount: float) -> None:
         """Persist the trade amount value used for BUY orders."""
@@ -1049,6 +1108,7 @@ class SpectrApp(App):
         except ValueError:
             self.trade_amount = 0.0
         cache.save_trade_amount(self.trade_amount)
+        self.update_status_bar()
 
     def set_strategy(self, name: str) -> None:
         """Change the active trading strategy."""

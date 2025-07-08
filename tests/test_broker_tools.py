@@ -136,3 +136,57 @@ def test_submit_order_crypto(monkeypatch, is_open):
     )
     assert broker.submitted["type"] is OrderType.MARKET
     assert broker.submitted["limit_price"] is None
+
+
+class FractionError(Exception):
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.message = message
+
+
+class FractionFailBroker(DummyBroker):
+    def __init__(self, quote=None):
+        super().__init__(qty=1, quote=quote)
+        self.calls = []
+
+    def submit_order(
+        self,
+        *,
+        symbol,
+        side,
+        type,
+        quantity=None,
+        limit_price=None,
+        market_price=None,
+        real_trades=False,
+    ):
+        self.calls.append(quantity)
+        if len(self.calls) == 1 and not float(quantity).is_integer():
+            raise FractionError("Asset is not fractionable")
+        return super().submit_order(
+            symbol=symbol,
+            side=side,
+            type=type,
+            quantity=quantity,
+            limit_price=limit_price,
+            market_price=market_price,
+            real_trades=real_trades,
+        )
+
+
+def test_submit_order_fraction_fallback(monkeypatch):
+    quote = {"ask": 10.0, "bid": 9.0}
+    broker = FractionFailBroker(quote=quote)
+    monkeypatch.setattr(broker_tools, "is_market_open_now", lambda tz=None: True)
+
+    broker_tools.submit_order(
+        broker,
+        "SBET",
+        OrderSide.BUY,
+        price=10.0,
+        trade_amount=25.0,
+        auto_trading_enabled=True,
+    )
+
+    assert broker.calls == [2.5, 2]
+    assert broker.submitted["quantity"] == 2

@@ -34,13 +34,31 @@ def _load_combined(path: pathlib.Path = COMBINED_CACHE_FILE) -> dict:
         pass
     return {}
 
+def _default(obj: object) -> object:
+    """Fallback JSON serializer for unsupported types."""
+    try:
+        from datetime import date, datetime, time as dt_time
+
+        if isinstance(obj, (datetime, date, dt_time)):
+            return obj.isoformat()
+    except Exception:  # pragma: no cover - import failure unlikely
+        pass
+
+    try:
+        import uuid
+
+        if isinstance(obj, uuid.UUID):
+            return str(obj)
+    except Exception:  # pragma: no cover - import failure unlikely
+        pass
+
+    return str(obj)
 
 def _save_combined(data: dict, path: pathlib.Path = COMBINED_CACHE_FILE) -> None:
     try:
-        path.write_text(json.dumps(data, indent=0))
-    except Exception as exc:
+        path.write_text(json.dumps(data, indent=0, default=_default))
+    except Exception as exc:  # pragma: no cover - logging only
         log.error(f"combined cache write failed: {exc}")
-
 
 def _load_legacy_strategy_cache(path: pathlib.Path) -> list[dict]:
     try:
