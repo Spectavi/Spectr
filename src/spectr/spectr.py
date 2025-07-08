@@ -321,12 +321,12 @@ class SpectrApp(App):
             # Skip auto-ordering if there's already an open order
             if BROKER_API.has_pending_order(symbol):
                 log.warning(f"Pending order for {symbol}; ignoring signal!")
-                #self.signal_detected.remove(signal)
+                # self.signal_detected.remove(signal)
                 self.voice_agent.say(
                     f"Ignoring {signal.capitalize()} signal for {symbol}, pending order already exists."
                 )
                 return
-            #self.signal_detected.remove(signal)
+            # self.signal_detected.remove(signal)
             broker_tools.submit_order(
                 BROKER_API,
                 symbol,
@@ -672,8 +672,8 @@ class SpectrApp(App):
                     str(rec["order_id"])
                     for rec in self.strategy_signals
                     if rec.get("order_id")
-                       and str(rec.get("order_status", "")).lower()
-                       not in {"filled", "canceled", "cancelled", "expired", "rejected"}
+                    and str(rec.get("order_status", "")).lower()
+                    not in {"filled", "canceled", "cancelled", "expired", "rejected"}
                 }
                 if open_ids:
                     orders = BROKER_API.get_all_orders()
@@ -965,16 +965,16 @@ class SpectrApp(App):
         )
         try:
             order = broker_tools.submit_order(
-                            BROKER_API,
-                            msg.symbol,
-                            msg.side,
-                            msg.price,
-                            self.trade_amount,
-                            self.auto_trading_enabled,
-                            voice_agent=self.voice_agent,
-                            buy_sound_path=BUY_SOUND_PATH,
-                            sell_sound_path=SELL_SOUND_PATH,
-                        )
+                BROKER_API,
+                msg.symbol,
+                msg.side,
+                msg.price,
+                self.trade_amount,
+                self.auto_trading_enabled,
+                voice_agent=self.voice_agent,
+                buy_sound_path=BUY_SOUND_PATH,
+                sell_sound_path=SELL_SOUND_PATH,
+            )
             cache.attach_order_to_last_signal(
                 self.strategy_signals,
                 msg.symbol.upper(),
@@ -1078,6 +1078,7 @@ class SpectrApp(App):
 
         overlay = self.query_one("#overlay-text", TopOverlay)
         overlay.symbol = self.ticker_symbols[self.active_symbol_index]
+        overlay.live_icon = live_icon
         overlay.update_status(
             f"{self.active_symbol_index + 1} / {len(self.ticker_symbols)} | {self.strategy_name} | {auto_trade_state}"
         )
@@ -1100,6 +1101,7 @@ class SpectrApp(App):
             screen = self.screen_stack[-1]
             screen.auto_trading_enabled = enabled
             screen.auto_switch.value = enabled
+        self.update_status_bar()
 
     def set_trade_amount(self, amount: float) -> None:
         """Persist the trade amount value used for BUY orders."""
