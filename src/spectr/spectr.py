@@ -144,6 +144,7 @@ class SpectrApp(App):
     ticker_symbols = reactive([])
     active_symbol_index = reactive(0)
     auto_trading_enabled: reactive[bool] = reactive(False)
+    afterhours_enabled: reactive[bool] = reactive(True)
     is_backtest: reactive[bool] = reactive(False)
     trade_amount: reactive[float] = reactive(0.0)
     confirm_quit: reactive[bool] = reactive(False)
@@ -314,7 +315,8 @@ class SpectrApp(App):
         reason = signal_dict.get("reason")
         log.debug(f"Signal detected for {symbol}. Reason: {reason}")
         df.at[df.index[-1], "trade"] = signal
-        if self.auto_trading_enabled:
+        afterhours_ok = self.afterhours_enabled or utils.is_market_open_now()
+        if self.auto_trading_enabled and afterhours_ok:
             log.info(
                 f"AUTO-TRADE: Submitting order for {symbol} at {curr_price} with side {signal}"
             )
@@ -542,7 +544,12 @@ class SpectrApp(App):
                         msg = f"SELL {msg}"
                         side = OrderSide.SELL
 
-                    if not self.auto_trading_enabled and sig and side:
+                    should_prompt = not self.auto_trading_enabled or (
+                        self.auto_trading_enabled
+                        and not self.afterhours_enabled
+                        and not utils.is_market_open_now()
+                    )
+                    if should_prompt and sig and side:
                         log.debug(f"Signal detected, opening dialog: {msg}")
                         if BROKER_API.has_pending_order(sym):
                             log.warning(f"Pending order for {sym}; ignoring signal!")
@@ -1044,6 +1051,8 @@ class SpectrApp(App):
                     or os.getenv("PAPER_SECRET", "") == "",
                     self.auto_trading_enabled,
                     self.set_auto_trading,
+                    self.afterhours_enabled,
+                    self.set_afterhours,
                     BROKER_API.get_balance,
                     BROKER_API.get_positions,
                     equity_data=self._equity_curve_data,
@@ -1101,6 +1110,15 @@ class SpectrApp(App):
             screen = self.screen_stack[-1]
             screen.auto_trading_enabled = enabled
             screen.auto_switch.value = enabled
+        self.update_status_bar()
+
+    def set_afterhours(self, enabled: bool) -> None:
+        """Enable or disable afterhours trading."""
+        self.afterhours_enabled = enabled
+        if self.screen_stack and isinstance(self.screen_stack[-1], PortfolioScreen):
+            screen = self.screen_stack[-1]
+            screen.afterhours_enabled = enabled
+            screen.afterhours_switch.value = enabled
         self.update_status_bar()
 
     def set_trade_amount(self, amount: float) -> None:

@@ -39,6 +39,7 @@ class PortfolioScreen(Screen):
     portfolio_value = reactive(0.0)
     real_trades = reactive(False)
     trade_amount = reactive(0.0)
+    afterhours_enabled = reactive(True)
 
     def __init__(
         self,
@@ -55,6 +56,8 @@ class PortfolioScreen(Screen):
         hide_live_switch: bool = False,
         auto_trading: bool = False,
         set_auto_trading_cb=None,
+        afterhours_enabled: bool = True,
+        set_afterhours_cb=None,
         balance_callback=None,
         positions_callback=None,
         equity_data: Optional[list] = None,
@@ -86,6 +89,8 @@ class PortfolioScreen(Screen):
         self._set_real_trades_cb = set_real_trades_cb
         self.auto_trading_enabled = auto_trading
         self._set_auto_trading_cb = set_auto_trading_cb
+        self.afterhours_enabled = afterhours_enabled
+        self._set_afterhours_cb = set_afterhours_cb
         self._cancel_order_cb = cancel_order_callback
         self.trade_amount = trade_amount
         self._set_trade_amount_cb = set_trade_amount_cb
@@ -124,6 +129,9 @@ class PortfolioScreen(Screen):
         self.mode_switch.disabled = self.disable_live_switch
         self.auto_switch = Switch(
             value=self.auto_trading_enabled, id="auto-trade-switch"
+        )
+        self.afterhours_switch = Switch(
+            value=self.afterhours_enabled, id="afterhours-switch"
         )
         self.orders_callback = orders_callback
         self.balance_callback = balance_callback
@@ -226,6 +234,11 @@ class PortfolioScreen(Screen):
                 ),
                 Container(
                     Static("Auto Trades"), self.auto_switch, id="trade-switch-container"
+                ),
+                Container(
+                    Static("Afterhours"),
+                    self.afterhours_switch,
+                    id="afterhours-switch-container",
                 ),
                 id="trade-mode-container",
             ),
@@ -408,6 +421,10 @@ class PortfolioScreen(Screen):
             self.auto_trading_enabled = event.value
             if callable(self._set_auto_trading_cb):
                 self._set_auto_trading_cb(event.value)
+        elif event.switch.id == "afterhours-switch":
+            self.afterhours_enabled = event.value
+            if callable(self._set_afterhours_cb):
+                self._set_afterhours_cb(event.value)
 
     async def on_input_changed(self, event: Input.Changed) -> None:
         if event.input.id == "trade-amount-input":
