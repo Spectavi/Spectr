@@ -20,6 +20,7 @@ def prepare_order_details(
     order_type = OrderType.MARKET
     limit_price: float | None = None
 
+    # Crypto is 24hrs so no need for limit orders.
     if not is_market_open_now() and not is_crypto_symbol(symbol):
         quote = broker.fetch_quote(symbol)
         order_type = OrderType.LIMIT
@@ -31,7 +32,7 @@ def prepare_order_details(
                 or quote.get("price")
             )
             if limit_price:
-                limit_price *= 1.003
+                limit_price *= 1.006
                 limit_price = round(limit_price, 2)
         else:
             limit_price = (
@@ -41,7 +42,7 @@ def prepare_order_details(
                 or quote.get("price")
             )
             if limit_price:
-                limit_price *= 0.997
+                limit_price *= 0.994
                 limit_price = round(limit_price, 2)
 
     log.debug(
@@ -135,7 +136,6 @@ def submit_order(
                         quantity=fallback_qty,
                         limit_price=limit_price,
                         market_price=price,
-                        real_trades=auto_trading_enabled,
                     )
                     if buy_sound_path and sell_sound_path:
                         play_sound(
@@ -145,6 +145,17 @@ def submit_order(
                     order = res
                 except Exception as exc2:  # noqa: BLE001
                     e = exc2
+            else:
+                log.warning(
+                    "%s not fractionable and trade_amount %.2f insufficient for whole share",
+                    symbol,
+                    trade_amount,
+                )
+                if voice_agent is not None:
+                    voice_agent.say(
+                        text=f"{symbol} not fractionable and funds insufficient for full share"
+                    )
+                return None
         if not retried:
             log.error(f"Failed to submit order for {symbol}: {traceback.format_exc()}")
             if voice_agent is not None:

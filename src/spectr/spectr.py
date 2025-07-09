@@ -315,36 +315,10 @@ class SpectrApp(App):
         reason = signal_dict.get("reason")
         log.debug(f"Signal detected for {symbol}. Reason: {reason}")
         df.at[df.index[-1], "trade"] = signal
-        afterhours_ok = self.afterhours_enabled or utils.is_market_open_now()
-        if self.auto_trading_enabled and afterhours_ok:
-            log.info(
-                f"AUTO-TRADE: Submitting order for {symbol} at {curr_price} with side {signal}"
-            )
-            # Skip auto-ordering if there's already an open order
-            if BROKER_API.has_pending_order(symbol):
-                log.warning(f"Pending order for {symbol}; ignoring signal!")
-                # self.signal_detected.remove(signal)
-                self.voice_agent.say(
-                    f"Ignoring {signal.capitalize()} signal for {symbol}, pending order already exists."
-                )
-                return
-            # self.signal_detected.remove(signal)
-            broker_tools.submit_order(
-                BROKER_API,
-                symbol,
-                OrderSide.BUY if signal.lower() == "buy" else OrderSide.SELL,
-                curr_price,
-                self.trade_amount,
-                self.auto_trading_enabled,
-                voice_agent=self.voice_agent,
-                buy_sound_path=BUY_SOUND_PATH,
-                sell_sound_path=SELL_SOUND_PATH,
-            )
-        else:
-            # If no auto-trading, append signal to queue to show order dialog.
-            self.call_from_thread(
-                self.signal_detected.append, (symbol, curr_price, signal, reason)
-            )
+        # Append signal to queue to show order dialog, or auto-trade.
+        self.call_from_thread(
+            self.signal_detected.append, (symbol, curr_price, signal, reason)
+        )
 
         self.call_from_thread(
             cache.record_signal,
@@ -531,28 +505,29 @@ class SpectrApp(App):
             # If a buy signal was triggered, switch to that symbol
             if len(self.signal_detected) > 0:
                 for signal in list(self.signal_detected):
-                    sym, price, sig, reason = signal
-                    index = self.ticker_symbols.index(sym)
+                    _sym, _price, _sig, _reason = signal
+                    index = self.ticker_symbols.index(_sym)
                     self.active_symbol_index = index
-                    msg = f"{sym} @ {price} 🚀"
-                    log.debug(f"Signal for {sym}: {msg} ({sig})")
+                    msg = f"{_sym} @ {_price} 🚀"
+                    log.debug(f"Signal for {_sym}: {msg} ({_sig})")
                     side = None
-                    if sig == "buy":
+                    if _sig == "buy":
                         msg = f"BUY {msg}"
                         side = OrderSide.BUY
-                    if sig == "sell":
+                    if _sig == "sell":
                         msg = f"SELL {msg}"
                         side = OrderSide.SELL
 
+                    if not self.auto_trading_enabled and _sig and side:
                     should_prompt = not self.auto_trading_enabled or (
                         self.auto_trading_enabled
                         and not self.afterhours_enabled
                         and not utils.is_market_open_now()
                     )
-                    if should_prompt and sig and side:
+                    if should_prompt and _sig and side:
                         log.debug(f"Signal detected, opening dialog: {msg}")
-                        if BROKER_API.has_pending_order(sym):
-                            log.warning(f"Pending order for {sym}; ignoring signal!")
+                        if BROKER_API.has_pending_order(_sym):
+                            log.warning(f"Pending order for {_sym}; ignoring signal!")
                             self.signal_detected.remove(signal)
                             continue
                         self.signal_detected.remove(signal)
@@ -560,36 +535,41 @@ class SpectrApp(App):
                             self.screen_stack[-1], OrderDialog
                         ):
                             self.open_order_dialog(
-                                side=side, pos_pct=100.0, symbol=sym, reason=reason
+                                side=side, pos_pct=100.0, symbol=_sym, reason=_reason
                             )
                         continue
-                    # elif self.auto_trading_enabled and sig and side:
-                    #     log.info(
-                    #         f"AUTO-TRADE: Submitting order for {sym} at {price} with side {side}"
-                    #     )
-                    #     # Skip auto-ordering if there's already an open order
-                    #     if BROKER_API.has_pending_order(sym):
-                    #         log.warning(f"Pending order for {sym}; ignoring signal!")
-                    #         self.signal_detected.remove(signal)
-                    #         continue
-                    #     self.signal_detected.remove(signal)
-                    #     order = broker_tools.submit_order(
-                    #         BROKER_API,
-                    #         sym,
-                    #         side,
-                    #         price,
-                    #         self.trade_amount,
-                    #         self.auto_trading_enabled,
-                    #         voice_agent=self.voice_agent,
-                    #         buy_sound_path=BUY_SOUND_PATH,
-                    #         sell_sound_path=SELL_SOUND_PATH,
-                    #     )
-                    #     cache.attach_order_to_last_signal(
-                    #         self.strategy_signals,
-                    #         sym.upper(),
-                    #         side.name.lower(),
-                    #         order,
-                    #     )
+                    elif self.auto_trading_enabled and _sig and side:
+                        log.info(
+                            f"AUTO-TRADE: Submitting order for {_sym} at {_price} with side {_sig}"
+                        )
+                        # Skip auto-ordering if there's already an open order
+                        if BROKER_API.has_pending_order(_sym):
+                            log.warning(f"Pending order for {_sym}; ignoring signal!")
+                            self.signal_detected.remove(signal)
+                            self.voice_agent.say(
+                                f"Ignoring {_sig.capitalize()} signal for {_sym}, pending order already exists."
+                            )
+                            return
+
+                        self.signal_detected.remove(signal)
+                        order = broker_tools.submit_order(
+                            BROKER_API,
+                            _sym,
+                            side,
+                            _price,
+                            self.trade_amount,
+                            self.auto_trading_enabled,
+                            voice_agent=self.voice_agent,
+                            buy_sound_path=BUY_SOUND_PATH,
+                            sell_sound_path=SELL_SOUND_PATH,
+                        )
+                        # Save to cache.
+                        cache.attach_order_to_last_signal(
+                            self.strategy_signals,
+                            _sym.upper(),
+                            side.name.lower(),
+                            order,
+                        )
             elif symbol == self.ticker_symbols[self.active_symbol_index]:
                 if not self.is_backtest:
                     df = self.df_cache.get(symbol)
