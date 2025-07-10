@@ -64,6 +64,7 @@ def submit_order(
     trade_amount: float,
     auto_trading_enabled: bool,
     *,
+    qty: float | None = None,
     voice_agent=None,
     buy_sound_path: str | None = None,
     sell_sound_path: str | None = None,
@@ -77,17 +78,19 @@ def submit_order(
     """
     order_type, limit_price = prepare_order_details(symbol, side, broker)
 
-    qty = 1.0
-    if side == OrderSide.BUY and trade_amount > 0 and price > 0:
-        qty = trade_amount / price
-    elif side == OrderSide.SELL:
-        pos = broker.get_position(symbol)
-        if pos:
-            log.debug(f"Position for {symbol}: {pos}")
-            qty = float(pos.qty)
-        else:
-            log.debug(f"WARNING: No position to sell for {symbol}")
-            return
+    qty_from_trade_amount = qty is None
+    if qty_from_trade_amount:
+        qty = 1.0
+        if side == OrderSide.BUY and trade_amount > 0 and price > 0:
+            qty = trade_amount / price
+        elif side == OrderSide.SELL:
+            pos = broker.get_position(symbol)
+            if pos:
+                log.debug(f"Position for {symbol}: {pos}")
+                qty = float(pos.qty)
+            else:
+                log.debug(f"WARNING: No position to sell for {symbol}")
+                return
 
     try:
         order = broker.submit_order(
@@ -118,7 +121,8 @@ def submit_order(
         err_msg = " ".join(msgs).lower()
         retried = False
         if (
-            side == OrderSide.BUY
+            qty_from_trade_amount
+            and side == OrderSide.BUY
             and not float(qty).is_integer()
             and any(w in err_msg for w in {"fraction", "integer", "whole"})
         ):

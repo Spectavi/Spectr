@@ -527,7 +527,9 @@ class SpectrApp(App):
                         if should_prompt and _sig and side:
                             log.debug(f"Signal detected, opening dialog: {msg}")
                             if BROKER_API.has_pending_order(_sym):
-                                log.warning(f"Pending order for {_sym}; ignoring signal!")
+                                log.warning(
+                                    f"Pending order for {_sym}; ignoring signal!"
+                                )
                                 self.signal_detected.remove(signal)
                                 continue
                             self.signal_detected.remove(signal)
@@ -535,7 +537,10 @@ class SpectrApp(App):
                                 self.screen_stack[-1], OrderDialog
                             ):
                                 self.open_order_dialog(
-                                    side=side, pos_pct=100.0, symbol=_sym, reason=_reason
+                                    side=side,
+                                    pos_pct=100.0,
+                                    symbol=_sym,
+                                    reason=_reason,
                                 )
                             continue
                     elif self.auto_trading_enabled and _sig and side:
@@ -958,6 +963,7 @@ class SpectrApp(App):
                 msg.price,
                 self.trade_amount,
                 self.auto_trading_enabled,
+                qty=msg.qty,
                 voice_agent=self.voice_agent,
                 buy_sound_path=BUY_SOUND_PATH,
                 sell_sound_path=SELL_SOUND_PATH,
