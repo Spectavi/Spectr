@@ -27,6 +27,7 @@ dependencies = [
   "openai>=1.0",
   "python-dotenv>=1.0",
   "robin_stocks>=2.1",
+  "pyperclip>=1.8",
 ]
 
 [project.urls]
