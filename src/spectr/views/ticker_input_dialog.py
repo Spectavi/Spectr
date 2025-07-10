@@ -9,7 +9,7 @@ from .. import utils
 
 log = logging.getLogger(__name__)
 
-NO_RESULT_ROW = ("No results found.", "", "", "", "", "", "")    # table layout
+NO_RESULT_ROW = ("No results found.", "", "", "", "", "", "")  # table layout
 
 
 class TickerInputDialog(ModalScreen):
@@ -18,20 +18,19 @@ class TickerInputDialog(ModalScreen):
         ("escape", "app.pop_screen", "Cancel"),
     ]
 
-
     def __init__(
-            self,
-            callback,
-            top_movers_cb,
-            quote_cb=None,
-            profile_cb=None,
-            scanner_results=None,
-            scanner_results_cb=None,
-            gainers_results=None,
-            gainers_results_cb=None,
-            scanner_names=None,
-            current_scanner=None,
-            set_scanner_cb=None,
+        self,
+        callback,
+        top_movers_cb,
+        quote_cb=None,
+        profile_cb=None,
+        scanner_results=None,
+        scanner_results_cb=None,
+        gainers_results=None,
+        gainers_results_cb=None,
+        scanner_names=None,
+        current_scanner=None,
+        set_scanner_cb=None,
     ):
         super().__init__()
         self.callback = callback
@@ -47,7 +46,9 @@ class TickerInputDialog(ModalScreen):
         self.gainers_results_cb = gainers_results_cb
         self._gainers_refresh_job = None
         self.scanner_names: list[str] = scanner_names or []
-        self.current_scanner = current_scanner or (self.scanner_names[0] if self.scanner_names else "")
+        self.current_scanner = current_scanner or (
+            self.scanner_names[0] if self.scanner_names else ""
+        )
         self.set_scanner_cb = set_scanner_cb
 
     def compose(self):
@@ -124,8 +125,6 @@ class TickerInputDialog(ModalScreen):
                 10.0, self._check_gainers_results
             )
 
-
-
     async def on_unmount(self, event: events.Unmount) -> None:
         if self._scanner_refresh_job:
             self._scanner_refresh_job.stop()
@@ -135,8 +134,8 @@ class TickerInputDialog(ModalScreen):
             self._gainers_refresh_job = None
 
     def on_data_table_row_selected(
-            self,
-            event: DataTable.RowSelected,
+        self,
+        event: DataTable.RowSelected,
     ) -> None:
         log.debug(f"row selected: {event.row_key}")
         log.debug(f"data table id: {event.data_table.id}")
@@ -146,7 +145,9 @@ class TickerInputDialog(ModalScreen):
             if event.data_table.id == "gainers-table"
             else self.scanner_table_columns
         )
-        symbol = str(event.data_table.get_cell(event.row_key, columns[0])).strip().upper()  # row_key is the first column
+        symbol = (
+            str(event.data_table.get_cell(event.row_key, columns[0])).strip().upper()
+        )  # row_key is the first column
         if not symbol:
             return
 
@@ -204,7 +205,7 @@ class TickerInputDialog(ModalScreen):
 
     async def refresh_top_movers(self, rows=None):
         if rows is None:
-            rows = self.top_gainers_cb(limit=50)
+            rows = await asyncio.to_thread(self.top_gainers_cb, limit=50)
 
         self.gainers_list = rows
         table = self.query_one("#gainers-table", DataTable)
@@ -215,7 +216,7 @@ class TickerInputDialog(ModalScreen):
                 row["changesPercentage"],
                 f"${row['price']:.2f}",
                 f"${row['open_price']:.2f}",
-                row.get('volume_pct'),
+                row.get("volume_pct"),
                 utils.human_format(row["avg_volume"]),
                 utils.human_format(row["float"]),
                 key=row["symbol"],
@@ -231,7 +232,9 @@ class TickerInputDialog(ModalScreen):
             table.add_row(*NO_RESULT_ROW)
         else:
             for row in rows:
-                pct = f"{row.get('volume_pct', 0):.0f}%" if row.get('avg_volume') else ""
+                pct = (
+                    f"{row.get('volume_pct', 0):.0f}%" if row.get("avg_volume") else ""
+                )
                 table.add_row(
                     row["symbol"],
                     str(row.get("changesPercentage", ""))[:7],
