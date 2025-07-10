@@ -203,6 +203,8 @@ class PortfolioScreen(Screen):
                 else:
                     dt_str = str(dt) if dt else ""
 
+                order_id = getattr(order, "id", None)
+                short_id = f"{str(order_id)[:4]}..." if order_id else ""
                 self.order_table.add_row(
                     dt_str,
                     order.symbol,
@@ -212,7 +214,8 @@ class PortfolioScreen(Screen):
                     order.order_type,
                     order.status,
                     "Cancel" if self._is_cancelable(order.status.name) else "",
-                    key=getattr(order, "id", None),
+                    short_id,
+                    key=order_id,
                 )
         else:
             self.order_table.add_row("Loading...", "", "", "", "", "", "", "")
@@ -387,6 +390,8 @@ class PortfolioScreen(Screen):
                 else:
                     dt_str = str(dt) if dt else ""
 
+                order_id = getattr(order, "id", None)
+                short_id = f"{str(order_id)[:4]}..." if order_id else ""
                 table.add_row(
                     dt_str,
                     order.symbol,
@@ -396,7 +401,8 @@ class PortfolioScreen(Screen):
                     order.order_type,
                     order.status,
                     "Cancel" if self._is_cancelable(order.status.name) else "",
-                    order.id,
+                    short_id,
+                    key=order_id,
                 )
             table.scroll_home()
             self.app._portfolio_orders_cache = orders
@@ -471,22 +477,26 @@ class PortfolioScreen(Screen):
         self.app.open_order_dialog(OrderSide.SELL, 100.0, symbol, None)
 
     async def on_data_table_cell_selected(self, event: DataTable.CellSelected) -> None:
-        """Handle cancel button clicks in the orders table."""
+        """Handle clicks in the orders table."""
         if event.data_table.id != "orders-table":
             return
-        if event.cell_key.column_key != self._cancel_col:
-            return
 
-        order_id = str(
-            event.data_table.get_cell(event.cell_key.row_key, self._order_id_col)
-        )
-        cell_val = event.value
-        if str(cell_val).lower() != "cancel" or not order_id:
-            return
+        row_id = str(event.cell_key.row_key)
 
-        if callable(self._cancel_order_cb):
-            await asyncio.to_thread(self._cancel_order_cb, order_id)
-            await self._refresh_orders()
+        if event.cell_key.column_key == self._cancel_col:
+            cell_val = event.value
+            if str(cell_val).lower() != "cancel" or not row_id:
+                return
+            if callable(self._cancel_order_cb):
+                await asyncio.to_thread(self._cancel_order_cb, row_id)
+                await self._refresh_orders()
+        elif event.cell_key.column_key == self._order_id_col and row_id:
+            try:
+                import pyperclip
+
+                pyperclip.copy(row_id)
+            except Exception:
+                log.warning("Failed to copy order id to clipboard")
 
     @staticmethod
     def _order_date(order):
