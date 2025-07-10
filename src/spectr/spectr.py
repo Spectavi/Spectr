@@ -558,6 +558,7 @@ class SpectrApp(App):
                                 log.warning(
                                     f"Pending order for {_sym}; ignoring signal!"
                                 )
+
                                 self.signal_detected.remove(signal)
                                 continue
                             self.signal_detected.remove(signal)
