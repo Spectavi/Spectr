@@ -320,6 +320,34 @@ class SpectrApp(App):
             self.signal_detected.append, (symbol, curr_price, signal, reason)
         )
 
+        if (
+            signal
+            and self.auto_trading_enabled
+            and self.afterhours_enabled
+            and not utils.is_market_open_now()
+        ):
+            side = (
+                OrderSide.BUY
+                if signal == "buy"
+                else OrderSide.SELL if signal == "sell" else None
+            )
+            if side:
+                broker_tools.submit_order(
+                    BROKER_API,
+                    symbol,
+                    side,
+                    curr_price,
+                    self.trade_amount,
+                    self.auto_trading_enabled,
+                    voice_agent=self.voice_agent,
+                    buy_sound_path=BUY_SOUND_PATH,
+                    sell_sound_path=SELL_SOUND_PATH,
+                )
+                self.call_from_thread(
+                    self.signal_detected.remove,
+                    (symbol, curr_price, signal, reason),
+                )
+
         self.call_from_thread(
             cache.record_signal,
             self.strategy_signals,
@@ -530,6 +558,7 @@ class SpectrApp(App):
                                 log.warning(
                                     f"Pending order for {_sym}; ignoring signal!"
                                 )
+
                                 self.signal_detected.remove(signal)
                                 continue
                             self.signal_detected.remove(signal)
