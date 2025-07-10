@@ -320,6 +320,34 @@ class SpectrApp(App):
             self.signal_detected.append, (symbol, curr_price, signal, reason)
         )
 
+        if (
+            signal
+            and self.auto_trading_enabled
+            and self.afterhours_enabled
+            and not utils.is_market_open_now()
+        ):
+            side = (
+                OrderSide.BUY
+                if signal == "buy"
+                else OrderSide.SELL if signal == "sell" else None
+            )
+            if side:
+                broker_tools.submit_order(
+                    BROKER_API,
+                    symbol,
+                    side,
+                    curr_price,
+                    self.trade_amount,
+                    self.auto_trading_enabled,
+                    voice_agent=self.voice_agent,
+                    buy_sound_path=BUY_SOUND_PATH,
+                    sell_sound_path=SELL_SOUND_PATH,
+                )
+                self.call_from_thread(
+                    self.signal_detected.remove,
+                    (symbol, curr_price, signal, reason),
+                )
+
         self.call_from_thread(
             cache.record_signal,
             self.strategy_signals,
@@ -519,25 +547,30 @@ class SpectrApp(App):
                         side = OrderSide.SELL
 
                     if not self.auto_trading_enabled and _sig and side:
-                    should_prompt = not self.auto_trading_enabled or (
-                        self.auto_trading_enabled
-                        and not self.afterhours_enabled
-                        and not utils.is_market_open_now()
-                    )
-                    if should_prompt and _sig and side:
-                        log.debug(f"Signal detected, opening dialog: {msg}")
-                        if BROKER_API.has_pending_order(_sym):
-                            log.warning(f"Pending order for {_sym}; ignoring signal!")
+                        should_prompt = not self.auto_trading_enabled or (
+                            self.auto_trading_enabled
+                            and not self.afterhours_enabled
+                            and not utils.is_market_open_now()
+                        )
+                        if should_prompt and _sig and side:
+                            log.debug(f"Signal detected, opening dialog: {msg}")
+                            if BROKER_API.has_pending_order(_sym):
+                                log.warning(
+                                    f"Pending order for {_sym}; ignoring signal!"
+                                )
+                                self.signal_detected.remove(signal)
+                                continue
                             self.signal_detected.remove(signal)
+                            if self.screen_stack and not isinstance(
+                                self.screen_stack[-1], OrderDialog
+                            ):
+                                self.open_order_dialog(
+                                    side=side,
+                                    pos_pct=100.0,
+                                    symbol=_sym,
+                                    reason=_reason,
+                                )
                             continue
-                        self.signal_detected.remove(signal)
-                        if self.screen_stack and not isinstance(
-                            self.screen_stack[-1], OrderDialog
-                        ):
-                            self.open_order_dialog(
-                                side=side, pos_pct=100.0, symbol=_sym, reason=_reason
-                            )
-                        continue
                     elif self.auto_trading_enabled and _sig and side:
                         log.info(
                             f"AUTO-TRADE: Submitting order for {_sym} at {_price} with side {_sig}"
