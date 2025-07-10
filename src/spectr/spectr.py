@@ -992,6 +992,7 @@ class SpectrApp(App):
                 msg.price,
                 self.trade_amount,
                 self.auto_trading_enabled,
+                qty=msg.qty,
                 voice_agent=self.voice_agent,
                 buy_sound_path=BUY_SOUND_PATH,
                 sell_sound_path=SELL_SOUND_PATH,

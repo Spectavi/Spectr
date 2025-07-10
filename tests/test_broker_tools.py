@@ -190,3 +190,21 @@ def test_submit_order_fraction_fallback(monkeypatch):
 
     assert broker.calls == [2.5, 2]
     assert broker.submitted["quantity"] == 2
+
+
+def test_submit_order_manual_qty(monkeypatch):
+    quote = {"ask": 10.0, "bid": 9.0}
+    broker = DummyBroker(qty=5, quote=quote)
+    monkeypatch.setattr(broker_tools, "is_market_open_now", lambda tz=None: True)
+
+    broker_tools.submit_order(
+        broker,
+        "NVDA",
+        OrderSide.BUY,
+        price=10.0,
+        trade_amount=50.0,
+        auto_trading_enabled=True,
+        qty=3.5,
+    )
+
+    assert broker.submitted["quantity"] == 3.5
