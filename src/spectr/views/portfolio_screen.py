@@ -116,6 +116,7 @@ class PortfolioScreen(Screen):
             "Qty",
             "Value",
             "Type",
+            "Reason",
             "Status",
             "Cancel?",
             "Order ID",
@@ -205,6 +206,7 @@ class PortfolioScreen(Screen):
 
                 order_id = getattr(order, "id", None)
                 short_id = f"{str(order_id)[:4]}..." if order_id else ""
+                reason = self._get_order_reason(order_id)
                 self.order_table.add_row(
                     dt_str,
                     order.symbol,
@@ -212,13 +214,14 @@ class PortfolioScreen(Screen):
                     order.qty,
                     value,
                     order.order_type,
+                    reason,
                     order.status,
                     "Cancel" if self._is_cancelable(order.status.name) else "",
                     short_id,
                     key=order_id,
                 )
         else:
-            self.order_table.add_row("Loading...", "", "", "", "", "", "", "")
+            self.order_table.add_row("Loading...", "", "", "", "", "", "", "", "", "")
 
     def compose(self):
         yield Vertical(
@@ -392,6 +395,7 @@ class PortfolioScreen(Screen):
 
                 order_id = getattr(order, "id", None)
                 short_id = f"{str(order_id)[:4]}..." if order_id else ""
+                reason = self._get_order_reason(order_id)
                 table.add_row(
                     dt_str,
                     order.symbol,
@@ -399,6 +403,7 @@ class PortfolioScreen(Screen):
                     order.qty,
                     value,
                     order.order_type,
+                    reason,
                     order.status,
                     "Cancel" if self._is_cancelable(order.status.name) else "",
                     short_id,
@@ -497,6 +502,16 @@ class PortfolioScreen(Screen):
                 pyperclip.copy(row_id)
             except Exception:
                 log.warning("Failed to copy order id to clipboard")
+
+    def _get_order_reason(self, order_id) -> str:
+        """Return the cached signal reason for an order, if available."""
+        if not order_id:
+            return ""
+        for rec in reversed(self.app.strategy_signals):
+            rec_id = rec.get("order_id")
+            if rec_id is not None and str(rec_id) == str(order_id):
+                return str(rec.get("reason", ""))
+        return ""
 
     @staticmethod
     def _order_date(order):
