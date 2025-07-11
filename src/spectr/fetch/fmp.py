@@ -11,18 +11,26 @@ from .data_interface import DataInterface
 from ..exceptions import DataApiRateLimitError
 
 load_dotenv()
+
 # Prefer the generic DATA_API_KEY environment variable set by the onboarding
 # dialog, but fall back to the legacy FMP_API_KEY if present for backwards
-# compatibility.
-FMP_API_KEY = os.getenv("DATA_API_KEY") or os.getenv("FMP_API_KEY")
+# compatibility.  This value is looked up at runtime rather than import time so
+# that keys entered in the onboarding UI are respected when the module is
+# imported after setup has completed.
+
+
+def _get_api_key() -> str | None:
+    return os.getenv("DATA_API_KEY") or os.getenv("FMP_API_KEY")
+
 
 log = logging.getLogger(__name__)
 
 
 # FMP only provides data, no broker services.
 class FMPInterface(DataInterface):
-    def __init__(self):
-        if not FMP_API_KEY:
+    def __init__(self) -> None:
+        self.api_key = _get_api_key()
+        if not self.api_key:
             raise ValueError("DATA_API_KEY not found in environment")
 
     def _check_rate_limit(self, resp: requests.Response) -> None:
@@ -34,7 +42,7 @@ class FMPInterface(DataInterface):
         self, symbol: str, from_date: str, to_date: str, interval: str = "1min"
     ) -> pd.DataFrame:
         # Fetch intraday data
-        url = f"https://financialmodelingprep.com/api/v3/historical-chart/{interval}/{symbol}?from_date={from_date}&to_date={to_date}&extended=true&timeseries=390&apikey={FMP_API_KEY}"
+        url = f"https://financialmodelingprep.com/api/v3/historical-chart/{interval}/{symbol}?from_date={from_date}&to_date={to_date}&extended=true&timeseries=390&apikey={self.api_key}"
         resp = requests.get(url)
         self._check_rate_limit(resp)
         data = resp.json()
@@ -65,9 +73,9 @@ class FMPInterface(DataInterface):
     def fetch_quote(self, symbol: str, afterhours: bool = False) -> dict:
         """Fetch the latest quote for a symbol from FMP."""
         if afterhours:
-            url = f"https://financialmodelingprep.com/api/v4/pre-post-market/{symbol}?apikey={FMP_API_KEY}"
+            url = f"https://financialmodelingprep.com/api/v4/pre-post-market/{symbol}?apikey={self.api_key}"
         else:
-            url = f"https://financialmodelingprep.com/api/v3/quote/{symbol}?apikey={FMP_API_KEY}"
+            url = f"https://financialmodelingprep.com/api/v3/quote/{symbol}?apikey={self.api_key}"
         try:
             response = requests.get(url)
             self._check_rate_limit(response)
@@ -93,9 +101,9 @@ class FMPInterface(DataInterface):
 
         joined = ",".join(symbols)
         if afterhours:
-            url = f"https://financialmodelingprep.com/api/v4/pre-post-market/{joined}?apikey={FMP_API_KEY}"
+            url = f"https://financialmodelingprep.com/api/v4/pre-post-market/{joined}?apikey={self.api_key}"
         else:
-            url = f"https://financialmodelingprep.com/api/v3/quote/{joined}?apikey={FMP_API_KEY}"
+            url = f"https://financialmodelingprep.com/api/v3/quote/{joined}?apikey={self.api_key}"
         try:
             resp = requests.get(url)
             self._check_rate_limit(resp)
@@ -113,7 +121,7 @@ class FMPInterface(DataInterface):
         self, symbol: str, from_date: str, to_date: str, interval="1min"
     ) -> pd.DataFrame:
         # Fetch intraday data (limited history on free tier)
-        url = f"https://financialmodelingprep.com/api/v3/historical-chart/{interval}/{symbol}?from={from_date}&to={to_date}&apikey={FMP_API_KEY}"
+        url = f"https://financialmodelingprep.com/api/v3/historical-chart/{interval}/{symbol}?from={from_date}&to={to_date}&apikey={self.api_key}"
         resp = requests.get(url)
         self._check_rate_limit(resp)
         data = resp.json()
@@ -146,7 +154,7 @@ class FMPInterface(DataInterface):
         Return a list of the day’s *up* movers sorted by %-gain
         Each result dict has at least: symbol, price, changesPercentage.
         """
-        url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={FMP_API_KEY}"
+        url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={self.api_key}"
         try:
             resp = requests.get(url, timeout=10)
             self._check_rate_limit(resp)
@@ -172,7 +180,7 @@ class FMPInterface(DataInterface):
             "%Y-%m-%d"
         )
         now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        url = f"https://financialmodelingprep.com/api/v3/stock_news?tickers={symbol.upper()}&from_date={since}&to_date={now}&apikey={FMP_API_KEY}"
+        url = f"https://financialmodelingprep.com/api/v3/stock_news?tickers={symbol.upper()}&from_date={since}&to_date={now}&apikey={self.api_key}"
 
         try:
             resp = requests.get(url, timeout=10)
@@ -191,7 +199,7 @@ class FMPInterface(DataInterface):
 
     def fetch_company_profile(self, symbol: str) -> dict:
         """Fetch profile information such as share float."""
-        url = f"https://financialmodelingprep.com/api/v3/profile/{symbol}?apikey={FMP_API_KEY}"
+        url = f"https://financialmodelingprep.com/api/v3/profile/{symbol}?apikey={self.api_key}"
         try:
             resp = requests.get(url, timeout=10)
             self._check_rate_limit(resp)
