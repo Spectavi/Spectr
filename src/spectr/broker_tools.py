@@ -93,6 +93,7 @@ def submit_order(
                 return
 
     try:
+        extended_hours = not is_market_open_now() and not is_crypto_symbol(symbol)
         order = broker.submit_order(
             symbol=symbol,
             side=side,
@@ -100,6 +101,7 @@ def submit_order(
             quantity=qty,
             limit_price=limit_price,
             market_price=price,
+            extended_hours=extended_hours,
         )
         if buy_sound_path and sell_sound_path:
             play_sound(buy_sound_path if side == OrderSide.BUY else sell_sound_path)
@@ -140,6 +142,7 @@ def submit_order(
                         quantity=fallback_qty,
                         limit_price=limit_price,
                         market_price=price,
+                        extended_hours=extended_hours,
                     )
                     if buy_sound_path and sell_sound_path:
                         play_sound(

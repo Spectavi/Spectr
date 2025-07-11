@@ -402,6 +402,7 @@ class AlpacaInterface(BrokerInterface):
         quantity: float | None = None,
         limit_price: float | None = None,
         market_price: float | None = None,
+        extended_hours: bool | None = None,
     ):
         log.debug(f"Attempting to submit {type.name}...")
         try:
@@ -420,6 +421,7 @@ class AlpacaInterface(BrokerInterface):
                     qty=quantity,
                     side=side.name.lower(),
                     time_in_force=tif,
+                    extended_hours=extended_hours,
                 )
                 price_used = market_price
             else:
@@ -429,6 +431,7 @@ class AlpacaInterface(BrokerInterface):
                     side=side.name.lower(),
                     time_in_force=tif,
                     limit_price=limit_price,
+                    extended_hours=extended_hours,
                 )
                 price_used = limit_price
 

@@ -88,6 +88,7 @@ class BrokerInterface(ABC):
         quantity: float | None = None,
         limit_price: float | None = None,
         market_price: float | None = None,
+        extended_hours: bool | None = None,
     ):
         """Submit a buy/sell order and return the resulting order object."""
         pass

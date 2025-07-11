@@ -32,6 +32,7 @@ ROBIN_PASS = (
 ## doesn't properly authenticate. Robinhood has sent users stating that API usage is not allowed, so user at your own risk.
 ## I recommend using FMP for data and Alpaca for broker. It's the most affordable way to get decent intraday 1min data.
 
+
 class RobinhoodInterface(BrokerInterface, DataInterface):
     def __init__(self, real_trades: bool = True):
         self._real_trades = real_trades
@@ -53,28 +54,30 @@ class RobinhoodInterface(BrokerInterface, DataInterface):
 
     # ------------- DataInterface methods -------------
 
-    def fetch_chart_data(self, symbol: str, from_date: str, to_date: str) -> pd.DataFrame:
+    def fetch_chart_data(
+        self, symbol: str, from_date: str, to_date: str
+    ) -> pd.DataFrame:
         # Robinhood supports intervals: 5minute, 10minute, day, week
         # We'll use 5minute as closest to 1min
         historicals = r.stocks.get_stock_historicals(
-            symbol,
-            interval="5minute",
-            span="week"
+            symbol, interval="5minute", span="week"
         )
         if not historicals:
             raise ValueError(f"No data returned for {symbol}")
         df = pd.DataFrame(historicals)
-        df['datetime'] = pd.to_datetime(df['begins_at'])
-        df.set_index('datetime', inplace=True)
+        df["datetime"] = pd.to_datetime(df["begins_at"])
+        df.set_index("datetime", inplace=True)
         df = df.sort_index()
-        df = df.rename(columns={
-            'open_price': 'open',
-            'high_price': 'high',
-            'low_price': 'low',
-            'close_price': 'close',
-            'volume': 'volume'
-        })
-        return df[['open', 'high', 'low', 'close', 'volume']]
+        df = df.rename(
+            columns={
+                "open_price": "open",
+                "high_price": "high",
+                "low_price": "low",
+                "close_price": "close",
+                "volume": "volume",
+            }
+        )
+        return df[["open", "high", "low", "close", "volume"]]
 
     def fetch_quote(self, symbol: str) -> dict:
         quote = r.stocks.get_quotes(symbol)
@@ -82,46 +85,49 @@ class RobinhoodInterface(BrokerInterface, DataInterface):
             raise ValueError(f"No quote data returned for {symbol}")
         return quote[0]
 
-    def fetch_chart_data_for_backtest(self, symbol: str, from_date: str, to_date: str, interval=None) -> pd.DataFrame:
+    def fetch_chart_data_for_backtest(
+        self, symbol: str, from_date: str, to_date: str, interval=None
+    ) -> pd.DataFrame:
         # Use the same as fetch_chart_data, but allow interval override
         interval = interval or "5minute"
         historicals = r.stocks.get_stock_historicals(
-            symbol,
-            interval=interval,
-            span="year"
+            symbol, interval=interval, span="year"
         )
         if not historicals:
             raise ValueError(f"No data returned for {symbol}")
         df = pd.DataFrame(historicals)
-        df['datetime'] = pd.to_datetime(df['begins_at'])
-        df.set_index('datetime', inplace=True)
+        df["datetime"] = pd.to_datetime(df["begins_at"])
+        df.set_index("datetime", inplace=True)
         df = df.sort_index()
-        df = df.rename(columns={
-            'open_price': 'open',
-            'high_price': 'high',
-            'low_price': 'low',
-            'close_price': 'close',
-            'volume': 'volume'
-        })
-        return df[['open', 'high', 'low', 'close', 'volume']]
+        df = df.rename(
+            columns={
+                "open_price": "open",
+                "high_price": "high",
+                "low_price": "low",
+                "close_price": "close",
+                "volume": "volume",
+            }
+        )
+        return df[["open", "high", "low", "close", "volume"]]
 
     def fetch_top_movers(self, limit: int = 10) -> list[dict]:
         # Robinhood does not have a direct "top movers" endpoint.
         # We'll use the "100 most popular" and sort by percent change.
         movers = r.stocks.get_most_popular()
-        quotes = r.stocks.get_quotes([m['symbol'] for m in movers])
+        quotes = r.stocks.get_quotes([m["symbol"] for m in movers])
         for m, q in zip(movers, quotes):
             try:
-                m['price'] = float(q['last_trade_price'])
-                m['changesPercentage'] = (
-                    (float(q['last_trade_price']) - float(q['previous_close'])) /
-                    float(q['previous_close']) * 100
+                m["price"] = float(q["last_trade_price"])
+                m["changesPercentage"] = (
+                    (float(q["last_trade_price"]) - float(q["previous_close"]))
+                    / float(q["previous_close"])
+                    * 100
                 )
             except Exception:
-                m['price'] = None
-                m['changesPercentage'] = None
-        movers = [m for m in movers if m['changesPercentage'] is not None]
-        movers = sorted(movers, key=lambda d: d['changesPercentage'], reverse=True)
+                m["price"] = None
+                m["changesPercentage"] = None
+        movers = [m for m in movers if m["changesPercentage"] is not None]
+        movers = sorted(movers, key=lambda d: d["changesPercentage"], reverse=True)
         return movers[:limit]
 
     def has_recent_positive_news(self, symbol: str, hours: int = 12) -> bool:
@@ -129,7 +135,7 @@ class RobinhoodInterface(BrokerInterface, DataInterface):
         news = r.stocks.get_news(symbol)
         since = datetime.now(timezone.utc) - timedelta(hours=hours)
         for article in news:
-            published = pd.to_datetime(article['published_at'])
+            published = pd.to_datetime(article["published_at"])
             if published > since:
                 return True
         return False
@@ -171,7 +177,11 @@ class RobinhoodInterface(BrokerInterface, DataInterface):
         try:
             orders = r.orders.get_all_open_stock_orders()
             if symbol:
-                orders = [o for o in orders if o["instrument"].lower().endswith(symbol.lower())]
+                orders = [
+                    o
+                    for o in orders
+                    if o["instrument"].lower().endswith(symbol.lower())
+                ]
             return pd.DataFrame(orders)
         except Exception as exc:
             log.error(f"Failed to fetch pending orders: {exc}")
@@ -180,7 +190,11 @@ class RobinhoodInterface(BrokerInterface, DataInterface):
     def get_closed_orders(self) -> pd.DataFrame:
         try:
             orders = r.orders.get_all_stock_orders()
-            closed = [o for o in orders if o.get("state") in ("filled", "cancelled", "rejected", "failed")]
+            closed = [
+                o
+                for o in orders
+                if o.get("state") in ("filled", "cancelled", "rejected", "failed")
+            ]
             return pd.DataFrame(closed)
         except Exception as exc:
             log.error(f"Failed to fetch closed orders: {exc}")
@@ -197,7 +211,9 @@ class RobinhoodInterface(BrokerInterface, DataInterface):
     def get_orders_for_symbol(self, symbol: str) -> pd.DataFrame:
         try:
             orders = r.orders.get_all_stock_orders()
-            orders = [o for o in orders if o["instrument"].lower().endswith(symbol.lower())]
+            orders = [
+                o for o in orders if o["instrument"].lower().endswith(symbol.lower())
+            ]
             return pd.DataFrame(orders)
         except Exception as exc:
             log.error(f"Failed to fetch orders for {symbol}: {exc}")
@@ -236,6 +252,7 @@ class RobinhoodInterface(BrokerInterface, DataInterface):
         quantity: float | None = None,
         limit_price: float | None = None,
         market_price: float | None = None,
+        extended_hours: bool | None = None,
     ):
         try:
             if type != OrderType.MARKET:
@@ -252,7 +269,7 @@ class RobinhoodInterface(BrokerInterface, DataInterface):
             return order
         except Exception as exc:
             log.error(f"ORDER FAILED: {exc}")
-            
+
     def cancel_order(self, order_id: str) -> bool:
         try:
             r.orders.cancel_stock_order(order_id)
