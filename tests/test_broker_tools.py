@@ -26,6 +26,7 @@ class DummyBroker:
         limit_price=None,
         market_price=None,
         real_trades=False,
+        extended_hours=None,
     ):
         self.submitted = {
             "symbol": symbol,
@@ -35,6 +36,7 @@ class DummyBroker:
             "limit_price": limit_price,
             "market_price": market_price,
             "real_trades": real_trades,
+            "extended_hours": extended_hours,
         }
         return self.submitted
 
@@ -111,6 +113,7 @@ def test_submit_order_equity(monkeypatch, side, is_open, expected_type):
         auto_trading_enabled=True,
     )
     assert broker.submitted["type"] is expected_type
+    assert broker.submitted["extended_hours"] is (not is_open)
     if is_open:
         assert broker.submitted["limit_price"] is None
     else:
@@ -135,6 +138,7 @@ def test_submit_order_crypto(monkeypatch, is_open):
         auto_trading_enabled=True,
     )
     assert broker.submitted["type"] is OrderType.MARKET
+    assert broker.submitted["extended_hours"] is False
     assert broker.submitted["limit_price"] is None
 
 
@@ -159,6 +163,7 @@ class FractionFailBroker(DummyBroker):
         limit_price=None,
         market_price=None,
         real_trades=False,
+        extended_hours=None,
     ):
         self.calls.append(quantity)
         if len(self.calls) == 1 and not float(quantity).is_integer():
@@ -171,6 +176,7 @@ class FractionFailBroker(DummyBroker):
             limit_price=limit_price,
             market_price=market_price,
             real_trades=real_trades,
+            extended_hours=extended_hours,
         )
 
 
@@ -190,6 +196,7 @@ def test_submit_order_fraction_fallback(monkeypatch):
 
     assert broker.calls == [2.5, 2]
     assert broker.submitted["quantity"] == 2
+    assert broker.submitted["extended_hours"] is False
 
 
 def test_submit_order_manual_qty(monkeypatch):
@@ -208,3 +215,4 @@ def test_submit_order_manual_qty(monkeypatch):
     )
 
     assert broker.submitted["quantity"] == 3.5
+    assert broker.submitted["extended_hours"] is False
