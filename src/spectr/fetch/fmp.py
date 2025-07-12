@@ -3,6 +3,7 @@ import os
 import pandas as pd
 import requests
 from dotenv import load_dotenv
+from .. import cache
 from datetime import datetime, timedelta, timezone
 
 from tzlocal import get_localzone
@@ -11,6 +12,7 @@ from .data_interface import DataInterface
 from ..exceptions import DataApiRateLimitError
 
 load_dotenv()
+CFG = cache.load_onboarding_config() or {}
 
 # Prefer the generic DATA_API_KEY environment variable set by the onboarding
 # dialog, but fall back to the legacy FMP_API_KEY if present for backwards
@@ -20,7 +22,7 @@ load_dotenv()
 
 
 def _get_api_key() -> str | None:
-    return os.getenv("DATA_API_KEY") or os.getenv("FMP_API_KEY")
+    return os.getenv("DATA_API_KEY") or CFG.get("data_key") or os.getenv("FMP_API_KEY")
 
 
 log = logging.getLogger(__name__)

@@ -5,26 +5,32 @@ from datetime import datetime, timedelta, timezone
 import types
 from robin_stocks import robinhood as r
 from dotenv import load_dotenv
+from .. import cache
 
 from .broker_interface import BrokerInterface, OrderSide, OrderType
 from .data_interface import DataInterface
 
 log = logging.getLogger(__name__)
 load_dotenv()
+CFG = cache.load_onboarding_config() or {}
 
 # Credentials are supplied via the generic BROKER_* variables for broker usage.
 # If Robinhood is also the selected data provider (``DATA_PROVIDER``), allow the
 # generic data variables to supply the credentials.  Otherwise fall back to the
 # legacy ROBINHOOD_* names for compatibility.
-DATA_PROVIDER = os.getenv("DATA_PROVIDER")
+DATA_PROVIDER = os.getenv("DATA_PROVIDER") or CFG.get("data_api")
 ROBIN_USER = (
     os.getenv("BROKER_API_KEY")
+    or CFG.get("broker_key")
     or (os.getenv("DATA_API_KEY") if DATA_PROVIDER == "robinhood" else None)
+    or (CFG.get("data_key") if DATA_PROVIDER == "robinhood" else None)
     or os.getenv("ROBINHOOD_USERNAME")
 )
 ROBIN_PASS = (
     os.getenv("BROKER_SECRET")
+    or CFG.get("broker_secret")
     or (os.getenv("DATA_SECRET") if DATA_PROVIDER == "robinhood" else None)
+    or (CFG.get("data_secret") if DATA_PROVIDER == "robinhood" else None)
     or os.getenv("ROBINHOOD_PASSWORD")
 )
 
