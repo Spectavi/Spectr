@@ -5,6 +5,7 @@ from textual.app import ComposeResult
 from textual.message import Message
 from textual import events
 
+
 class SetupDialog(ModalScreen):
     """Ask the user for broker and data provider configuration."""
 
@@ -41,15 +42,19 @@ class SetupDialog(ModalScreen):
             self.data_secret = data_secret
             self.openai_key = openai_key
 
-    def __init__(self, callback) -> None:
+    def __init__(self, callback, defaults: dict | None = None) -> None:
         super().__init__()
         self._callback = callback
+        self._defaults = defaults or {}
 
     def compose(self) -> ComposeResult:
         yield VerticalScroll(
             Static("Setup", id="setup-title"),
             Label("Broker:"),
-            Select(id="broker-select", options=[("Alpaca", "alpaca"), ("Robinhood", "robinhood")]),
+            Select(
+                id="broker-select",
+                options=[("Alpaca", "alpaca"), ("Robinhood", "robinhood")],
+            ),
             Input(placeholder="Broker API Key", id="broker-key"),
             Input(placeholder="Broker Secret Key", id="broker-secret"),
             Label("Paper Trading:"),
@@ -57,7 +62,14 @@ class SetupDialog(ModalScreen):
             Input(placeholder="Paper API Key", id="paper-key"),
             Input(placeholder="Paper Secret Key", id="paper-secret"),
             Label("Data Provider:"),
-            Select(id="data-select", options=[("Alpaca", "alpaca"), ("Robinhood", "robinhood"), ("FMP", "fmp")]),
+            Select(
+                id="data-select",
+                options=[
+                    ("Alpaca", "alpaca"),
+                    ("Robinhood", "robinhood"),
+                    ("FMP", "fmp"),
+                ],
+            ),
             Input(placeholder="Data API Key", id="data-key"),
             Input(placeholder="Data Secret Key", id="data-secret"),
             Label("OpenAI API Key:"),
@@ -71,9 +83,44 @@ class SetupDialog(ModalScreen):
         )
 
     async def on_mount(self, event: events.Mount) -> None:
+        if self._defaults:
+            self.query_one("#broker-select", Select).value = self._defaults.get(
+                "broker", "alpaca"
+            )
+            self.query_one("#paper-select", Select).value = self._defaults.get(
+                "paper", "alpaca"
+            )
+            self.query_one("#data-select", Select).value = self._defaults.get(
+                "data_api", "alpaca"
+            )
+
         self._update_broker_fields()
         self._update_paper_fields()
         self._update_data_fields()
+
+        if self._defaults:
+            self.query_one("#broker-key", Input).value = self._defaults.get(
+                "broker_key", ""
+            )
+            self.query_one("#broker-secret", Input).value = self._defaults.get(
+                "broker_secret", ""
+            )
+            self.query_one("#paper-key", Input).value = self._defaults.get(
+                "paper_key", ""
+            )
+            self.query_one("#paper-secret", Input).value = self._defaults.get(
+                "paper_secret", ""
+            )
+            self.query_one("#data-key", Input).value = self._defaults.get(
+                "data_key", ""
+            )
+            self.query_one("#data-secret", Input).value = self._defaults.get(
+                "data_secret", ""
+            )
+            self.query_one("#openai-key", Input).value = self._defaults.get(
+                "openai_key", ""
+            )
+
         # Focus the first input field so the user can start typing immediately
         self.query_one("#broker-key", Input).focus()
 
@@ -97,6 +144,7 @@ class SetupDialog(ModalScreen):
             key_input.placeholder = "Broker Username"
             secret_input.placeholder = "Broker Password"
             secret_input.display = True
+
     def _update_paper_fields(self) -> None:
         paper = self.query_one("#paper-select", Select).value
         key_input = self.query_one("#paper-key", Input)

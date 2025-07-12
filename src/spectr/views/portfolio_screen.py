@@ -1,4 +1,5 @@
 import logging
+import os
 
 from typing import Optional
 from types import SimpleNamespace
@@ -17,7 +18,7 @@ from .. import cache
 
 from .equity_curve_view import EquityCurveView
 from .setup_confirm_dialog import SetupConfirmDialog
-from .setup_app import SetupApp
+from .setup_dialog import SetupDialog
 
 log = logging.getLogger(__name__)
 
@@ -544,7 +545,50 @@ class PortfolioScreen(Screen):
                 SetupConfirmDialog(), wait_for_dismiss=True
             )
             if result:
-                setup = SetupApp()
-                setup.run()
+                cfg = cache.load_onboarding_config() or {}
+                await self.app.push_screen(
+                    SetupDialog(self._on_setup_submit, cfg), wait_for_dismiss=True
+                )
         elif event.button.id == "close-button":
             self.app.pop_screen()
+
+    def _on_setup_submit(
+        self,
+        broker: str,
+        paper: str,
+        data: str,
+        broker_key: str,
+        broker_secret: str,
+        paper_key: str,
+        paper_secret: str,
+        data_key: str,
+        data_secret: str,
+        openai_key: str,
+    ) -> None:
+        cfg = {
+            "broker": broker,
+            "paper": paper,
+            "data_api": data,
+            "broker_key": broker_key,
+            "broker_secret": broker_secret,
+            "paper_key": paper_key,
+            "paper_secret": paper_secret,
+            "data_key": data_key,
+            "data_secret": data_secret,
+            "openai_key": openai_key,
+        }
+        cache.save_onboarding_config(cfg)
+        os.environ["PAPER_API_KEY"] = cfg.get("paper_key", "")
+        os.environ["PAPER_SECRET"] = cfg.get("paper_secret", "")
+        if cfg.get("broker_key"):
+            os.environ["BROKER_API_KEY"] = cfg["broker_key"]
+        if cfg.get("broker_secret"):
+            os.environ["BROKER_SECRET"] = cfg["broker_secret"]
+        if cfg.get("data_key"):
+            os.environ["DATA_API_KEY"] = cfg["data_key"]
+        if cfg.get("data_secret"):
+            os.environ["DATA_SECRET"] = cfg["data_secret"]
+        if cfg.get("openai_key"):
+            os.environ["OPENAI_API_KEY"] = cfg["openai_key"]
+        if cfg.get("data_api"):
+            os.environ["DATA_PROVIDER"] = cfg["data_api"]
