@@ -17,6 +17,7 @@ from alpaca.data.historical import (
 )
 from alpaca.data.requests import StockLatestQuoteRequest, CryptoLatestQuoteRequest
 from dotenv import load_dotenv
+from .. import cache
 
 from .broker_interface import BrokerInterface, OrderType
 from ..utils import CRYPTO_SUFFIXES, is_crypto_symbol
@@ -24,21 +25,32 @@ from ..utils import CRYPTO_SUFFIXES, is_crypto_symbol
 # Load credentials. Prefer the generic BROKER_* or DATA_* environment variables
 # provided by the onboarding dialog. Fallback to the legacy ALPACA_* variables
 # so existing setups continue to work.
+
+# Load credentials. Prefer the generic BROKER_* or DATA_* environment variables
+# provided by the onboarding dialog. Fallback to any cached onboarding config so
+# existing setups continue to work regardless of environment variables.
 load_dotenv()
+CFG = cache.load_onboarding_config() or {}
 
 # Determine if Alpaca is being used as the data provider.  In that case we allow
 # the generic ``DATA_API_KEY``/``DATA_SECRET`` variables to supply the
 # credentials.  Otherwise we fall back to the broker-specific or legacy
 # variables.
-DATA_PROVIDER = os.getenv("DATA_PROVIDER")
-API_KEY = os.getenv("BROKER_API_KEY") or (
-    os.getenv("DATA_API_KEY") if DATA_PROVIDER == "alpaca" else None
+DATA_PROVIDER = os.getenv("DATA_PROVIDER") or CFG.get("data_api")
+API_KEY = (
+    os.getenv("BROKER_API_KEY")
+    or CFG.get("broker_key")
+    or (os.getenv("DATA_API_KEY") if DATA_PROVIDER == "alpaca" else None)
+    or (CFG.get("data_key") if DATA_PROVIDER == "alpaca" else None)
 )
-SECRET_KEY = os.getenv("BROKER_SECRET") or (
-    os.getenv("DATA_SECRET") if DATA_PROVIDER == "alpaca" else None
+SECRET_KEY = (
+    os.getenv("BROKER_SECRET")
+    or CFG.get("broker_secret")
+    or (os.getenv("DATA_SECRET") if DATA_PROVIDER == "alpaca" else None)
+    or (CFG.get("data_secret") if DATA_PROVIDER == "alpaca" else None)
 )
-PAPER_KEY = os.getenv("PAPER_API_KEY") or API_KEY
-PAPER_SECRET = os.getenv("PAPER_SECRET") or SECRET_KEY
+PAPER_KEY = os.getenv("PAPER_API_KEY") or CFG.get("paper_key") or API_KEY
+PAPER_SECRET = os.getenv("PAPER_SECRET") or CFG.get("paper_secret") or SECRET_KEY
 
 log = logging.getLogger(__name__)
 
