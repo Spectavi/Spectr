@@ -15,6 +15,7 @@ authors = [
 
 dependencies = [
   "backtrader>=1.9.78.123",
+  "alpaca-py>=0.42",
   "textual[syntax]>=0.59",
   "pandas>=2.2",
   "requests>=2.32",
@@ -28,6 +29,7 @@ dependencies = [
   "python-dotenv>=1.0",
   "robin_stocks>=2.1",
   "pyperclip>=1.8",
+  "black>=25.1.0",
 ]
 
 [project.urls]

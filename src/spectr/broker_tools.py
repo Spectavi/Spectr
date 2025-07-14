@@ -3,7 +3,7 @@ import math
 import traceback
 
 from .fetch.broker_interface import BrokerInterface, OrderSide, OrderType
-from .utils import is_market_open_now, is_crypto_symbol, play_sound
+from .utils import is_market_open_now, is_crypto_symbol
 
 log = logging.getLogger(__name__)
 
@@ -103,8 +103,8 @@ def submit_order(
             market_price=price,
             extended_hours=extended_hours,
         )
-        if buy_sound_path and sell_sound_path:
-            play_sound(buy_sound_path if side == OrderSide.BUY else sell_sound_path)
+        # if buy_sound_path and sell_sound_path:
+            # play_sound(buy_sound_path if side == OrderSide.BUY else sell_sound_path)
         return order
     except Exception as e:  # noqa: BLE001
         err_msg = str(e)
