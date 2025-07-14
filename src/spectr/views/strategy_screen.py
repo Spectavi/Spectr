@@ -9,6 +9,8 @@ from textual.widgets import DataTable, Static, Select, TextArea, Button
 from textual.containers import Vertical, VerticalScroll, Horizontal
 from textual.reactive import reactive
 
+from .top_overlay import TopOverlay
+
 
 class StrategyScreen(Screen):
     """Modal screen listing live strategy signals."""
@@ -45,6 +47,8 @@ class StrategyScreen(Screen):
         raise FileNotFoundError(f"Unable to locate file for strategy {name}")
 
     def compose(self):
+        yield TopOverlay(id="overlay-text")
+
         table = DataTable(zebra_stripes=True, id="signals-table")
         table.add_columns(
             "Date/Time",
