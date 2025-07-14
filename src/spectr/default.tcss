@@ -224,6 +224,34 @@ SetupDialog {
 }
 
 
+/* ------- Setup Confirm Dialog ------- */
+
+SetupConfirmDialog {
+    align: center middle;
+}
+
+#setup_confirm_body {
+    width: 50%;
+    height: 20;
+    border: solid green;
+    padding: 1 2;
+    content-align-horizontal: center;
+    content-align-vertical: middle;
+    background: #1a1a1a;
+}
+#setup_confirm_body Static {
+    text-align: center;
+    padding: 1 0;
+}
+
+#setup_confirm_row {
+    width: 100%;
+    content-align-horizontal: center;
+    align: center middle;
+    margin: 1 0;
+}
+
+
 
 /* ------- Portfolio Screen ------- */
 
