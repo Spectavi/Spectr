@@ -547,7 +547,8 @@ class PortfolioScreen(Screen):
             if result:
                 cfg = cache.load_onboarding_config() or {}
                 await self.app.push_screen(
-                    SetupDialog(self._on_setup_submit, cfg), wait_for_dismiss=True
+                    SetupDialog(self._on_setup_submit, cfg, exit_on_cancel=False),
+                    wait_for_dismiss=True,
                 )
         elif event.button.id == "close-button":
             self.app.pop_screen()

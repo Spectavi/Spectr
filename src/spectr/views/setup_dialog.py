@@ -42,10 +42,13 @@ class SetupDialog(ModalScreen):
             self.data_secret = data_secret
             self.openai_key = openai_key
 
-    def __init__(self, callback, defaults: dict | None = None) -> None:
+    def __init__(
+        self, callback, defaults: dict | None = None, *, exit_on_cancel: bool = True
+    ) -> None:
         super().__init__()
         self._callback = callback
         self._defaults = defaults or {}
+        self._exit_on_cancel = exit_on_cancel
 
     def compose(self) -> ComposeResult:
         yield VerticalScroll(
@@ -173,8 +176,11 @@ class SetupDialog(ModalScreen):
             secret_input.display = True
 
     def action_cancel(self) -> None:
-        """Exit the entire app when the dialog is cancelled."""
-        self.app.exit()
+        """Dismiss or exit when the dialog is cancelled."""
+        if self._exit_on_cancel:
+            self.app.exit()
+        else:
+            self.dismiss()
 
     def action_save(self) -> None:
         """Collect field values and exit with the result."""
