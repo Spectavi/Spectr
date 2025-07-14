@@ -60,3 +60,26 @@ def test_set_strategy_updates_cache(monkeypatch):
 
     assert new_col in app.df_cache["SYM"]
     assert updated == ["SYM"]
+
+
+def test_set_strategy_none(monkeypatch):
+    saved = []
+    monkeypatch.setattr(
+        "spectr.cache.save_selected_strategy", lambda n: saved.append(n)
+    )
+    app = SimpleNamespace(
+        available_strategies={"Test": object()},
+        strategy_name="Test",
+        strategy_class=object(),
+        df_cache={},
+        ticker_symbols=["SYM"],
+        active_symbol_index=0,
+        update_status_bar=lambda: None,
+        update_view=lambda *a: None,
+    )
+
+    SpectrApp.set_strategy(app, None)
+
+    assert app.strategy_name is None
+    assert app.strategy_class is None
+    assert saved == [None]

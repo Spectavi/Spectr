@@ -94,6 +94,7 @@ class StrategyScreen(Screen):
             Button("Format", id="strategy-format"),
             Button("Save", id="strategy-save", variant="success"),
             Button("Activate", id="strategy-activate", variant="primary"),
+            Button("Deactivate", id="strategy-deactivate", variant="warning"),
             id="strategy-toolbar",
         )
         code_scroll = VerticalScroll(self.code_widget, id="strategy-code")
@@ -135,6 +136,14 @@ class StrategyScreen(Screen):
                 "Strategy activated",
                 duration=3.0,
                 style="bold green",
+            )
+        elif event.button.id == "strategy-deactivate":
+            if callable(self.callback):
+                self.callback(None)
+            self.app.query_one("#overlay-text").flash_message(
+                "Strategy deactivated",
+                duration=3.0,
+                style="bold yellow",
             )
 
     async def _save_strategy(self) -> None:
