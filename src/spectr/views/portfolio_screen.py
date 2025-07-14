@@ -19,6 +19,7 @@ from .. import cache
 from .equity_curve_view import EquityCurveView
 from .setup_confirm_dialog import SetupConfirmDialog
 from .setup_dialog import SetupDialog
+from .top_overlay import TopOverlay
 
 log = logging.getLogger(__name__)
 
@@ -225,6 +226,7 @@ class PortfolioScreen(Screen):
             self.order_table.add_row("Loading...", "", "", "", "", "", "", "", "", "")
 
     def compose(self):
+        yield TopOverlay(id="overlay-text")
         yield Vertical(
             self.top_title,
             Horizontal(
