@@ -437,6 +437,13 @@ class SpectrApp(App):
         try:
             df, quote = self._fetch_data(symbol, quote)
             if df.empty or quote is None:
+                self.df_cache[symbol] = df
+                self._update_queue.put(symbol)
+                if (
+                    symbol == self.ticker_symbols[self.active_symbol_index]
+                    and self._is_splash_active()
+                ):
+                    self.call_from_thread(self.pop_screen)
                 return
 
             df = self._analyze_indicators(df)
@@ -1098,7 +1105,7 @@ class SpectrApp(App):
             self.symbol_view.load_df(symbol, df, self.args, indicators)
 
         self.update_status_bar()
-        if self.query("#splash") and df is not None and not df.empty:
+        if self.query("#splash") and df is not None:
             self.remove(self.query_one("#splash"))
 
     def update_status_bar(self):
