@@ -214,13 +214,13 @@ class SpectrApp(App):
         self.strategy_signals: list[dict] = cache.load_strategy_cache()
         self.available_strategies = list_strategies()
         saved_strategy = cache.load_selected_strategy()
-        default_name = saved_strategy or "CustomStrategy"
-        if default_name in self.available_strategies:
-            self.strategy_name = default_name
+        if saved_strategy and saved_strategy in self.available_strategies:
+            self.strategy_name = saved_strategy
+            self.strategy_class = load_strategy(saved_strategy)
         else:
-            self.strategy_name = next(iter(self.available_strategies))
-        self.strategy_class = load_strategy(self.strategy_name)
-        cache.save_selected_strategy(self.strategy_name)
+            self.strategy_name = None
+            self.strategy_class = None
+            cache.save_selected_strategy(None)
         self._shutting_down = False
 
         self.trade_amount = 0.0
@@ -234,7 +234,9 @@ class SpectrApp(App):
             get_cached_orders=lambda: self._portfolio_orders_cache,
             add_symbol=self.add_symbol,
             remove_symbol=self.remove_symbol,
-            get_strategy_code=lambda: get_strategy_code(self.strategy_name),
+            get_strategy_code=lambda: (
+                get_strategy_code(self.strategy_name) if self.strategy_name else ""
+            ),
             stream_voice=getattr(args, "voice_streaming", False),
         )
         if getattr(args, "listen", False):
@@ -298,6 +300,8 @@ class SpectrApp(App):
 
     def _analyze_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
         log.debug("Analyzing indicators")
+        if self.strategy_class is None:
+            return df
         df = metrics.analyze_indicators(
             df,
             self.strategy_class.get_indicators(),
@@ -428,6 +432,8 @@ class SpectrApp(App):
         return position
 
     def _poll_one_symbol(self, symbol: str, quote: dict | None = None, position=None):
+        if self.strategy_class is None:
+            return
         try:
             df, quote = self._fetch_data(symbol, quote)
             if df.empty or quote is None:
@@ -1084,7 +1090,11 @@ class SpectrApp(App):
         df = self.df_cache.get(symbol)
         if df is not None and not self.is_backtest:
             self.symbol_view = self.query_one("#symbol-view", SymbolView)
-            indicators = self.strategy_class.get_indicators()
+            indicators = (
+                self.strategy_class.get_indicators()
+                if self.strategy_class is not None
+                else []
+            )
             self.symbol_view.load_df(symbol, df, self.args, indicators)
 
         self.update_status_bar()
@@ -1103,8 +1113,12 @@ class SpectrApp(App):
         overlay = self.query_one("#overlay-text", TopOverlay)
         overlay.symbol = self.ticker_symbols[self.active_symbol_index]
         overlay.live_icon = live_icon
+        if self.strategy_name:
+            strat_status = f"{self.strategy_name} (ACTIVE)"
+        else:
+            strat_status = "NO STRATEGY (INACTIVE)"
         overlay.update_status(
-            f"{self.active_symbol_index + 1} / {len(self.ticker_symbols)} | {self.strategy_name} | {auto_trade_state}"
+            f"{self.active_symbol_index + 1} / {len(self.ticker_symbols)} | {strat_status} | {auto_trade_state}"
         )
 
     def flash_message(self, msg: str):
@@ -1145,8 +1159,14 @@ class SpectrApp(App):
         cache.save_trade_amount(self.trade_amount)
         self.update_status_bar()
 
-    def set_strategy(self, name: str) -> None:
+    def set_strategy(self, name: str | None) -> None:
         """Change the active trading strategy."""
+        if not name:
+            self.strategy_name = None
+            self.strategy_class = None
+            cache.save_selected_strategy(None)
+            self.update_status_bar()
+            return
         if name not in self.available_strategies:
             log.error(f"Unknown strategy: {name}")
             return
@@ -1249,6 +1269,11 @@ class SpectrApp(App):
         form = {"symbol": str, "from": str, "to": str, "cash": str}
         Runs in a thread to keep the UI responsive.
         """
+        if self.strategy_class is None:
+            self.query_one("#overlay-text", TopOverlay).flash_message(
+                "No active strategy", style="bold red"
+            )
+            return
         try:
             log.debug("Backtest starting...")
             overlay = self.query_one("#overlay-text", TopOverlay)
@@ -1324,7 +1349,11 @@ class SpectrApp(App):
                 BacktestResultScreen(
                     df,
                     self.args,
-                    indicators=self.strategy_class.get_indicators(),
+                    indicators=(
+                        self.strategy_class.get_indicators()
+                        if self.strategy_class is not None
+                        else []
+                    ),
                     symbol=symbol,
                     start_date=form["from"],
                     end_date=form["to"],

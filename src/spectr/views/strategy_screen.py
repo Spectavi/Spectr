@@ -93,6 +93,7 @@ class StrategyScreen(Screen):
             Button("Outdent", id="strategy-outdent"),
             Button("Format", id="strategy-format"),
             Button("Save", id="strategy-save", variant="success"),
+            Button("Activate", id="strategy-activate", variant="primary"),
             id="strategy-toolbar",
         )
         code_scroll = VerticalScroll(self.code_widget, id="strategy-code")
@@ -113,8 +114,6 @@ class StrategyScreen(Screen):
             self.code_str = self.file_path.read_text(encoding="utf-8")
             self.code_widget.text = self.code_str
             self.code_widget.language = "python"
-            if callable(self.callback):
-                self.callback(event.value)
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "strategy-undo":
@@ -129,6 +128,14 @@ class StrategyScreen(Screen):
             self._format_code()
         elif event.button.id == "strategy-save":
             await self._save_strategy()
+        elif event.button.id == "strategy-activate":
+            if callable(self.callback):
+                self.callback(self.current)
+            self.app.query_one("#overlay-text").flash_message(
+                "Strategy activated",
+                duration=3.0,
+                style="bold green",
+            )
 
     async def _save_strategy(self) -> None:
         """Write edits to disk and reload the strategy."""
