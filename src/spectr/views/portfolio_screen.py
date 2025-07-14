@@ -541,15 +541,29 @@ class PortfolioScreen(Screen):
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "setup-button":
-            result = await self.app.push_screen(
-                SetupConfirmDialog(), wait_for_dismiss=True
-            )
-            if result:
-                cfg = cache.load_onboarding_config() or {}
-                await self.app.push_screen(
-                    SetupDialog(self._on_setup_submit, cfg, exit_on_cancel=False),
-                    wait_for_dismiss=True,
-                )
+
+            async def _show_setup() -> None:
+                log.debug("Opening setup confirmation dialog")
+                try:
+                    result = await self.app.push_screen(
+                        SetupConfirmDialog(), wait_for_dismiss=True
+                    )
+                    log.debug(f"Setup confirmation result: {result}")
+                    if result:
+                        cfg = cache.load_onboarding_config() or {}
+                        await self.app.push_screen(
+                            SetupDialog(
+                                self._on_setup_submit,
+                                cfg,
+                                exit_on_cancel=False,
+                            ),
+                            wait_for_dismiss=True,
+                        )
+                except Exception as exc:
+                    log.exception(f"Setup dialog failed: {exc}")
+
+            worker = self.app.run_worker(_show_setup(), exclusive=True)
+            await worker.wait()
         elif event.button.id == "close-button":
             self.app.pop_screen()
 
