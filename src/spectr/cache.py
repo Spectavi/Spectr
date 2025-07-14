@@ -34,6 +34,7 @@ def _load_combined(path: pathlib.Path = COMBINED_CACHE_FILE) -> dict:
         pass
     return {}
 
+
 def _default(obj: object) -> object:
     """Fallback JSON serializer for unsupported types."""
     try:
@@ -54,11 +55,13 @@ def _default(obj: object) -> object:
 
     return str(obj)
 
+
 def _save_combined(data: dict, path: pathlib.Path = COMBINED_CACHE_FILE) -> None:
     try:
         path.write_text(json.dumps(data, indent=0, default=_default))
     except Exception as exc:  # pragma: no cover - logging only
         log.error(f"combined cache write failed: {exc}")
+
 
 def _load_legacy_strategy_cache(path: pathlib.Path) -> list[dict]:
     try:
@@ -303,7 +306,9 @@ def load_symbols_cache(path: pathlib.Path = COMBINED_CACHE_FILE) -> list[str]:
     return data.get("symbols", [])
 
 
-def save_selected_strategy(name: str, path: pathlib.Path = COMBINED_CACHE_FILE) -> None:
+def save_selected_strategy(
+    name: str | None, path: pathlib.Path = COMBINED_CACHE_FILE
+) -> None:
     """Persist the currently selected strategy name."""
     data = _load_combined(path)
     data["selected_strategy"] = name
