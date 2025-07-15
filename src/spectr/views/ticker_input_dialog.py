@@ -88,6 +88,8 @@ class TickerInputDialog(ModalScreen):
         )
 
     async def on_mount(self, event: events.Mount) -> None:
+        if hasattr(self.app, "update_status_bar"):
+            self.app.update_status_bar()
         input_widget = self.query_one("#ticker-input", Input)
         if hasattr(self.app, "ticker_symbols"):
             input_widget.value = ",".join(self.app.ticker_symbols)
