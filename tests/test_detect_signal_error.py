@@ -16,7 +16,6 @@ def test_poll_one_symbol_error(monkeypatch):
     )
 
     calls = {"said": [], "popped": False}
-    splash_msgs = []
 
     dummy_broker = SimpleNamespace(
         get_position=lambda symbol: None,
@@ -39,7 +38,6 @@ def test_poll_one_symbol_error(monkeypatch):
         active_symbol_index=0,
         _is_splash_active=lambda: True,
         pop_screen=lambda: calls.__setitem__("popped", True),
-        _set_splash_message=lambda text: splash_msgs.append(text),
         call_from_thread=lambda func, *a, **k: func(*a, **k),
         voice_agent=SimpleNamespace(
             say=lambda text, wait=False: calls["said"].append(text)
@@ -52,5 +50,4 @@ def test_poll_one_symbol_error(monkeypatch):
 
     assert overlay_msgs == ["Strategy error: boom"]
     assert calls["said"] == ["Strategy error: boom"]
-    assert splash_msgs == ["Strategy error: boom"]
-    assert not calls["popped"]
+    assert calls["popped"]

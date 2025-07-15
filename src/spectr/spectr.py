@@ -168,15 +168,6 @@ class SpectrApp(App):
             self.screen_stack and isinstance(self.screen_stack[-1], SplashScreen)
         )
 
-    def _set_splash_message(self, text: str) -> None:
-        """Update the splash screen message if it is visible."""
-        if self._is_splash_active():
-            try:
-                splash = self.query_one("#splash", SplashScreen)
-                splash.update_message(text)
-            except Exception:
-                pass
-
     def _prepend_open_positions(self) -> None:
         """Ensure open position symbols are at the start of ``ticker_symbols``."""
         try:
@@ -378,7 +369,6 @@ class SpectrApp(App):
 
     async def on_mount(self, event: events.Mount) -> None:
         await self.push_screen(SplashScreen(id="splash"), wait_for_dismiss=False)
-        self._set_splash_message("Loading...")
         self.refresh()
 
         overlay = self.query_one("#overlay-text", TopOverlay)
@@ -476,10 +466,11 @@ class SpectrApp(App):
                         f"Strategy error: {exc}",
                         style="bold red",
                     )
-                    self._set_splash_message(f"Strategy error: {exc}")
 
                 self.call_from_thread(_flash_error)
                 self.call_from_thread(self.voice_agent.say, f"Strategy error: {exc}")
+                if self._is_splash_active():
+                    self.call_from_thread(self.pop_screen)
                 return
 
             # Check for signal
