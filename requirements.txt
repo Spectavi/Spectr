@@ -17,7 +17,7 @@ textual[syntax]
 plotext
 requests
 rich
-playsound==1.2.2
+playsound
 plotext~=5.3.2
 requests~=2.32.3
 rich~=14.0.0
