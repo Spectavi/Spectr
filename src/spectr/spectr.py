@@ -218,8 +218,8 @@ class SpectrApp(App):
             self.strategy_name = saved_strategy
             self.strategy_class = load_strategy(saved_strategy)
         else:
-            self.strategy_name = None
-            self.strategy_class = None
+            self.strategy_name = "CustomStrategy"
+            self.strategy_class = load_strategy(self.strategy_name)
             cache.save_selected_strategy(None)
         self._shutting_down = False
 

@@ -45,6 +45,8 @@ def load_strategy(name: str) -> Type[bt.Strategy]:
 
 def get_strategy_code(name: str) -> str:
     """Return the full source for the given strategy class."""
+    if not name:
+        return ""
     try:
         cls = load_strategy(name)
         module = inspect.getmodule(cls)

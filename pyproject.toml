@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name            = "spectr"                     # pip install spectr
-version         = "0.1.0"                      # bump with each release
+version         = "0.9.0"                      # bump with each release
 description     = "Live Backtrader + Textual dashboard for multi-symbol monitoring"
 readme          = "README.md"
 license         = {file = "LICENSE"}
@@ -33,9 +33,7 @@ dependencies = [
 ]
 
 [project.urls]
-Source   = "https://github.com/your-handle/spectr"
-Issues   = "https://github.com/your-handle/spectr/issues"
-Docs     = "https://spectr.readthedocs.io"
+Source   = "https://github.com/Spectavi/Spectr"
 
 [project.scripts]
 spectr = "spectr.cli:main"   # $ spectr ↵ launches the UI
