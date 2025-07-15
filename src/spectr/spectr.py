@@ -447,14 +447,6 @@ class SpectrApp(App):
         try:
             df, quote = self._fetch_data(symbol, quote)
             if df.empty or quote is None:
-                self.df_cache[symbol] = df
-                self._update_queue.put(symbol)
-                if (
-                    symbol == self.ticker_symbols[self.active_symbol_index]
-                    and self._is_splash_active()
-                    and getattr(self, "is_running", False)
-                ):
-                    self.call_from_thread(self.pop_screen)
                 return
 
             df = self._analyze_indicators(df)
@@ -497,7 +489,7 @@ class SpectrApp(App):
             self.df_cache[symbol] = df
             self._update_queue.put(symbol)
             if symbol == self.ticker_symbols[self.active_symbol_index]:
-                if self._is_splash_active() and getattr(self, "is_running", False):
+                if self._is_splash_active():
                     self.call_from_thread(self.pop_screen)
                     self.voice_agent.say("Welcome to Spectr", wait=True)
                 # refresh the active view from the UI thread
