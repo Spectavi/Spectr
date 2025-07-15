@@ -18,6 +18,10 @@ Screen {
     color: green;
     content-align: center middle;
 }
+#splash-msg {
+    text-align: center;
+    color: yellow;
+}
 
 
 
