@@ -452,6 +452,7 @@ class SpectrApp(App):
                 if (
                     symbol == self.ticker_symbols[self.active_symbol_index]
                     and self._is_splash_active()
+                    and getattr(self, "is_running", False)
                 ):
                     self.call_from_thread(self.pop_screen)
                 return
@@ -496,7 +497,7 @@ class SpectrApp(App):
             self.df_cache[symbol] = df
             self._update_queue.put(symbol)
             if symbol == self.ticker_symbols[self.active_symbol_index]:
-                if self._is_splash_active():
+                if self._is_splash_active() and getattr(self, "is_running", False):
                     self.call_from_thread(self.pop_screen)
                     self.voice_agent.say("Welcome to Spectr", wait=True)
                 # refresh the active view from the UI thread
