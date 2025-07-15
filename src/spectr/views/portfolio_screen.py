@@ -271,6 +271,8 @@ class PortfolioScreen(Screen):
         )
 
     async def on_mount(self, event: events.Mount) -> None:
+        if hasattr(self.app, "update_status_bar"):
+            self.app.update_status_bar()
         # Fetch account data in the background so the dialog appears immediately
         asyncio.create_task(self._reload_account_data())
         asyncio.create_task(self._refresh_orders())

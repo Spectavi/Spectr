@@ -4,6 +4,7 @@ import importlib
 import pathlib
 import black
 
+from textual import events
 from textual.screen import Screen
 from textual.widgets import DataTable, Static, Select, TextArea, Button
 from textual.containers import Vertical, VerticalScroll, Horizontal
@@ -111,6 +112,10 @@ class StrategyScreen(Screen):
             code_scroll,
             id="strategy-screen",
         )
+
+    async def on_mount(self, event: events.Mount) -> None:
+        if hasattr(self.app, "update_status_bar"):
+            self.app.update_status_bar()
 
     async def on_select_changed(self, event: Select.Changed):
         if event.select.id == "strategy-select":
