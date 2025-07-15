@@ -437,6 +437,13 @@ class SpectrApp(App):
         try:
             df, quote = self._fetch_data(symbol, quote)
             if df.empty or quote is None:
+                self.df_cache[symbol] = df
+                self._update_queue.put(symbol)
+                if (
+                    symbol == self.ticker_symbols[self.active_symbol_index]
+                    and self._is_splash_active()
+                ):
+                    self.call_from_thread(self.pop_screen)
                 return
 
             df = self._analyze_indicators(df)
