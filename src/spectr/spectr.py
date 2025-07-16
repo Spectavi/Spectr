@@ -1147,6 +1147,8 @@ class SpectrApp(App):
     def set_auto_trading(self, enabled: bool) -> None:
         """Enable or disable auto trading mode."""
         self.auto_trading_enabled = enabled
+        if enabled:
+            self.set_strategy_active(True)
         # Update the portfolio screen toggle if it's currently visible
         if self.screen_stack and isinstance(self.screen_stack[-1], PortfolioScreen):
             screen = self.screen_stack[-1]

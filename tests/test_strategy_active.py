@@ -78,3 +78,23 @@ def test_strategy_screen_buttons_toggle():
             assert pilot.app.toggled == [True, False]
 
     asyncio.run(run())
+
+
+def test_set_auto_trading_activates_strategy():
+    calls = []
+
+    def _set_strategy_active(enabled: bool) -> None:
+        calls.append(enabled)
+
+    app = SimpleNamespace(
+        auto_trading_enabled=False,
+        screen_stack=[],
+        query_one=lambda *a, **k: None,
+        update_status_bar=lambda: None,
+        set_strategy_active=_set_strategy_active,
+    )
+
+    SpectrApp.set_auto_trading(app, True)
+
+    assert app.auto_trading_enabled
+    assert calls == [True]
