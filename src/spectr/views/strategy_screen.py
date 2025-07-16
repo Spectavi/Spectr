@@ -142,19 +142,21 @@ class StrategyScreen(Screen):
         elif event.button.id == "strategy-activate":
             if callable(self.callback):
                 self.callback(self.current)
-            self.app.query_one("#overlay-text").flash_message(
-                "Strategy activated",
-                duration=3.0,
-                style="bold green",
-            )
+            if hasattr(self.app, "set_strategy_active"):
+                self.app.set_strategy_active(True)
+                self.app.query_one("#overlay-text").flash_message(
+                    "Strategy activated",
+                    duration=3.0,
+                    style="bold green",
+                )
         elif event.button.id == "strategy-deactivate":
-            if callable(self.callback):
-                self.callback(None)
-            self.app.query_one("#overlay-text").flash_message(
-                "Strategy deactivated",
-                duration=3.0,
-                style="bold yellow",
-            )
+            if hasattr(self.app, "set_strategy_active"):
+                self.app.set_strategy_active(False)
+                self.app.query_one("#overlay-text").flash_message(
+                    "Strategy deactivated",
+                    duration=3.0,
+                    style="bold yellow",
+                )
 
     async def _save_strategy(self) -> None:
         """Write edits to disk and reload the strategy."""
