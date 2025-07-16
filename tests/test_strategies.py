@@ -235,6 +235,55 @@ def test_dual_thrust_signals():
     assert sig and sig["signal"] == "sell"
 
 
+def test_stop_loss_and_take_profit():
+    idx = pd.date_range("2021-01-01", periods=2, freq="D")
+    df = pd.DataFrame(
+        {
+            "open": [100, 99],
+            "high": [100, 99],
+            "low": [100, 99],
+            "close": [100, 99],
+            "volume": [1, 1],
+        },
+        index=idx,
+    )
+    sig = CustomStrategy.detect_signals(
+        df,
+        "TEST",
+        position=SimpleNamespace(qty=1, avg_entry_price=100),
+        stop_loss_pct=0.01,
+        take_profit_pct=0.05,
+        bb_period=20,
+        bb_dev=2,
+        macd_thresh=0.005,
+        is_backtest=False,
+    )
+    assert sig and sig["signal"] == "sell" and "Stop loss" in sig["reason"]
+
+    df = pd.DataFrame(
+        {
+            "open": [100, 106],
+            "high": [100, 106],
+            "low": [100, 106],
+            "close": [100, 106],
+            "volume": [1, 1],
+        },
+        index=idx,
+    )
+    sig = CustomStrategy.detect_signals(
+        df,
+        "TEST",
+        position=SimpleNamespace(qty=1, avg_entry_price=100),
+        stop_loss_pct=0.01,
+        take_profit_pct=0.05,
+        bb_period=20,
+        bb_dev=2,
+        macd_thresh=0.005,
+        is_backtest=False,
+    )
+    assert sig and sig["signal"] == "sell" and "Take profit" in sig["reason"]
+
+
 def test_indicator_specs():
     assert any(spec.name == "MACD" for spec in CustomStrategy.get_indicators())
 

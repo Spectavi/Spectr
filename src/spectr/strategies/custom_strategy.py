@@ -4,7 +4,12 @@ from typing import Optional
 import pandas as pd
 
 from . import metrics
-from .trading_strategy import TradingStrategy, IndicatorSpec, get_order_sides
+from .trading_strategy import (
+    TradingStrategy,
+    IndicatorSpec,
+    get_order_sides,
+    check_stop_levels,
+)
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +52,15 @@ class CustomStrategy(TradingStrategy):
         price = float(curr.get("close", 0))
         reason = None
         signal = None
+
+        stop_signal = check_stop_levels(price, position, stop_loss_pct, take_profit_pct)
+        if stop_signal:
+            return {
+                "signal": stop_signal["signal"],
+                "price": price,
+                "symbol": symbol,
+                "reason": stop_signal["reason"],
+            }
 
         if is_backtest:
             if (
