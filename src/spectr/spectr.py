@@ -145,6 +145,7 @@ class SpectrApp(App):
     active_symbol_index = reactive(0)
     auto_trading_enabled: reactive[bool] = reactive(False)
     afterhours_enabled: reactive[bool] = reactive(True)
+    strategy_active: reactive[bool] = reactive(True)
     is_backtest: reactive[bool] = reactive(False)
     trade_amount: reactive[float] = reactive(0.0)
     confirm_quit: reactive[bool] = reactive(False)
@@ -458,27 +459,31 @@ class SpectrApp(App):
             except Exception:
                 orders = None
 
-            try:
-                signal_dict = self.strategy_class.detect_signals(
-                    df,
-                    symbol,
-                    position=position,
-                    orders=orders,
-                )
-            except Exception as exc:  # noqa: BLE001
-                log.error("[poll] signal error: %s", traceback.format_exc())
-
-                def _flash_error() -> None:
-                    self.query_one("#overlay-text", TopOverlay).flash_message(
-                        f"Strategy error: {exc}",
-                        style="bold red",
+            signal_dict = None
+            if self.strategy_active:
+                try:
+                    signal_dict = self.strategy_class.detect_signals(
+                        df,
+                        symbol,
+                        position=position,
+                        orders=orders,
                     )
+                except Exception as exc:  # noqa: BLE001
+                    log.error("[poll] signal error: %s", traceback.format_exc())
 
-                self.call_from_thread(_flash_error)
-                self.call_from_thread(self.voice_agent.say, f"Strategy error: {exc}")
-                if self._is_splash_active():
-                    self.call_from_thread(self.pop_screen)
-                return
+                    def _flash_error() -> None:
+                        self.query_one("#overlay-text", TopOverlay).flash_message(
+                            f"Strategy error: {exc}",
+                            style="bold red",
+                        )
+
+                    self.call_from_thread(_flash_error)
+                    self.call_from_thread(
+                        self.voice_agent.say, f"Strategy error: {exc}"
+                    )
+                    if self._is_splash_active():
+                        self.call_from_thread(self.pop_screen)
+                    return
 
             # Check for signal
             if signal_dict and not self._is_splash_active():
@@ -1121,7 +1126,8 @@ class SpectrApp(App):
         overlay.symbol = self.ticker_symbols[self.active_symbol_index]
         overlay.live_icon = live_icon
         if self.strategy_name:
-            strat_status = f"{self.strategy_name} (ACTIVE)"
+            status = "ACTIVE" if self.strategy_active else "INACTIVE"
+            strat_status = f"{self.strategy_name} ({status})"
         else:
             strat_status = "NO STRATEGY (INACTIVE)"
         overlay.update_status(
@@ -1155,6 +1161,11 @@ class SpectrApp(App):
             screen = self.screen_stack[-1]
             screen.afterhours_enabled = enabled
             screen.afterhours_switch.value = enabled
+        self.update_status_bar()
+
+    def set_strategy_active(self, enabled: bool) -> None:
+        """Enable or disable strategy signal generation."""
+        self.strategy_active = enabled
         self.update_status_bar()
 
     def set_trade_amount(self, amount: float) -> None:

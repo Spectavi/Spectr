@@ -44,6 +44,7 @@ def test_poll_one_symbol_error(monkeypatch):
         ),
         update_view=lambda sym: None,
         query_one=lambda sel, cls: overlay,
+        strategy_active=True,
     )
 
     SpectrApp._poll_one_symbol(app, "AAA")
