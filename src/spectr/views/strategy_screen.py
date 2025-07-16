@@ -124,6 +124,7 @@ class StrategyScreen(Screen):
             self.code_str = self.file_path.read_text(encoding="utf-8")
             self.code_widget.text = self.code_str
             self.code_widget.language = "python"
+            event.select.blur()
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "strategy-undo":

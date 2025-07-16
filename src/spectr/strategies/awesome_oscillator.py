@@ -12,8 +12,8 @@ class AwesomeOscillator(TradingStrategy):
 
     params = (
         ("symbol", ""),
-        ("fast_period", 5),
-        ("slow_period", 34),
+        ("fast_period", 12),
+        ("slow_period", 26),
         ("stop_loss_pct", 0.01),
         ("take_profit_pct", 0.05),
     )
