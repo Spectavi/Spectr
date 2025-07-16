@@ -4,7 +4,12 @@ from datetime import datetime
 
 import pandas as pd
 import numpy as np
-from .trading_strategy import TradingStrategy, IndicatorSpec, get_order_sides
+from .trading_strategy import (
+    TradingStrategy,
+    IndicatorSpec,
+    get_order_sides,
+    check_stop_levels,
+)
 
 log = logging.getLogger(__name__)
 
@@ -77,6 +82,15 @@ class DualThrust(TradingStrategy):
         signal = None
         reason = None
         price = float(curr.get("close", 0))
+
+        stop_signal = check_stop_levels(price, position, stop_loss_pct, take_profit_pct)
+        if stop_signal:
+            return {
+                "signal": stop_signal["signal"],
+                "price": price,
+                "symbol": symbol,
+                "reason": stop_signal["reason"],
+            }
 
         qty = 0
         if position is not None:
