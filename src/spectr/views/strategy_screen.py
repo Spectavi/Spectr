@@ -10,8 +10,6 @@ from textual.widgets import DataTable, Static, Select, TextArea, Button
 from textual.containers import Vertical, VerticalScroll, Horizontal
 from textual.reactive import reactive
 
-from .top_overlay import TopOverlay
-
 
 class StrategyScreen(Screen):
     """Modal screen listing live strategy signals."""
@@ -48,8 +46,6 @@ class StrategyScreen(Screen):
         raise FileNotFoundError(f"Unable to locate file for strategy {name}")
 
     def compose(self):
-        yield TopOverlay(id="overlay-text")
-
         table = DataTable(zebra_stripes=True, id="signals-table")
         table.add_columns(
             "Date/Time",
@@ -144,7 +140,7 @@ class StrategyScreen(Screen):
                 self.callback(self.current)
             if hasattr(self.app, "set_strategy_active"):
                 self.app.set_strategy_active(True)
-                self.app.query_one("#overlay-text").flash_message(
+                self.app.overlay.flash_message(
                     "Strategy activated",
                     duration=3.0,
                     style="bold green",
@@ -152,7 +148,7 @@ class StrategyScreen(Screen):
         elif event.button.id == "strategy-deactivate":
             if hasattr(self.app, "set_strategy_active"):
                 self.app.set_strategy_active(False)
-                self.app.query_one("#overlay-text").flash_message(
+                self.app.overlay.flash_message(
                     "Strategy deactivated",
                     duration=3.0,
                     style="bold yellow",
@@ -169,11 +165,11 @@ class StrategyScreen(Screen):
                 importlib.import_module(module_name)
             if callable(self.callback):
                 self.callback(self.current)
-            self.app.query_one("#overlay-text").flash_message(
+            self.app.overlay.flash_message(
                 "Strategy saved", duration=3.0, style="bold green"
             )
         except Exception as exc:  # pragma: no cover - best effort
-            self.app.query_one("#overlay-text").flash_message(
+            self.app.overlay.flash_message(
                 f"Error saving: {exc}", duration=5.0, style="bold red"
             )
 
@@ -205,12 +201,12 @@ class StrategyScreen(Screen):
         try:
             formatted = black.format_str(self.code_widget.text, mode=black.FileMode())
         except Exception as exc:
-            self.app.query_one("#overlay-text").flash_message(
+            self.app.overlay.flash_message(
                 f"Format error: {exc}", duration=5.0, style="bold red"
             )
             return
         if formatted != self.code_widget.text:
             self.code_widget.text = formatted
-            self.app.query_one("#overlay-text").flash_message(
+            self.app.overlay.flash_message(
                 "Code formatted", duration=3.0, style="bold green"
             )

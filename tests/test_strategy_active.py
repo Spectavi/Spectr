@@ -42,7 +42,7 @@ def test_poll_one_symbol_inactive(monkeypatch):
         call_from_thread=lambda func, *a, **k: func(*a, **k),
         voice_agent=SimpleNamespace(say=lambda *a, **k: None),
         update_view=lambda sym: None,
-        query_one=lambda sel, cls: overlay,
+        overlay=overlay,
         strategy_active=False,
     )
 
@@ -68,7 +68,7 @@ def test_strategy_screen_buttons_toggle():
         async with ToggleApp().run_test() as pilot:
             screen = pilot.app.scr
             overlay = SimpleNamespace(flash_message=lambda *a, **k: None)
-            pilot.app.query_one = lambda *a, **k: overlay
+            pilot.app.overlay = overlay
             await screen.on_button_pressed(
                 SimpleNamespace(button=SimpleNamespace(id="strategy-activate"))
             )
@@ -89,7 +89,7 @@ def test_set_auto_trading_activates_strategy():
     app = SimpleNamespace(
         auto_trading_enabled=False,
         screen_stack=[],
-        query_one=lambda *a, **k: None,
+        overlay=None,
         update_status_bar=lambda: None,
         set_strategy_active=_set_strategy_active,
     )

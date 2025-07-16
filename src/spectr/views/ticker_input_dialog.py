@@ -7,7 +7,6 @@ from textual.containers import Vertical, Horizontal, Container
 from textual.screen import ModalScreen
 
 from .. import utils
-from .top_overlay import TopOverlay
 
 log = logging.getLogger(__name__)
 
@@ -54,7 +53,6 @@ class TickerInputDialog(ModalScreen):
         self.set_scanner_cb = set_scanner_cb
 
     def compose(self):
-        yield TopOverlay(id="overlay-text")
         yield Vertical(
             Label("Enter new ticker symbol list (up to 20):"),
             Horizontal(

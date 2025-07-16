@@ -160,7 +160,7 @@ class SpectrApp(App):
             elif event.key.lower() == "n":
                 event.stop()
                 self.confirm_quit = False
-                self.query_one("#overlay-text", TopOverlay).clear_prompt()
+                self.overlay.clear_prompt()
                 self.update_status_bar()
 
     def _is_splash_active(self) -> bool:
@@ -275,7 +275,8 @@ class SpectrApp(App):
         return self.scanner.top_gainers
 
     def compose(self) -> ComposeResult:
-        yield TopOverlay(id="overlay-text")
+        self.overlay = TopOverlay(id="overlay-text")
+        yield self.overlay
         yield SymbolView(id="symbol-view")
 
     def _fetch_data(self, symbol: str, quote: dict | None = None):
@@ -372,7 +373,7 @@ class SpectrApp(App):
         await self.push_screen(SplashScreen(id="splash"), wait_for_dismiss=False)
         self.refresh()
 
-        overlay = self.query_one("#overlay-text", TopOverlay)
+        overlay = self.overlay
         self.voice_agent._on_speech_start = lambda: self.call_from_thread(
             overlay.start_voice_animation
         )
@@ -400,7 +401,7 @@ class SpectrApp(App):
 
         # self.update_status_bar()
         if self.args.broker == "robinhood" and self.args.real_trades:
-            self.query_one("#overlay-text", TopOverlay).flash_message(
+            self.overlay.flash_message(
                 "Robinhood does NOT support PAPER TRADING!", style="bold red"
             )
         log.debug("starting consumer task")
@@ -472,7 +473,7 @@ class SpectrApp(App):
                     log.error("[poll] signal error: %s", traceback.format_exc())
 
                     def _flash_error() -> None:
-                        self.query_one("#overlay-text", TopOverlay).flash_message(
+                        self.overlay.flash_message(
                             f"Strategy error: {exc}",
                             style="bold red",
                         )
@@ -788,14 +789,12 @@ class SpectrApp(App):
         """Prompt the user for confirmation before quitting."""
         if not self.confirm_quit:
             self.confirm_quit = True
-            self.query_one("#overlay-text", TopOverlay).show_prompt(
-                "Quit Y/N?", style="bold red"
-            )
+            self.overlay.show_prompt("Quit Y/N?", style="bold red")
             return
 
         # Second ESC cancels the prompt
         self.confirm_quit = False
-        self.query_one("#overlay-text", TopOverlay).clear_prompt()
+        self.overlay.clear_prompt()
         self.update_status_bar()
 
     # ------------ Action Functions -------------
@@ -972,14 +971,14 @@ class SpectrApp(App):
         if self._voice_worker and self._voice_worker.is_running:
             self.voice_agent.stop()
             self._voice_worker.cancel()
-            self.query_one("#overlay-text", TopOverlay).clear_prompt()
+            self.overlay.clear_prompt()
             self.update_status_bar()
             return
         self._voice_worker = self.run_worker(self._ask_agent, thread=True)
 
     def _ask_agent(self) -> None:
         """Run the voice assistant and display errors in the overlay."""
-        overlay = self.query_one("#overlay-text", TopOverlay)
+        overlay = self.overlay
         self.call_from_thread(overlay.show_prompt, "Listening...")
         try:
             self.voice_agent.listen_and_answer()
@@ -1097,7 +1096,7 @@ class SpectrApp(App):
     # --------------
 
     def update_view(self, symbol: str):
-        self.query_one("#overlay-text", TopOverlay).symbol = symbol
+        self.overlay.symbol = symbol
 
         df = self.df_cache.get(symbol)
         if df is not None and not self.is_backtest:
@@ -1122,7 +1121,7 @@ class SpectrApp(App):
         else:
             auto_trade_state = f"Auto-Trades: [BOLD RED]DISABLED[/BOLD RED] {live_icon}"
 
-        overlay = self.query_one("#overlay-text", TopOverlay)
+        overlay = self.overlay
         overlay.symbol = self.ticker_symbols[self.active_symbol_index]
         overlay.live_icon = live_icon
         if self.strategy_name:
@@ -1135,7 +1134,7 @@ class SpectrApp(App):
         )
 
     def flash_message(self, msg: str):
-        overlay = self.query_one("#overlay-text", TopOverlay)
+        overlay = self.overlay
         overlay.flash_message(f"ORDER FAILED: {msg}", 10)
 
     def set_real_trades(self, enabled: bool) -> None:
@@ -1233,9 +1232,7 @@ class SpectrApp(App):
             self.args.symbols = self.ticker_symbols
             self.df_cache.setdefault(sym, pd.DataFrame())
             cache.save_symbols_cache(self.ticker_symbols)
-            self.query_one("#overlay-text", TopOverlay).flash_message(
-                f"Added {sym}", duration=5.0, style="bold green"
-            )
+            self.overlay.flash_message(f"Added {sym}", duration=5.0, style="bold green")
         return self.ticker_symbols
 
     def remove_symbol(self, symbol: str) -> list[str]:
@@ -1248,7 +1245,7 @@ class SpectrApp(App):
                     "If we remove it from the watchlist we could miss a sell signal."
                 )
                 self.voice_agent.say(msg)
-                self.query_one("#overlay-text", TopOverlay).flash_message(
+                self.overlay.flash_message(
                     f"Failed to remove {sym}, has open position!",
                     duration=6.0,
                     style="bold red",
@@ -1263,7 +1260,7 @@ class SpectrApp(App):
             cache.save_symbols_cache(self.ticker_symbols)
             if self.ticker_symbols:
                 self.update_view(self.ticker_symbols[self.active_symbol_index])
-            self.query_one("#overlay-text", TopOverlay).flash_message(
+            self.overlay.flash_message(
                 f"Removed {sym} from watchlist.",
                 duration=5.0,
                 style="bold yellow",
@@ -1290,13 +1287,11 @@ class SpectrApp(App):
         Runs in a thread to keep the UI responsive.
         """
         if self.strategy_class is None:
-            self.query_one("#overlay-text", TopOverlay).flash_message(
-                "No active strategy", style="bold red"
-            )
+            self.overlay.flash_message("No active strategy", style="bold red")
             return
         try:
             log.debug("Backtest starting...")
-            overlay = self.query_one("#overlay-text", TopOverlay)
+            overlay = self.overlay
             overlay.update_status("Running backtest...")
             symbol = form["symbol"]
             starting_cash = float(form["cash"])
@@ -1385,9 +1380,7 @@ class SpectrApp(App):
             )
 
         except Exception as exc:
-            self.query_one("#overlay-text", TopOverlay).flash_message(
-                f"Back-test error: {exc}", style="bold red"
-            )
+            self.overlay.flash_message(f"Back-test error: {exc}", style="bold red")
             log.error("Back-test error: %s", traceback.format_exc())
 
     def _exit_backtest(self) -> None:

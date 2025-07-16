@@ -43,7 +43,7 @@ def test_poll_one_symbol_error(monkeypatch):
             say=lambda text, wait=False: calls["said"].append(text)
         ),
         update_view=lambda sym: None,
-        query_one=lambda sel, cls: overlay,
+        overlay=overlay,
         strategy_active=True,
     )
 
