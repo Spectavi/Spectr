@@ -9,7 +9,7 @@ def test_update_status_bar_no_strategy():
         auto_trading_enabled=False,
         ticker_symbols=["AAA"],
         active_symbol_index=0,
-        query_one=lambda *a, **k: overlay,
+        overlay=overlay,
         strategy_name=None,
         strategy_class=None,
     )
@@ -25,7 +25,7 @@ def test_update_status_bar_inactive_strategy():
         auto_trading_enabled=False,
         ticker_symbols=["AAA"],
         active_symbol_index=0,
-        query_one=lambda *a, **k: overlay,
+        overlay=overlay,
         strategy_name="Test",
         strategy_class=object(),
         strategy_active=False,

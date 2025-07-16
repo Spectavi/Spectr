@@ -8,6 +8,10 @@ from spectr.views.top_overlay import TopOverlay
 
 
 class StrategyApp(App):
+    def compose(self):
+        self.overlay = TopOverlay(id="overlay-text")
+        yield self.overlay
+
     async def on_mount(self) -> None:
         self.scr = StrategyScreen([], ["A"], "A")
         await self.push_screen(self.scr)
@@ -16,14 +20,16 @@ class StrategyApp(App):
 def test_strategy_screen_has_overlay():
     async def run():
         async with StrategyApp().run_test() as pilot:
-            assert isinstance(
-                pilot.app.scr.query_one("#overlay-text", TopOverlay), TopOverlay
-            )
+            assert isinstance(pilot.app.overlay, TopOverlay)
 
     asyncio.run(run())
 
 
 class PortfolioApp(App):
+    def compose(self):
+        self.overlay = TopOverlay(id="overlay-text")
+        yield self.overlay
+
     async def on_mount(self) -> None:
         self.scr = PortfolioScreen(
             0.0,
@@ -41,14 +47,16 @@ class PortfolioApp(App):
 def test_portfolio_screen_has_overlay():
     async def run():
         async with PortfolioApp().run_test() as pilot:
-            assert isinstance(
-                pilot.app.scr.query_one("#overlay-text", TopOverlay), TopOverlay
-            )
+            assert isinstance(pilot.app.overlay, TopOverlay)
 
     asyncio.run(run())
 
 
 class TickerApp(App):
+    def compose(self):
+        self.overlay = TopOverlay(id="overlay-text")
+        yield self.overlay
+
     async def on_mount(self) -> None:
         self.scr = TickerInputDialog(
             lambda *a, **k: None,
@@ -62,8 +70,6 @@ class TickerApp(App):
 def test_ticker_dialog_has_overlay():
     async def run():
         async with TickerApp().run_test() as pilot:
-            assert isinstance(
-                pilot.app.scr.query_one("#overlay-text", TopOverlay), TopOverlay
-            )
+            assert isinstance(pilot.app.overlay, TopOverlay)
 
     asyncio.run(run())
