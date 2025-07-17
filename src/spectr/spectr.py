@@ -979,12 +979,14 @@ class SpectrApp(App):
             self.voice_agent.listen_and_answer()
         except Exception as exc:
             log.error("Voice agent error: %s", traceback.format_exc())
+            self.call_from_thread(overlay.clear_prompt)
             self.call_from_thread(
                 overlay.flash_message,
                 f"Voice error: {exc}",
             )
-        finally:
+        else:
             self.call_from_thread(overlay.clear_prompt)
+        finally:
             self.call_from_thread(self.update_status_bar)
             self._voice_worker = None
 
