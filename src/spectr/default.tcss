@@ -116,6 +116,7 @@ TickerInputDialog {
 #overlay-text {
     height: 1;
     dock: top;
+    layer: overlay;
     background: black;
     text-style: bold;
     content-align-horizontal: center;
