@@ -510,7 +510,10 @@ class PortfolioScreen(Screen):
         """Return the cached signal reason for an order, if available."""
         if not order_id:
             return ""
-        for rec in reversed(self.app.strategy_signals):
+        app = getattr(self, "app", None)
+        if app is None or not hasattr(app, "strategy_signals"):
+            return ""
+        for rec in reversed(app.strategy_signals):
             rec_id = rec.get("order_id")
             if rec_id is not None and str(rec_id) == str(order_id):
                 return str(rec.get("reason", ""))
