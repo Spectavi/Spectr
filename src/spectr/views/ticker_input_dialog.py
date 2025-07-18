@@ -3,6 +3,7 @@ import asyncio
 
 from textual import events
 from textual.widgets import Input, Label, Button, DataTable, Select
+from textual.widget import Widget
 from textual.containers import Vertical, Horizontal, Container
 from textual.screen import ModalScreen
 
@@ -88,6 +89,11 @@ class TickerInputDialog(ModalScreen):
     async def on_mount(self, event: events.Mount) -> None:
         if hasattr(self.app, "update_status_bar"):
             self.app.update_status_bar()
+        overlay = getattr(self.app, "overlay", None)
+        if isinstance(overlay, Widget):
+            if overlay.parent:
+                overlay.remove()
+            await self.mount(overlay, before=0)
         input_widget = self.query_one("#ticker-input", Input)
         if hasattr(self.app, "ticker_symbols"):
             input_widget.value = ",".join(self.app.ticker_symbols)
@@ -135,6 +141,11 @@ class TickerInputDialog(ModalScreen):
         if self._gainers_refresh_job:
             self._gainers_refresh_job.stop()
             self._gainers_refresh_job = None
+        overlay = getattr(self.app, "overlay", None)
+        if isinstance(overlay, Widget):
+            if overlay.parent:
+                overlay.remove()
+            await self.app.mount(overlay, before=0)
 
     def on_data_table_row_selected(
         self,

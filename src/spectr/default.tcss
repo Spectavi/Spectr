@@ -32,6 +32,11 @@ SymbolView > Vertical {
     SymbolView GraphView   { height: 6fr; }
     SymbolView MACDView    { height: 2fr; }
     SymbolView VolumeView  { height: 2fr; }
+#symbol-title {
+    height: 1;
+    text-align: center;
+    padding: 0 1;
+}
 
 #graph {
     padding: 0;
