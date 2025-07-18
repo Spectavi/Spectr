@@ -18,6 +18,7 @@ import logging
 from textual.widget import Widget
 from textual.containers import Vertical
 from textual.app import ComposeResult
+from textual.widgets import Static
 
 from .graph_view import GraphView
 from .macd_view import MACDView
@@ -41,6 +42,7 @@ class SymbolView(Widget):
     SymbolView GraphView   { height: 6fr; }
     SymbolView MACDView    { height: 2fr; }
     SymbolView VolumeView  { height: 2fr; }
+    #symbol-title { text-align: center; height: 1; padding: 0 1; }
     """
 
     def __init__(self, *, id: str | None = None) -> None:  # noqa: D401
@@ -54,17 +56,20 @@ class SymbolView(Widget):
         super().__init__(id=id)
 
         # child widgets are created in compose()
+        self.symbol_title: Static | None = None
         self.graph: GraphView | None = None
         self.macd: MACDView | None = None
         self.volume: VolumeView | None = None
 
     def compose(self) -> ComposeResult:  # noqa: D401
         """Create and arrange the three sub‑views."""
+        self.symbol_title = Static("", id="symbol-title")
         self.graph = GraphView()
         self.macd = MACDView()
         self.volume = VolumeView()
 
         with Vertical():
+            yield self.symbol_title
             yield self.graph
             yield self.macd
             yield self.volume
@@ -75,6 +80,8 @@ class SymbolView(Widget):
             log.debug("SymbolView.load_df called before compose finished")
             return
 
+        if self.symbol_title:
+            self.symbol_title.update(symbol.upper())
         self.graph.symbol = symbol
         self.graph.load_df(df, args, indicators)
         has_macd = any(spec.name.lower() == "macd" for spec in (indicators or []))

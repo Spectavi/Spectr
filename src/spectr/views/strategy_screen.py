@@ -7,6 +7,7 @@ import black
 from textual import events
 from textual.screen import Screen
 from textual.widgets import DataTable, Static, Select, TextArea, Button
+from textual.widget import Widget
 from textual.containers import Vertical, VerticalScroll, Horizontal
 from textual.reactive import reactive
 
@@ -112,6 +113,11 @@ class StrategyScreen(Screen):
     async def on_mount(self, event: events.Mount) -> None:
         if hasattr(self.app, "update_status_bar"):
             self.app.update_status_bar()
+        overlay = getattr(self.app, "overlay", None)
+        if isinstance(overlay, Widget):
+            if overlay.parent:
+                overlay.remove()
+            await self.mount(overlay, before=0)
 
     async def on_select_changed(self, event: Select.Changed):
         if event.select.id == "strategy-select":
@@ -210,3 +216,10 @@ class StrategyScreen(Screen):
             self.app.overlay.flash_message(
                 "Code formatted", duration=3.0, style="bold green"
             )
+
+    async def on_unmount(self, event: events.Unmount) -> None:
+        overlay = getattr(self.app, "overlay", None)
+        if isinstance(overlay, Widget):
+            if overlay.parent:
+                overlay.remove()
+            await self.app.mount(overlay, before=0)

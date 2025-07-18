@@ -7,6 +7,7 @@ import pandas as pd
 
 from textual.screen import Screen
 from textual.widgets import Static, DataTable, Switch, Input, Button
+from textual.widget import Widget
 from textual.containers import Vertical, Container, Horizontal
 from textual.reactive import reactive
 from textual import events
@@ -271,6 +272,11 @@ class PortfolioScreen(Screen):
     async def on_mount(self, event: events.Mount) -> None:
         if hasattr(self.app, "update_status_bar"):
             self.app.update_status_bar()
+        overlay = getattr(self.app, "overlay", None)
+        if isinstance(overlay, Widget):
+            if overlay.parent:
+                overlay.remove()
+            await self.mount(overlay, before=0)
         # Fetch account data in the background so the dialog appears immediately
         asyncio.create_task(self._reload_account_data())
         asyncio.create_task(self._refresh_orders())
@@ -296,6 +302,11 @@ class PortfolioScreen(Screen):
         if self._balance_job:
             self._balance_job.stop()
             self._balance_job = None
+        overlay = getattr(self.app, "overlay", None)
+        if isinstance(overlay, Widget):
+            if overlay.parent:
+                overlay.remove()
+            await self.app.mount(overlay, before=0)
 
     async def _reload_account_data(self):
         """Refresh balance metrics and positions using callbacks."""
