@@ -867,6 +867,13 @@ class SpectrApp(App):
     ):
         if self._is_splash_active():
             return
+        if BROKER_API.has_pending_order(symbol):
+            log.warning(f"Pending order for {symbol}; dialog not opened")
+            if hasattr(self, "overlay") and self.overlay:
+                self.overlay.flash_message(
+                    f"Pending order for {symbol}", style="bold yellow", duration=5.0
+                )
+            return
         order_type, limit_price = broker_tools.prepare_order_details(
             symbol, side, BROKER_API
         )
@@ -998,6 +1005,15 @@ class SpectrApp(App):
             f"Placing {msg.side} {msg.qty} {msg.symbol} @ ${msg.price:.2f} "
             f"(total ${msg.total:,.2f})"
         )
+        if BROKER_API.has_pending_order(msg.symbol):
+            log.warning(f"Pending order for {msg.symbol}; not submitting")
+            if hasattr(self, "overlay") and self.overlay:
+                self.overlay.flash_message(
+                    f"Pending order for {msg.symbol}",
+                    style="bold yellow",
+                    duration=5.0,
+                )
+            return
         try:
             order = broker_tools.submit_order(
                 BROKER_API,
