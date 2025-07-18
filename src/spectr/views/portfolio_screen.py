@@ -500,7 +500,8 @@ class PortfolioScreen(Screen):
         if event.data_table.id != "orders-table":
             return
 
-        row_id = str(event.cell_key.row_key)
+        row_key = event.cell_key.row_key
+        row_id = str(getattr(row_key, "value", row_key))
 
         if event.cell_key.column_key == self._cancel_col:
             cell_val = event.value
