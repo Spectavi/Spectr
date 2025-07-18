@@ -14,7 +14,7 @@ This software is for educational purposes only. Do not risk money which you are 
 
 **Spectr** is a terminal-based algorithmic trading terminal. It supports live-monitoring w/ algo-based auto-trading and historical backtesting. Supports Robinhood, Alpaca, and FMP.
 
-BYOS - Bring Your Own Strategy. You must implement your own trading strategy in strategies/custom_strategy.py.
+Contains a few basic strategies. Modify CustomStrategy as you wish using the editor on the Strategy screen (s key), or by accessing it in the Python site-packages directory. Any other strategy classes you add to the strategies directory will show up in the drop-down.
 
 
 ![Example GIF](src/spectr/res/example_features.gif)
