@@ -1,4 +1,4 @@
-# 📈 spectr — Terminal-based Algo-Trading Terminal
+# 📈 spectr — Open-Source Algo-Trading Terminal
 
 ---
 
