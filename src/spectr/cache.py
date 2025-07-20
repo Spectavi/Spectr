@@ -217,9 +217,15 @@ def attach_order_to_last_signal(
     symbol: str,
     side: str,
     order: object | None,
+    *,
+    reason: str | None = None,
     path: pathlib.Path = COMBINED_CACHE_FILE,
 ) -> None:
-    """Attach order details to the most recent matching signal."""
+    """Attach order details to the most recent matching signal.
+
+    If no matching signal exists yet, a new record is created so the order
+    reason is preserved regardless of order type.
+    """
     if order is None:
         return
 
@@ -237,6 +243,7 @@ def attach_order_to_last_signal(
     if status is None and hasattr(order, "__getitem__"):
         status = order.get("status") or order.get("state")
 
+    found = False
     for rec in reversed(cache_list):
         if (
             rec.get("symbol") == symbol
@@ -247,7 +254,23 @@ def attach_order_to_last_signal(
                 rec["order_id"] = order_id
             if status:
                 rec["order_status"] = status
+            if reason is not None and "reason" not in rec:
+                rec["reason"] = reason
+            found = True
             break
+
+    if not found:
+        rec = {
+            "time": datetime.now(),
+            "symbol": symbol,
+            "side": side,
+            "reason": reason,
+        }
+        if order_id:
+            rec["order_id"] = order_id
+        if status:
+            rec["order_status"] = status
+        cache_list.append(rec)
 
     save_strategy_cache(cache_list, path)
 
