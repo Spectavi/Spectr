@@ -617,6 +617,7 @@ class SpectrApp(App):
                             _sym.upper(),
                             side.name.lower(),
                             order,
+                            reason=_reason,
                         )
             elif symbol == self.ticker_symbols[self.active_symbol_index]:
                 if not self.is_backtest:
@@ -1032,6 +1033,7 @@ class SpectrApp(App):
                 msg.symbol.upper(),
                 msg.side.name.lower(),
                 order,
+                reason=None,
             )
         except Exception as e:
             log.error(e)
