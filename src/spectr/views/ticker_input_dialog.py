@@ -92,7 +92,7 @@ class TickerInputDialog(ModalScreen):
         overlay = getattr(self.app, "overlay", None)
         if isinstance(overlay, Widget):
             if overlay.parent:
-                overlay.remove()
+                await overlay.remove()
             await self.mount(overlay, before=0)
         input_widget = self.query_one("#ticker-input", Input)
         if hasattr(self.app, "ticker_symbols"):
@@ -144,7 +144,7 @@ class TickerInputDialog(ModalScreen):
         overlay = getattr(self.app, "overlay", None)
         if isinstance(overlay, Widget):
             if overlay.parent:
-                overlay.remove()
+                await overlay.remove()
             await self.app.mount(overlay, before=0)
 
     def on_data_table_row_selected(

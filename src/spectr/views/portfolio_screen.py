@@ -275,7 +275,7 @@ class PortfolioScreen(Screen):
         overlay = getattr(self.app, "overlay", None)
         if isinstance(overlay, Widget):
             if overlay.parent:
-                overlay.remove()
+                await overlay.remove()
             await self.mount(overlay, before=0)
         # Fetch account data in the background so the dialog appears immediately
         asyncio.create_task(self._reload_account_data())
@@ -305,7 +305,7 @@ class PortfolioScreen(Screen):
         overlay = getattr(self.app, "overlay", None)
         if isinstance(overlay, Widget):
             if overlay.parent:
-                overlay.remove()
+                await overlay.remove()
             await self.app.mount(overlay, before=0)
 
     async def _reload_account_data(self):
