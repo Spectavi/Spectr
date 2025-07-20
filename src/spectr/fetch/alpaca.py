@@ -420,7 +420,9 @@ class AlpacaInterface(BrokerInterface):
         try:
             tc = self.get_api()
             tif = TimeInForce.GTC
-            if (
+            if extended_hours and not is_crypto_symbol(symbol):
+                tif = TimeInForce.DAY
+            elif (
                 quantity is not None
                 and not float(quantity).is_integer()
                 and not is_crypto_symbol(symbol)
