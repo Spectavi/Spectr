@@ -116,7 +116,7 @@ class StrategyScreen(Screen):
         overlay = getattr(self.app, "overlay", None)
         if isinstance(overlay, Widget):
             if overlay.parent:
-                overlay.remove()
+                await overlay.remove()
             await self.mount(overlay, before=0)
 
     async def on_select_changed(self, event: Select.Changed):
@@ -221,5 +221,5 @@ class StrategyScreen(Screen):
         overlay = getattr(self.app, "overlay", None)
         if isinstance(overlay, Widget):
             if overlay.parent:
-                overlay.remove()
+                await overlay.remove()
             await self.app.mount(overlay, before=0)
