@@ -114,6 +114,33 @@ TickerInputDialog {
     overflow: auto;
 }
 
+/* ------- Backtest Input Dialog ------- */
+
+BacktestInputDialog {
+    align: center middle;
+}
+
+#backtest-input-body {
+    width: 66%;
+    border: solid green;
+    padding: 1 2;
+    content-align-horizontal: center;
+    background: #1a1a1a;
+}
+
+#backtest-input-body Input,
+#backtest-input-body Select {
+    background: #262626;
+    color: #00ff55;
+}
+
+#backtest-buttons-row {
+    width: 100%;
+    content-align-horizontal: center;
+    align: center middle;
+    margin: 1 0;
+}
+
 
 
 /* ------- Status Bar Overlay ------- */
@@ -335,7 +362,7 @@ BacktestResultScreen {
 }
 
 #backtest-result-container {
-    width: 80%;
+    width: 66%;
     height: 42;
     background: #1a1a1a;
     border: solid green;
