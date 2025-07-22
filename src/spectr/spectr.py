@@ -1292,14 +1292,18 @@ class SpectrApp(App):
         self.push_screen(
             BacktestInputDialog(
                 callback=self.on_backtest_submit,
-                default_symbol=current_symbol,  # ← new arg
+                default_symbol=current_symbol,
+                strategies=list(self.available_strategies.keys()),
+                current_strategy=self.strategy_name,
             )
         )
 
     async def on_backtest_submit(self, form: dict) -> None:
         """
-        form = {"symbol": str, "from": str, "to": str, "cash": str}
-        Runs in a thread to keep the UI responsive.
+        Handle form data from :class:`BacktestInputDialog`.
+
+        ``form`` contains ``symbol``, ``from``, ``to``, ``cash`` and
+        ``strategy`` keys. Runs in a thread to keep the UI responsive.
         """
         if self.strategy_class is None:
             self.overlay.flash_message("No active strategy", style="bold red")
@@ -1310,6 +1314,8 @@ class SpectrApp(App):
             overlay.update_status("Running backtest...")
             symbol = form["symbol"]
             starting_cash = float(form["cash"])
+            strategy_name = form.get("strategy", self.strategy_name)
+            strategy_cls = load_strategy(strategy_name)
 
             # Fetch historical bars
             df, _ = await asyncio.to_thread(
@@ -1334,7 +1340,7 @@ class SpectrApp(App):
                 df,
                 symbol,
                 self.config,
-                self.strategy_class,
+                strategy_cls,
                 starting_cash,
             )
             log.debug("Backtest completed successfully.")

@@ -81,13 +81,22 @@ class StrategyScreen(Screen):
             value=self.current,
             options=[(name, name) for name in self.strategy_names],
         )
-        self.code_widget = TextArea(
-            self.code_str,
-            language="python",
-            theme="monokai",
-            show_line_numbers=True,
-            id="strategy-code-content",
-        )
+        try:
+            self.code_widget = TextArea(
+                self.code_str,
+                language="python",
+                theme="monokai",
+                show_line_numbers=True,
+                id="strategy-code-content",
+            )
+        except Exception:
+            self.code_widget = TextArea(
+                self.code_str,
+                language=None,
+                theme="monokai",
+                show_line_numbers=True,
+                id="strategy-code-content",
+            )
         toolbar = Horizontal(
             Button("Undo", id="strategy-undo"),
             Button("Redo", id="strategy-redo"),
@@ -127,7 +136,10 @@ class StrategyScreen(Screen):
             self.file_path = self._get_strategy_file(self.current)
             self.code_str = self.file_path.read_text(encoding="utf-8")
             self.code_widget.text = self.code_str
-            self.code_widget.language = "python"
+            try:
+                self.code_widget.language = "python"
+            except Exception:
+                self.code_widget.language = None
             event.select.blur()
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -224,4 +236,5 @@ class StrategyScreen(Screen):
         if isinstance(overlay, Widget):
             if overlay.parent:
                 await overlay.remove()
-            await self.app.mount(overlay, before=0)
+            if getattr(self.app, "_screen_stack", None):
+                await self.app.mount(overlay, before=0)
