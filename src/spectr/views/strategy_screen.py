@@ -118,6 +118,8 @@ class StrategyScreen(Screen):
             if overlay.parent:
                 await overlay.remove()
             await self.mount(overlay, before=0)
+        # Focus the strategy selector so users can immediately change strategies
+        self.query_one("#strategy-select", Select).focus()
 
     async def on_select_changed(self, event: Select.Changed):
         if event.select.id == "strategy-select":
