@@ -3,11 +3,20 @@ import logging
 import pandas as pd
 import plotext as plt
 from rich.text import Text
-from textual._ansi_theme import rgb
 from textual.reactive import reactive
 from textual.widgets import Static
 
+try:  # textual < 0.60
+    from textual._ansi_theme import rgb  # type: ignore
+except Exception:  # textual >= 0.60
+    from textual.color import Color
+
+    def rgb(r: int, g: int, b: int) -> str:  # type: ignore
+        return Color.from_rgb(r, g, b).rich_color
+
+
 log = logging.getLogger(__name__)
+
 
 class MACDView(Static):
     is_backtest: reactive[bool] = reactive(False)
@@ -25,7 +34,7 @@ class MACDView(Static):
 
     def update_df(self, df: pd.DataFrame):
         """Set a new DataFrame and trigger redraw"""
-        if 'macd' in df.columns and 'macd_signal' in df.columns:
+        if "macd" in df.columns and "macd_signal" in df.columns:
             self.df = df.copy()
 
     def watch_df(self, old, new):
@@ -66,7 +75,7 @@ class MACDView(Static):
             except Exception as e:
                 return f"Invalid index: {e}"
 
-        times = df.index.strftime('%Y-%m-%d %H:%M:%S')
+        times = df.index.strftime("%Y-%m-%d %H:%M:%S")
 
         plt.clf()
         plt.canvas_color("default")
@@ -78,8 +87,17 @@ class MACDView(Static):
 
         baseline_x = [times[0], times[-1]]
         plt.plot(baseline_x, [0, 0], marker="-", color="gray", yside="right", label="")
-        plt.plot(times, df["macd"], color="green", label="MACD", marker="hd", yside="right")
-        plt.plot(times, df["macd_signal"], color="red", label="Signal", marker="hd", yside="right")
+        plt.plot(
+            times, df["macd"], color="green", label="MACD", marker="hd", yside="right"
+        )
+        plt.plot(
+            times,
+            df["macd_signal"],
+            color="red",
+            label="Signal",
+            marker="hd",
+            yside="right",
+        )
 
         # Y range adjustment
         macd_range = max(df["macd"]) - min(df["macd_signal"])
@@ -87,6 +105,6 @@ class MACDView(Static):
         margin = macd_range * 1.2 if macd_range else 1
         plt.ylim(center - margin, center + margin)
 
-        plt.plotsize(self.size.width-5, self.size.height)
+        plt.plotsize(self.size.width - 5, self.size.height)
 
         return Text.from_ansi(plt.build())

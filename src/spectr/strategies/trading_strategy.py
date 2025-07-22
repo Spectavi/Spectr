@@ -1,12 +1,20 @@
 import logging
 from dataclasses import dataclass
 from typing import Optional, Any, Iterable
+from enum import Enum
 
 import pandas as pd
 import backtrader as bt
 import inspect
 
 log = logging.getLogger(__name__)
+
+
+def _normalize_side(side: Any) -> str:
+    """Return ``side`` as a lower-case string."""
+    if isinstance(side, Enum):
+        side = side.value
+    return str(side).lower()
 
 
 def get_order_sides(orders: Optional[Iterable]) -> set[str]:
@@ -18,7 +26,7 @@ def get_order_sides(orders: Optional[Iterable]) -> set[str]:
     try:
         if isinstance(orders, pd.DataFrame):
             if "side" in orders.columns:
-                sides.update(str(s).lower() for s in orders["side"].dropna())
+                sides.update(_normalize_side(s) for s in orders["side"].dropna())
         else:
             for order in orders:
                 side = None
@@ -26,8 +34,8 @@ def get_order_sides(orders: Optional[Iterable]) -> set[str]:
                     side = order.get("side")
                 else:
                     side = getattr(order, "side", None)
-                if side:
-                    sides.add(str(side).lower())
+                if side is not None:
+                    sides.add(_normalize_side(side))
     except Exception:
         pass
     return sides
