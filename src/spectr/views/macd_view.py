@@ -6,6 +6,15 @@ from rich.text import Text
 from textual.reactive import reactive
 from textual.widgets import Static
 
+try:  # textual < 0.60
+    from textual._ansi_theme import rgb  # type: ignore
+except Exception:  # textual >= 0.60
+    from textual.color import Color
+
+    def rgb(r: int, g: int, b: int) -> str:  # type: ignore
+        return Color.from_rgb(r, g, b).rich_color
+
+
 log = logging.getLogger(__name__)
 
 
