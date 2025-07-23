@@ -126,6 +126,7 @@ BacktestInputDialog {
     padding: 1 2;
     content-align-horizontal: center;
     background: #1a1a1a;
+    height: 44;
 }
 
 #backtest-input-body Input,
