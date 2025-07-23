@@ -11,37 +11,6 @@ import inspect
 class BacktestInputDialog(ModalScreen):
     """Modal form for selecting symbol, strategy and date range."""
 
-    CSS = """
-    BacktestInputDialog {
-        align: center middle;
-    }
-
-    #backtest-input-body {
-        width: 66%;
-        border: solid green;
-        padding: 1 2;
-        content-align-horizontal: center;
-        background: #1a1a1a;
-    }
-
-    #backtest-input-body Input,
-    #backtest-input-body Select {
-        background: #262626;
-        color: #00ff55;
-    }
-    #backtest-input-body Label {
-        height: 3;
-        text-align: center;
-        padding: 1 0;
-    }
-
-    #backtest-title {
-        text-align: center;
-        padding: 0 1;
-        height: 2;
-    }
-    """
-
     def __init__(
         self,
         callback,
