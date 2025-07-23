@@ -133,6 +133,17 @@ BacktestInputDialog {
     background: #262626;
     color: #00ff55;
 }
+#backtest-input-body Label {
+    height: 3;
+    text-align: center;
+    padding: 1 0;
+}
+
+#backtest-title {
+    text-align: center;
+    padding: 0 1;
+    height: 2;
+}
 
 #backtest-buttons-row {
     width: 100%;
