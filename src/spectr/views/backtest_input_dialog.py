@@ -29,6 +29,17 @@ class BacktestInputDialog(ModalScreen):
         background: #262626;
         color: #00ff55;
     }
+    #backtest-input-body Label {
+        height: 3;
+        text-align: center;
+        padding: 1 0;
+    }
+
+    #backtest-title {
+        text-align: center;
+        padding: 0 1;
+        height: 2;
+    }
     """
 
     def __init__(
@@ -58,28 +69,33 @@ class BacktestInputDialog(ModalScreen):
 
     def compose(self) -> ComposeResult:
         yield Vertical(
-            Static("Back-test Parameters", classes="title"),
+            Static("Back-test Parameters", id="backtest-title", classes="title"),
+            Label("Symbol:"),
             Input(
-                value=self._default_symbol,  # pre-populated
+                value=self._default_symbol,
                 placeholder="Symbol (e.g. NVDA)",
                 id="symbol",
             ),
+            Label("Strategy:"),
             Select(
                 id="strategy-select",
                 prompt="",
                 value=self._current_strategy,
                 options=[(s, s) for s in self._strategies],
             ),
+            Label("From:"),
             Input(
                 value=self._default_from,
                 placeholder="From date YYYY-MM-DD",
                 id="from",
             ),
+            Label("To:"),
             Input(
                 value=self._default_to,
                 placeholder="To date YYYY-MM-DD",
                 id="to",
             ),
+            Label("Starting Cash:"),
             Input(value="10000", placeholder="Starting balance $", id="cash"),
             Horizontal(
                 Button("Run", id="run", variant="success"),
