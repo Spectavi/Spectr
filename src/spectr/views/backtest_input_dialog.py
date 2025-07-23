@@ -11,6 +11,10 @@ import inspect
 class BacktestInputDialog(ModalScreen):
     """Modal form for selecting symbol, strategy and date range."""
 
+    BINDINGS = [
+        ("escape", "app.pop_screen", "Cancel"),
+    ]
+
     def __init__(
         self,
         callback,
