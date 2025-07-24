@@ -114,19 +114,15 @@ class AlpacaInterface(BrokerInterface):
                 status=QueryOrderStatus.ALL, symbols=[symbol.upper()]
             )
             orders = tc.get_orders(req)
+
             for o in orders:
                 status = getattr(o, "status", "")
                 if hasattr(status, "value"):
                     status = status.value
                 status = str(status).lower()
-                if status not in {
-                    "filled",
-                    "canceled",
-                    "cancelled",
-                    "expired",
-                    "rejected",
-                    "done_for_day",
-                    "replaced",
+                if status in {
+                    "pending",
+                    "accepted",
                 }:
                     return True
             return False
