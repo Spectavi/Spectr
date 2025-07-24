@@ -148,8 +148,8 @@ class TradingStrategy(bt.Strategy):
             self.entry_price = None
             return
 
-        if signal and signal.get("signal") == "buy":
-            log.debug("BACKTEST: Exiting position")
+        if signal and signal.get("signal") == "buy" and not qty:
+            log.debug(f"BACKTEST: Buy signal detected: {signal['reason']}")
             self.buy()
             self.buy_signals.append(
                 {

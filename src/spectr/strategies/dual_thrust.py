@@ -9,6 +9,7 @@ from .trading_strategy import (
     IndicatorSpec,
     get_order_sides,
     check_stop_levels,
+    get_position_qty,
 )
 
 log = logging.getLogger(__name__)
@@ -92,13 +93,7 @@ class DualThrust(TradingStrategy):
                 "reason": stop_signal["reason"],
             }
 
-        qty = 0
-        if position is not None:
-            qty = getattr(position, "qty", getattr(position, "size", 0))
-            try:
-                qty = float(qty)
-            except Exception:
-                qty = 0.0
+        qty = get_position_qty(position)
         in_pos = qty != 0
         pos_dir = 1 if qty > 0 else -1 if qty < 0 else 0
 

@@ -9,6 +9,7 @@ from .trading_strategy import (
     IndicatorSpec,
     get_order_sides,
     check_stop_levels,
+    get_position_qty,
 )
 
 log = logging.getLogger(__name__)
@@ -68,28 +69,22 @@ class CustomStrategy(TradingStrategy):
             "macd_crossover",
         }
         if (
-                not required_cols.issubset(df.columns)
-                or df.loc[:, list(required_cols)].isna().any().any()
+            not required_cols.issubset(df.columns)
+            or df.loc[:, list(required_cols)].isna().any().any()
         ):
-                df = metrics.analyze_indicators(
-                    df,
-                    CustomStrategy.get_indicators(),
-                )
+            df = metrics.analyze_indicators(
+                df,
+                CustomStrategy.get_indicators(),
+            )
 
         macd_cross = curr.get("macd_crossover")
         above_bb = curr.get("close") > curr.get("bb_upper")
         below_bb = curr.get("close") < curr.get("bb_mid")
 
-        qty = 0
-        in_position = False
-        if position is not None:
-            qty = getattr(position, "qty", getattr(position, "size", 0))
-            try:
-                in_position = float(qty) != 0
-            except Exception:
-                in_position = bool(qty)
+        qty = get_position_qty(position)
+        in_position = qty != 0
 
-        if in_position is None or qty == 0:
+        if not in_position:
             if macd_cross == "buy":
                 signal = "buy"
                 reason = "MACD crossover"
