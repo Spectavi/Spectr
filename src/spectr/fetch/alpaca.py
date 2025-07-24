@@ -115,13 +115,18 @@ class AlpacaInterface(BrokerInterface):
             )
             orders = tc.get_orders(req)
             for o in orders:
-                status = getattr(o, "status", "").lower()
+                status = getattr(o, "status", "")
+                if hasattr(status, "value"):
+                    status = status.value
+                status = str(status).lower()
                 if status not in {
                     "filled",
                     "canceled",
                     "cancelled",
                     "expired",
                     "rejected",
+                    "done_for_day",
+                    "replaced",
                 }:
                     return True
             return False
@@ -167,6 +172,12 @@ class AlpacaInterface(BrokerInterface):
                 return pd.DataFrame()
 
             df = pd.DataFrame([o.model_dump() for o in orders])
+
+            if "status" in df.columns:
+                df["status"] = df["status"].apply(
+                    lambda s: s.value if hasattr(s, "value") else s
+                )
+
             for col in (
                 "created_at",
                 "filled_at",
@@ -217,6 +228,11 @@ class AlpacaInterface(BrokerInterface):
             order_dicts = [o.model_dump() for o in orders]
             df = pd.DataFrame(order_dicts)
 
+            if "status" in df.columns:
+                df["status"] = df["status"].apply(
+                    lambda s: s.value if hasattr(s, "value") else s
+                )
+
             # Ensure date columns are proper datetimes
             for col in ("filled_at", "submitted_at", "updated_at", "canceled_at"):
                 if col in df.columns:
@@ -259,6 +275,12 @@ class AlpacaInterface(BrokerInterface):
                 return pd.DataFrame()
 
             df = pd.DataFrame([o.model_dump() for o in orders])
+
+            if "status" in df.columns:
+                df["status"] = df["status"].apply(
+                    lambda s: s.value if hasattr(s, "value") else s
+                )
+
             for col in (
                 "created_at",
                 "filled_at",
@@ -308,6 +330,11 @@ class AlpacaInterface(BrokerInterface):
 
             # convert Order dataclasses to dicts → DataFrame
             df = pd.DataFrame([o.model_dump() for o in orders])
+
+            if "status" in df.columns:
+                df["status"] = df["status"].apply(
+                    lambda s: s.value if hasattr(s, "value") else s
+                )
 
             # parse ISO timestamps into true datetimes
             for col in (
