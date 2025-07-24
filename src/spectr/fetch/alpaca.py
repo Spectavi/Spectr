@@ -123,6 +123,13 @@ class AlpacaInterface(BrokerInterface):
                 if status in {
                     "pending",
                     "accepted",
+                    "accepted_for_bidding",
+                    "pending_replace",
+                    "pending_new",
+                    "pending_review",
+                    "pending_cancel",
+                    "partially_filled",
+                    "new",
                 }:
                     return True
             return False
