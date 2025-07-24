@@ -121,14 +121,10 @@ class AlpacaInterface(BrokerInterface):
                 if hasattr(status, "value"):
                     status = status.value
                 status = str(status).lower()
-                if status not in {
-                    "canceled",
-                    "cancelled",
-                    "expired",
-                    "rejected",
-                    "done_for_day",
-                    "replaced",
-                    "filled",
+
+                if status in {
+                    "pending",
+                    "accepted",
                 }:
                     return True
             return False
