@@ -7,6 +7,7 @@ from .trading_strategy import (
     IndicatorSpec,
     get_order_sides,
     check_stop_levels,
+    get_position_qty,
 )
 
 log = logging.getLogger(__name__)
@@ -70,13 +71,8 @@ class AwesomeOscillator(TradingStrategy):
                 "reason": stop_signal["reason"],
             }
 
-        in_position = False
-        if position is not None:
-            qty = getattr(position, "qty", getattr(position, "size", 0))
-            try:
-                in_position = float(qty) != 0
-            except Exception:
-                in_position = bool(qty)
+        qty = get_position_qty(position)
+        in_position = qty != 0
 
         if not in_position:
             if (
