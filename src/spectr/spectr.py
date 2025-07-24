@@ -338,7 +338,7 @@ class SpectrApp(App):
                 else OrderSide.SELL if signal == "sell" else None
             )
             if side:
-                broker_tools.submit_order(
+                order = broker_tools.submit_order(
                     BROKER_API,
                     symbol,
                     side,
@@ -348,6 +348,14 @@ class SpectrApp(App):
                     voice_agent=self.voice_agent,
                     buy_sound_path=BUY_SOUND_PATH,
                     sell_sound_path=SELL_SOUND_PATH,
+                )
+                self.call_from_thread(
+                    cache.attach_order_to_last_signal,
+                    self.strategy_signals,
+                    symbol.upper(),
+                    side.name.lower(),
+                    order,
+                    reason=reason,
                 )
                 self.call_from_thread(
                     self.signal_detected.remove,
