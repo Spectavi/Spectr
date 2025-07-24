@@ -218,7 +218,13 @@ class PortfolioScreen(Screen):
                     order.order_type,
                     reason,
                     order.status,
-                    "Cancel" if self._is_cancelable(order.status.name) else "",
+                    (
+                        "Cancel"
+                        if self._is_cancelable(
+                            getattr(order.status, "name", order.status)
+                        )
+                        else ""
+                    ),
                     short_id,
                     key=order_id,
                 )
@@ -419,7 +425,13 @@ class PortfolioScreen(Screen):
                     order.order_type,
                     reason,
                     order.status,
-                    "Cancel" if self._is_cancelable(order.status.name) else "",
+                    (
+                        "Cancel"
+                        if self._is_cancelable(
+                            getattr(order.status, "name", order.status)
+                        )
+                        else ""
+                    ),
                     short_id,
                     key=order_id,
                 )
