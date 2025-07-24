@@ -104,7 +104,12 @@ class PortfolioScreen(Screen):
         # Holdings Table
         self.holdings_table = DataTable(zebra_stripes=True, id="holdings-table")
         self.holdings_table_columns = self.holdings_table.add_columns(
-            "Symbol", "Qty", "Value", "Avg Cost", "Profit"
+            "Symbol",
+            "Qty",
+            "Value",
+            "Ask Value",
+            "Avg Cost",
+            "Profit",
         )
         self.holdings_table.cursor_type = "row"
         self.holdings_table.show_cursor = True
@@ -176,11 +181,12 @@ class PortfolioScreen(Screen):
                     pos.symbol,
                     pos.qty,
                     pos.market_value,
+                    0.0,
                     cost,
                     profit,
                 )
         else:
-            self.holdings_table.add_row("Loading...", "", "", "", "")
+            self.holdings_table.add_row("Loading...", "", "", "", "", "")
 
         if self._has_cached_orders:
             self.cached_orders.sort(key=self._order_date, reverse=True)
@@ -347,6 +353,10 @@ class PortfolioScreen(Screen):
 
         # refresh holdings table
         self.holdings_table.clear()
+        from .. import spectr as appmod
+
+        broker = getattr(appmod, "BROKER_API", None)
+
         for pos in self.positions:
             cost = getattr(pos, "cost_basis", None)
             if cost is None:
@@ -355,10 +365,22 @@ class PortfolioScreen(Screen):
                 except Exception:
                     cost = 0.0
             profit = float(pos.market_value) - float(cost) if cost else 0.0
+            quote = {}
+            if broker is not None:
+                quote = await asyncio.to_thread(broker.fetch_quote, pos.symbol)
+            ask_price = (
+                quote.get("ask")
+                or quote.get("ask_price")
+                or quote.get("askPrice")
+                or quote.get("price")
+                or 0.0
+            )
+            ask_value = float(pos.qty) * float(ask_price) if ask_price else 0.0
             self.holdings_table.add_row(
                 pos.symbol,
                 pos.qty,
                 pos.market_value,
+                ask_value,
                 cost,
                 profit,
             )
