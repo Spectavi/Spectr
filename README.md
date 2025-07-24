@@ -85,15 +85,31 @@ source .venv/bin/activate
 
 pip install -r requirements.txt
 ```
+
+### Voice features require additional system libraries.
+ On Debian/Ubuntu, install them with:
+```bash
+   sudo apt install libportaudio2 libsndfile1
+````
+
+ On macOS, use Homebrew:
+```bash
+   brew install portaudio libsndfile
+````
+ On Fedora/RHEL, use:
+```bash
+   sudo dnf install portaudio libsndfile
+````
+
 # Usage
 ```bash
 pip install -e .
 
 # After installation you can launch the UI with the `spectr` command
-spectr --broker alpaca --data_api fmp --scale 0.5 --symbols NVDA,TSLA,BTCUSD --candles
+spectr
 
 # Alternatively without installing you can run
-PYTHONPATH=src python -m spectr.spectr --broker alpaca --data_api fmp --scale 0.5 --symbols NVDA,TSLA,BTCUSD --candles
+PYTHONPATH=src python -m spectr.spectr
 ```
 
 

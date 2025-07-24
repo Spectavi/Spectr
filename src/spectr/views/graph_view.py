@@ -30,7 +30,8 @@ class GraphView(Static):
         self.indicators = indicators or []
 
     def on_mount(self):
-        self.set_interval(0.5, self.refresh)  # Force refresh loop, optional
+        if not self.is_backtest:
+            self.set_interval(0.5, self.refresh)  # Force refresh loop, optional
 
     def on_resize(self, event):
         self.refresh()  # Force redraw when size changes

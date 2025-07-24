@@ -62,29 +62,34 @@ class CustomStrategy(TradingStrategy):
                 "reason": stop_signal["reason"],
             }
 
-        if is_backtest:
-            if (
-                df.iloc[-1].get("bb_upper") is None
-                or df.iloc[-1].get("bb_upper").isnan()
-            ):
+        required_cols = {
+            "bb_upper",
+            "bb_mid",
+            "macd_crossover",
+        }
+        if (
+                not required_cols.issubset(df.columns)
+                or df.loc[:, list(required_cols)].isna().any().any()
+        ):
                 df = metrics.analyze_indicators(
                     df,
                     CustomStrategy.get_indicators(),
                 )
 
         macd_cross = curr.get("macd_crossover")
-        above_bb = curr.get("close", 0) > curr.get("bb_upper", 0)
-        below_bb = curr.get("close", 0) < curr.get("bb_mid", 0)
+        above_bb = curr.get("close") > curr.get("bb_upper")
+        below_bb = curr.get("close") < curr.get("bb_mid")
 
         qty = 0
+        in_position = False
         if position is not None:
             qty = getattr(position, "qty", getattr(position, "size", 0))
             try:
-                qty = float(qty)
+                in_position = float(qty) != 0
             except Exception:
-                qty = 0.0
+                in_position = bool(qty)
 
-        if position is None or qty == 0:
+        if in_position is None or qty == 0:
             if macd_cross == "buy":
                 signal = "buy"
                 reason = "MACD crossover"

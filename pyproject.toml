@@ -23,6 +23,7 @@ dependencies = [
   "pygame>=2.5",
   "sounddevice>=0.4",
   "soundfile>=0.12",
+  "playsound==1.2.2",
   "plotext>=5.2",
   "ta>=0.11",
   "openai>=1.0",
