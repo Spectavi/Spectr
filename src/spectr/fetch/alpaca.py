@@ -110,23 +110,25 @@ class AlpacaInterface(BrokerInterface):
         """True if there is any order for ``symbol`` that is not closed."""
         try:
             tc = self.get_api()
+            # Only fetch open orders to avoid closed/cancelled ones.
             req = GetOrdersRequest(
-                status=QueryOrderStatus.ALL, symbols=[symbol.upper()]
+                status=QueryOrderStatus.OPEN, symbols=[symbol.upper()]
             )
             orders = tc.get_orders(req)
+
             for o in orders:
                 status = getattr(o, "status", "")
                 if hasattr(status, "value"):
                     status = status.value
                 status = str(status).lower()
                 if status not in {
-                    "filled",
                     "canceled",
                     "cancelled",
                     "expired",
                     "rejected",
                     "done_for_day",
                     "replaced",
+                    "filled",
                 }:
                     return True
             return False

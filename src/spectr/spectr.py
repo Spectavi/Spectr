@@ -605,7 +605,7 @@ class SpectrApp(App):
                             self.voice_agent.say(
                                 f"Ignoring {_sig.capitalize()} signal for {_sym}, pending order already exists."
                             )
-                            return
+                            continue
 
                         self.signal_detected.remove(signal)
                         order = broker_tools.submit_order(
