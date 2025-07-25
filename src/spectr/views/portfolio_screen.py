@@ -184,6 +184,7 @@ class PortfolioScreen(Screen):
                     0.0,
                     cost,
                     profit,
+                    key=pos.symbol,
                 )
         else:
             self.holdings_table.add_row("Loading...", "", "", "", "", "")
@@ -351,11 +352,17 @@ class PortfolioScreen(Screen):
         )
         self.equity_view.add_point(self.cash, self.portfolio_value)
 
-        # refresh holdings table
-        self.holdings_table.clear()
+        # refresh holdings table without clearing
+        table = self.holdings_table
         from .. import spectr as appmod
 
         broker = getattr(appmod, "BROKER_API", None)
+
+        current_keys = {pos.symbol for pos in self.positions}
+        existing_keys = set(table.rows.keys())
+
+        for row_key in existing_keys - current_keys:
+            table.remove_row(row_key)
 
         for pos in self.positions:
             cost = getattr(pos, "cost_basis", None)
@@ -376,15 +383,28 @@ class PortfolioScreen(Screen):
                 or 0.0
             )
             ask_value = float(pos.qty) * float(ask_price) if ask_price else 0.0
-            self.holdings_table.add_row(
-                pos.symbol,
-                pos.qty,
-                pos.market_value,
-                ask_value,
-                cost,
-                profit,
-            )
-        self.holdings_table.scroll_home()
+
+            if pos.symbol not in existing_keys:
+                table.add_row(
+                    pos.symbol,
+                    pos.qty,
+                    pos.market_value,
+                    ask_value,
+                    cost,
+                    profit,
+                    key=pos.symbol,
+                )
+            else:
+                table.update_cell(pos.symbol, self.holdings_table_columns[1], pos.qty)
+                table.update_cell(
+                    pos.symbol, self.holdings_table_columns[2], pos.market_value
+                )
+                table.update_cell(pos.symbol, self.holdings_table_columns[3], ask_value)
+                table.update_cell(pos.symbol, self.holdings_table_columns[4], cost)
+                table.update_cell(pos.symbol, self.holdings_table_columns[5], profit)
+                row_index = table.get_row_index(pos.symbol)
+                table.refresh_row(row_index)
+        table.scroll_home()
 
     async def _refresh_orders(self):
         log.debug("Refreshing orders")
