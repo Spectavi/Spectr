@@ -168,7 +168,17 @@ class TradingStrategy(bt.Strategy):
         allowed = set(params) - {"self", "df", "symbol", "position", "orders"}
         filtered = {k: v for k, v in kwargs.items() if k in allowed}
 
+        open_orders = []
+        try:
+            open_orders = list(self.broker.get_orders_open(safe=True))
+        except Exception:  # pragma: no cover - unexpected
+            pass
+
         signal = self.detect_signals(
-            df, self.p.symbol, position=self.position, orders=None, **filtered
+            df,
+            self.p.symbol,
+            position=self.position,
+            orders=open_orders,
+            **filtered,
         )
         self.handle_signal(signal)
