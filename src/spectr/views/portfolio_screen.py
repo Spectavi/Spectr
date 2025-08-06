@@ -108,6 +108,7 @@ class PortfolioScreen(Screen):
             "Qty",
             "Value",
             "Ask Value",
+            "Bid Value",
             "Avg Cost",
             "Profit",
         )
@@ -182,12 +183,13 @@ class PortfolioScreen(Screen):
                     pos.qty,
                     pos.market_value,
                     0.0,
+                    0.0,
                     cost,
                     profit,
                     key=pos.symbol,
                 )
         else:
-            self.holdings_table.add_row("Loading...", "", "", "", "", "")
+            self.holdings_table.add_row("Loading...", "", "", "", "", "", "")
 
         if self._has_cached_orders:
             self.cached_orders.sort(key=self._order_date, reverse=True)
@@ -382,7 +384,15 @@ class PortfolioScreen(Screen):
                 or quote.get("price")
                 or 0.0
             )
+            bid_price = (
+                quote.get("bid")
+                or quote.get("bid_price")
+                or quote.get("bidPrice")
+                or quote.get("price")
+                or 0.0
+            )
             ask_value = float(pos.qty) * float(ask_price) if ask_price else 0.0
+            bid_value = float(pos.qty) * float(bid_price) if bid_price else 0.0
 
             if pos.symbol not in existing_keys:
                 table.add_row(
@@ -390,6 +400,7 @@ class PortfolioScreen(Screen):
                     pos.qty,
                     pos.market_value,
                     ask_value,
+                    bid_value,
                     cost,
                     profit,
                     key=pos.symbol,
@@ -400,8 +411,9 @@ class PortfolioScreen(Screen):
                     pos.symbol, self.holdings_table_columns[2], pos.market_value
                 )
                 table.update_cell(pos.symbol, self.holdings_table_columns[3], ask_value)
-                table.update_cell(pos.symbol, self.holdings_table_columns[4], cost)
-                table.update_cell(pos.symbol, self.holdings_table_columns[5], profit)
+                table.update_cell(pos.symbol, self.holdings_table_columns[4], bid_value)
+                table.update_cell(pos.symbol, self.holdings_table_columns[5], cost)
+                table.update_cell(pos.symbol, self.holdings_table_columns[6], profit)
                 row_index = table.get_row_index(pos.symbol)
                 table.refresh_row(row_index)
         table.scroll_home()

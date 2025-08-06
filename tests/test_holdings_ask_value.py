@@ -33,10 +33,10 @@ class DummyApp(App):
         await self.push_screen(self.pscreen)
 
 
-def test_holdings_table_ask_value(monkeypatch):
+def test_holdings_table_bid_and_ask_value(monkeypatch):
     class DummyBroker:
         def fetch_quote(self, symbol: str):
-            return {"ask": 11.0}
+            return {"ask": 11.0, "bid": 9.0}
 
     monkeypatch.setattr(appmod, "BROKER_API", DummyBroker())
 
@@ -48,6 +48,8 @@ def test_holdings_table_ask_value(monkeypatch):
             await screen._reload_account_data()
             table = screen.query_one("#holdings-table", DataTable)
             ask_val = float(table.get_cell_at((0, 3)))
+            bid_val = float(table.get_cell_at((0, 4)))
             assert ask_val == 22.0
+            assert bid_val == 18.0
 
     asyncio.run(run())
