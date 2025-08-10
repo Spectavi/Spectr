@@ -5,7 +5,7 @@ from typing import Optional
 from types import SimpleNamespace
 import pandas as pd
 
-from textual.screen import Screen
+from textual.screen import ModalScreen
 from textual.widgets import Static, DataTable, Switch, Input, Button
 from textual.widget import Widget
 from textual.containers import Vertical, Container, Horizontal
@@ -24,7 +24,7 @@ from .setup_dialog import SetupDialog
 log = logging.getLogger(__name__)
 
 
-class PortfolioScreen(Screen):
+class PortfolioScreen(ModalScreen):
     """Modal screen that shows cash, invested value, and current holdings."""
 
     BINDINGS = [

@@ -5,14 +5,14 @@ import pathlib
 import black
 
 from textual import events
-from textual.screen import Screen
+from textual.screen import ModalScreen
 from textual.widgets import DataTable, Static, Select, TextArea, Button
 from textual.widget import Widget
 from textual.containers import Vertical, VerticalScroll, Horizontal
 from textual.reactive import reactive
 
 
-class StrategyScreen(Screen):
+class StrategyScreen(ModalScreen):
     """Modal screen listing live strategy signals."""
 
     BINDINGS = [

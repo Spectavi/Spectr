@@ -67,6 +67,7 @@ ScreenModal {
 
 TickerInputDialog {
     align: center middle;
+    background: transparent;
 }
 #ticker_input_dlg_body {
     width: 75%;
@@ -118,6 +119,7 @@ TickerInputDialog {
 
 BacktestInputDialog {
     align: center middle;
+    background: transparent;
 }
 
 #backtest-input-body {
@@ -302,6 +304,7 @@ SetupConfirmDialog {
 
 PortfolioScreen {
     align: center middle;
+    background: transparent;
 }
 
 #portfolio-screen {
@@ -371,6 +374,7 @@ PortfolioScreen {
 
 BacktestResultScreen {
     align: center middle;
+    background: transparent;
 }
 
 #backtest-result-container {
@@ -400,6 +404,7 @@ BacktestResultScreen {
 
 StrategyScreen {
     align: center middle;
+    background: transparent;
 }
 
 #strategy-screen {
