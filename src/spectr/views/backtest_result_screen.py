@@ -1,11 +1,11 @@
-from textual.screen import Screen
+from textual.screen import ModalScreen
 from textual.widgets import Static
 from textual.containers import Vertical
 
 from .graph_view import GraphView
 
 
-class BacktestResultScreen(Screen):
+class BacktestResultScreen(ModalScreen):
     """Screen displaying the back‑test graph and summary metrics."""
 
     BINDINGS = [
