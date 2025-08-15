@@ -1,0 +1,69 @@
+### Recommendations
+
+1. **Refactor `SpectrApp` into a Composition of Small Services**
+   - Create distinct classes: `StrategyEngine`, `ScannerEngine`, `DataPoller`, `
+VoiceController`, `UIInterface`.
+   - Each service exposes a clean start/stop API and owns its own lock where nec
+essary.
+
+2. **Introduce a Dependency Injection / Service Locator**
+   - Pass `DATA_API`, `BROKER_API`, and configuration objects into services thro
+ugh constructor arguments.
+   - Removes globals, making it easier to swap mock implementations in tests.
+
+3. **Centralise Configuration**
+   - Move CLI parsing into `config.py` with a single `SpectrConfig` dataclass.
+   - Load strategy/scanner defaults from config, not from the core app.
+
+4. **Add Strategy Validation**
+   - Define a simple protocol (e.g., `class StrategyProtocol: get_indicators() -
+> list; ...)` and check at load time.
+   - Catch `ImportError`, `AttributeError`, and log a user‑friendly message inst
+ead of crashing.
+
+5. **Graceful Thread Shutdown**
+   - Provide `start_workers()` and `stop_workers()` in `SpectrApp` that set/clea
+r events.
+   - Each worker should poll its own event with a short timeout, ensuring no del
+ayed shutdown.
+
+6. **Thread‑Safe Collections**
+   - Replace list‑based `self.signal_detected` with a thread‑safe `queue.Queue`
+or `collections.deque` protected by a dedicated lock.
+   - Consider `asyncio` queues for workers to eliminate manual locking.
+
+7. **Testing Infrastructure**
+   - Decouple the GUI from the core logic: expose a `SpectrCore` that has no Tex
+tual widgets.
+   - The UI layer can then just subscribe to events from `SpectrCore`.
+
+8. **Performance Considerations**
+   - Current chart fetch uses a date range of one day per request every poll.
+   - If polling is frequent, this results in millions of HTTP hits.
+   - Cache recent candles and update only the delta (e.g., last OHLCV block).
+
+9. **Security & Robustness**
+   - VoiceAgent callbacks use global constants (`BUY_SOUND_PATH`, `SELL_SOUND_PA
+TH`).
+   - Validate paths on load; consider packaging assets inside the Python distrib
+ution rather than external files.
+
+10. **Documentation & Self‑Testing**
+    - Add module‑level docstrings that describe the overall data flow (CLI → cor
+e → workers → strategy → broker).
+    - Provide unit‑test stubs for each engine (strategy, scanner, data poller) t
+o validate expected events.
+
+---
+
+### Summary
+
+`spectr.py` is an ambitious single file that stitches together CLI, data polling
+, strategy execution, scanning, voice interaction, and a Textual UI. Its primary
+ strengths are flexibility (dynamic strategy/scanner loading) and a reasonably c
+lean layout of worker threads. The main architectural weakness is the tight coup
+ling of all concerns inside a single large `SpectrApp` class, which hampers test
+ability, maintainability, and future evolution (e.g., replacing the UI framework
+). By decomposing the system into well‑defined services with clear interfaces, e
+ncapsulating configuration, and adding validation for dynamic modules, the codeb
+ase will be easier to extend, debug, and unit‑test.

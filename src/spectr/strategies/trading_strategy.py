@@ -136,7 +136,7 @@ class TradingStrategy(bt.Strategy):
         current_position = self.getposition(self.datas[0])
         qty = getattr(current_position, "qty", getattr(current_position, "size", 0))
         if signal and signal.get("signal") == "sell" and qty:
-            log.debug(f"BACKTEST: Sell signal detected: {signal['reason']}")
+            log.debug(f"BACKTEST: Sell signal detected: {signal['reason']} - qty: {qty}")
             self.sell()
             self.sell_signals.append(
                 {
@@ -149,7 +149,7 @@ class TradingStrategy(bt.Strategy):
             return
 
         if signal and signal.get("signal") == "buy" and not qty:
-            log.debug(f"BACKTEST: Buy signal detected: {signal['reason']}")
+            log.debug(f"BACKTEST: Buy signal detected: {signal['reason']} - qty: {qty}")
             self.buy()
             self.buy_signals.append(
                 {

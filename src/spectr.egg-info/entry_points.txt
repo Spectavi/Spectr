@@ -1,0 +1,2 @@
+[console_scripts]
+spectr = spectr.cli:main

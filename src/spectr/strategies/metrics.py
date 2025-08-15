@@ -45,7 +45,7 @@ def analyze_indicators(
             )
             df["bb_upper"] = bb.bollinger_hband()
             df["bb_lower"] = bb.bollinger_lband()
-            df["bb_angle"] = bollinger_band_angle(df["close"], period=3)  # Very short window to get angle.
+            df["bb_angle"] = bollinger_band_angle(df["close"], period=5)  # Very short window to get angle.
             df["bb_mid"] = (df["bb_upper"] + df["bb_lower"]) / 2
 
         elif name == "vwap" and {"close", "volume"}.issubset(df.columns):
