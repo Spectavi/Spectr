@@ -2,8 +2,6 @@ import logging
 from typing import Optional
 
 import pandas as pd
-
-from . import metrics
 from .trading_strategy import (
     TradingStrategy,
     IndicatorSpec,
@@ -68,14 +66,11 @@ class CustomStrategy(TradingStrategy):
             "bb_mid",
             "macd_crossover",
         }
-        if (
-            not required_cols.issubset(df.columns)
-            or df.loc[:, list(required_cols)].isna().any().any()
+        if not required_cols.issubset(df.columns) or any(
+            pd.isna(curr.get(col)) for col in required_cols
         ):
-            df = metrics.analyze_indicators(
-                df,
-                CustomStrategy.get_indicators(),
-            )
+            log.warning("Required indicators missing; skipping signal")
+            return None
 
         macd_cross = curr.get("macd_crossover")
         above_bb = curr.get("close") > curr.get("bb_upper")

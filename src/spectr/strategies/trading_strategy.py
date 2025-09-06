@@ -127,7 +127,17 @@ class TradingStrategy(bt.Strategy):
             "low": [self.datas[0].low[-i] for i in reversed(range(lookback))],
             "volume": [self.datas[0].volume[-i] for i in reversed(range(lookback))],
         }
-        return pd.DataFrame(data)
+        df = pd.DataFrame(data)
+
+        specs = self.get_indicators()
+        if specs:
+            try:
+                from . import metrics
+
+                df = metrics.analyze_indicators(df, specs)
+            except Exception:  # pragma: no cover - unexpected
+                log.warning("Failed to analyze indicators", exc_info=True)
+        return df
 
     def handle_signal(self, signal: Optional[dict]) -> None:
         if signal:
