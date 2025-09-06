@@ -140,6 +140,7 @@ class TradingStrategy(bt.Strategy):
         return df
 
     def handle_signal(self, signal: Optional[dict]) -> None:
+        """Execute orders based on the provided *signal*."""
         if signal:
             log.debug(f"Signal detected: {signal}")
 

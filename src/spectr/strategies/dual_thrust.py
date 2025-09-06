@@ -132,26 +132,6 @@ class DualThrust(TradingStrategy):
     def get_lookback(self) -> int:
         return (self.p.window + 1) * 390 + 5
 
-    def build_dataframe(self, lookback: int) -> pd.DataFrame:
-        data = {
-            "close": [self.datas[0].close[-i] for i in reversed(range(lookback))],
-            "open": [self.datas[0].open[-i] for i in reversed(range(lookback))],
-            "high": [self.datas[0].high[-i] for i in reversed(range(lookback))],
-            "low": [self.datas[0].low[-i] for i in reversed(range(lookback))],
-            "volume": [self.datas[0].volume[-i] for i in reversed(range(lookback))],
-        }
-        index = [self.datas[0].datetime.datetime(-i) for i in reversed(range(lookback))]
-        df = pd.DataFrame(data, index=index)
-        specs = self.get_indicators()
-        if specs:
-            try:
-                from . import metrics
-
-                df = metrics.analyze_indicators(df, specs)
-            except Exception:  # pragma: no cover - unexpected
-                log.warning("Failed to analyze indicators", exc_info=True)
-        return df
-
     def get_signal_args(self) -> dict:
         return {
             "k": self.p.k,
