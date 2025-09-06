@@ -131,23 +131,26 @@ class TradingStrategy(bt.Strategy):
 
         specs = self.get_indicators()
         if specs:
+            log.debug("[Backtest] Calculating indicators: %s", specs)
             try:
                 from . import metrics
 
                 df = metrics.analyze_indicators(df, specs)
             except Exception:  # pragma: no cover - unexpected
                 log.warning("Failed to analyze indicators", exc_info=True)
+        else:
+            log.debug("[Backtest] No indicators found.")
         return df
 
     def handle_signal(self, signal: Optional[dict]) -> None:
         """Execute orders based on the provided *signal*."""
         if signal:
-            log.debug(f"Signal detected: {signal}")
+            log.debug(f"[Backtest] Signal detected: {signal}")
 
         current_position = self.getposition(self.datas[0])
         qty = getattr(current_position, "qty", getattr(current_position, "size", 0))
         if signal and signal.get("signal") == "sell" and qty:
-            log.debug(f"BACKTEST: Sell signal detected: {signal['reason']}")
+            log.debug(f"[BACKTEST]: Sell signal detected: {signal['reason']}")
             self.sell()
             self.sell_signals.append(
                 {
@@ -160,7 +163,7 @@ class TradingStrategy(bt.Strategy):
             return
 
         if signal and signal.get("signal") == "buy" and not qty:
-            log.debug(f"BACKTEST: Buy signal detected: {signal['reason']}")
+            log.debug(f"[BACKTEST]: Buy signal detected: {signal['reason']}")
             self.buy()
             self.buy_signals.append(
                 {
@@ -189,7 +192,6 @@ class TradingStrategy(bt.Strategy):
             df,
             self.p.symbol,
             position=self.position,
-            orders=open_orders,
-            **filtered,
+            orders=open_orders
         )
         self.handle_signal(signal)
