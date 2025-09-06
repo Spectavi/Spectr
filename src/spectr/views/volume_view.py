@@ -13,8 +13,8 @@ class VolumeView(Static):
 
     def __init__(self, *, id: str = "volume"):
         super().__init__(id=id)
-        self.df = None          # DataFrame injected by SpectrApp
-        self.args = None        # same args object GraphView uses
+        self.df = None  # DataFrame injected by SpectrApp
+        self.args = None  # same args object GraphView uses
 
     def load_df(self, df, args):
         """Store the DataFrame and redraw on next refresh."""
@@ -59,21 +59,25 @@ class VolumeView(Static):
         )
 
         # Cosmetics – keep the same theme as other views
-        #plt.title(f"Volume — {self.args.symbols[self.args.active_index]}")
+        # plt.title(f"Volume — {self.args.symbols[self.args.active_index]}")
         plt.xticks([], [])  # No xticks for indicators, cleans up UI.
         plt.canvas_color("default")
         plt.axes_color("default")
         plt.ticks_color("default")
 
         max_vol = float(df["volume"].astype(float).max())
-        top = max_vol * 1.1 if max_vol > 0 else 1
+        top = int(np.ceil(max_vol * 1.1)) if max_vol > 0 else 1
         plt.ylim(0, top, yside="right")
+
+        tick_step = max(1, top // 4)
+        ticks = np.arange(0, top + tick_step, tick_step)
+        plt.yticks(ticks.tolist(), [str(t) for t in ticks], yside="right")
 
         width = max(self.size.width, 20)
         height = max(self.size.height, 10)
         plt.plotsize(width, height)
 
-        #plt.xticks(auto=True, rotation=90)
-        #plt.frame(True)
+        # plt.xticks(auto=True, rotation=90)
+        # plt.frame(True)
 
         return Text.from_ansi(plt.build())
