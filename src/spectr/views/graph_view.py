@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 from datetime import datetime
@@ -36,9 +37,21 @@ class GraphView(Static):
         if not self.is_backtest:
             self.set_interval(0.5, self.refresh)  # Force refresh loop, optional
 
-    def on_resize(self, event):
-        self.pre_rendered = None
-        self.refresh()  # Force redraw when size changes
+    async def on_resize(self, event):
+        """Handle resize events.
+
+        For back-test graphs the render can be expensive, so rebuild the
+        graph off the UI thread when the widget is resized.  Live graphs are
+        lightweight, so they simply trigger a normal refresh.
+        """
+        if self.is_backtest:
+            # Keep the previous render until the updated one is ready to avoid
+            # blocking the interface.
+            self.pre_rendered = await asyncio.to_thread(self.build_graph)
+            self.refresh()
+        else:
+            self.pre_rendered = None
+            self.refresh()  # Force redraw when size changes
 
     def watch_df(self, old, new):
         self.pre_rendered = None
