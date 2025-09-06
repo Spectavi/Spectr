@@ -227,15 +227,18 @@ class GraphView(Static):
         last_y = df["Close"].iloc[-1]
         price_label = f"${last_y:.2f}"
 
-        plt.text(
-            price_label,
-            last_x,
-            last_y + 0.5,
-            color="green",
-            style="#price_label",
-            yside="right",
-        )
-        plt.title(f"{self.symbol} - {price_label}")
+        if not self.is_backtest:
+            plt.text(
+                price_label,
+                last_x,
+                last_y + 0.5,
+                color="green",
+                style="#price_label",
+                yside="right",
+            )
+            plt.title(f"{self.symbol} - {price_label}")
+        else:
+            plt.title(self.symbol)
 
         # Align the latest price_label in a center vertically
         current_price = df["Close"].iloc[-1]
