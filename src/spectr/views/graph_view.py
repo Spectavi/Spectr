@@ -23,29 +23,37 @@ class GraphView(Static):
     def update_symbol(self, value: str):
         self.symbol = value
 
-    def __init__(self, df=None, args=None, indicators=None, **kwargs):
+    def __init__(
+        self, df=None, args=None, indicators=None, pre_rendered=None, **kwargs
+    ):
         super().__init__(**kwargs)
         self.df = df
         self.args = args
         self.indicators = indicators or []
+        self.pre_rendered = pre_rendered
 
     def on_mount(self):
         if not self.is_backtest:
             self.set_interval(0.5, self.refresh)  # Force refresh loop, optional
 
     def on_resize(self, event):
+        self.pre_rendered = None
         self.refresh()  # Force redraw when size changes
 
     def watch_df(self, old, new):
+        self.pre_rendered = None
         self.refresh()
 
     def watch_symbol(self, old, new):
+        self.pre_rendered = None
         self.refresh()
 
     def watch_quote(self, old, new):
+        self.pre_rendered = None
         self.refresh()
 
     def watch_is_backtest(self, old, new):
+        self.pre_rendered = None
         self.refresh()
 
     def load_df(self, df, args, indicators=None):
@@ -54,9 +62,12 @@ class GraphView(Static):
         self.args = args
         if indicators is not None:
             self.indicators = indicators
+        self.pre_rendered = None
         self.refresh()
 
     def render(self):
+        if self.pre_rendered is not None:
+            return self.pre_rendered
         return self.build_graph()
 
     def build_graph(self):

@@ -31,6 +31,7 @@ from . import broker_tools
 from .backtest import run_backtest
 from .views.backtest_input_dialog import BacktestInputDialog
 from .views.backtest_result_screen import BacktestResultScreen
+from .views.graph_view import GraphView
 from .views.order_dialog import OrderDialog
 from .views.portfolio_screen import PortfolioScreen
 from .views.splash_screen import SplashScreen
@@ -1388,16 +1389,24 @@ class SpectrApp(App):
             # left-join adds open/high/low/volume from the original df
             df = df.join(price_df[["buy_signals", "sell_signals"]])
 
+            # Pre-render the graph off the UI thread for responsiveness
+            graph = GraphView(
+                df=df,
+                args=self.args,
+                indicators=(
+                    self.strategy_class.get_indicators()
+                    if self.strategy_class is not None
+                    else []
+                ),
+                id="backtest-graph",
+            )
+            graph.is_backtest = True
+            graph.pre_rendered = await asyncio.to_thread(graph.build_graph)
+
             # Show results screen with summary information
             await self.push_screen(
                 BacktestResultScreen(
-                    df,
-                    self.args,
-                    indicators=(
-                        self.strategy_class.get_indicators()
-                        if self.strategy_class is not None
-                        else []
-                    ),
+                    graph,
                     symbol=symbol,
                     start_date=form["from"],
                     end_date=form["to"],

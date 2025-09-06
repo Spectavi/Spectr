@@ -6,6 +6,7 @@ from textual.app import App
 
 from spectr.views.backtest_input_dialog import BacktestInputDialog
 from spectr.views.backtest_result_screen import BacktestResultScreen
+from spectr.views.graph_view import GraphView
 from spectr.views.strategy_screen import StrategyScreen
 from spectr.views.portfolio_screen import PortfolioScreen
 from spectr.views.ticker_input_dialog import TickerInputDialog
@@ -125,9 +126,9 @@ class BacktestResultApp(App):
     async def on_mount(self) -> None:
         df = pd.DataFrame()
         args = SimpleNamespace(scale=1)
+        graph = GraphView(df, args, pre_rendered="")
         self.scr = BacktestResultScreen(
-            df,
-            args,
+            graph,
             symbol="A",
             start_date="2024-01-01",
             end_date="2024-01-02",
