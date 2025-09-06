@@ -186,12 +186,14 @@ class TradingStrategy(bt.Strategy):
         try:
             open_orders = list(self.broker.get_orders_open(safe=True))
         except Exception:  # pragma: no cover - unexpected
+            log.error("Failed to get open orders", exc_info=True)
             pass
 
         signal = self.detect_signals(
             df,
             self.p.symbol,
             position=self.position,
-            orders=open_orders
+            orders=open_orders,
+            **filtered,
         )
         self.handle_signal(signal)

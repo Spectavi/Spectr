@@ -38,7 +38,7 @@ class CustomStrategy(TradingStrategy):
         orders=None,
         stop_loss_pct: float = 0.01,
         take_profit_pct: float = 0.05,
-        bb_period: int = 20,
+        bb_period: int = 100,
         bb_dev: float = 2.0,
         macd_thresh: float = 0.005,
         is_backtest=False,
