@@ -56,7 +56,7 @@ class SetupDialog(ModalScreen):
             Label("Broker:"),
             Select(
                 id="broker-select",
-                options=[("Alpaca", "alpaca"), ("Robinhood", "robinhood")],
+                options=[("Alpaca", "alpaca")],
             ),
             Input(placeholder="Broker API Key", id="broker-key"),
             Input(placeholder="Broker Secret Key", id="broker-secret"),
@@ -69,7 +69,6 @@ class SetupDialog(ModalScreen):
                 id="data-select",
                 options=[
                     ("Alpaca", "alpaca"),
-                    ("Robinhood", "robinhood"),
                     ("FMP", "fmp"),
                 ],
             ),
@@ -87,15 +86,18 @@ class SetupDialog(ModalScreen):
 
     async def on_mount(self, event: events.Mount) -> None:
         if self._defaults:
-            self.query_one("#broker-select", Select).value = self._defaults.get(
-                "broker", "alpaca"
-            )
-            self.query_one("#paper-select", Select).value = self._defaults.get(
-                "paper", "alpaca"
-            )
-            self.query_one("#data-select", Select).value = self._defaults.get(
-                "data_api", "alpaca"
-            )
+            broker = self._defaults.get("broker", "alpaca")
+            if broker not in {"alpaca"}:
+                broker = "alpaca"
+            self.query_one("#broker-select", Select).value = broker
+            paper = self._defaults.get("paper", "alpaca")
+            if paper not in {"alpaca"}:
+                paper = "alpaca"
+            self.query_one("#paper-select", Select).value = paper
+            data = self._defaults.get("data_api", "alpaca")
+            if data not in {"alpaca", "fmp"}:
+                data = "alpaca"
+            self.query_one("#data-select", Select).value = data
 
         self._update_broker_fields()
         self._update_paper_fields()
