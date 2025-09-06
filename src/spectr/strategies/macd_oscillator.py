@@ -93,7 +93,12 @@ class MACDOscillator(TradingStrategy):
         return None
 
     def get_lookback(self) -> int:
-        return max(self.p.fast_period, self.p.slow_period) + 5
+        """Return the number of bars required to compute signals."""
+        # We only need enough history for the slow moving average plus one
+        # additional bar to compare the oscillator against its previous value.
+        # A larger buffer causes backtests on small data sets to skip too many
+        # bars, which in turn misses expected signals.
+        return max(self.p.fast_period, self.p.slow_period) + 1
 
     def get_signal_args(self) -> dict:
         return {
