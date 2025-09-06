@@ -180,6 +180,7 @@ Static {
 
 OrderDialog {
     align: center middle;
+    background: transparent;
 }
 
 #dlg_body {
