@@ -12,7 +12,7 @@ This software is for educational purposes only. Do not risk money which you are 
 
 ---
 
-**Spectr** is a terminal-based algorithmic trading terminal. It supports live-monitoring w/ algo-based auto-trading and historical backtesting. Supports Robinhood, Alpaca, and FMP.
+**Spectr** is a terminal-based algorithmic trading terminal. It supports live-monitoring w/ algo-based auto-trading and historical backtesting. Supports Alpaca and FMP.
 
 Contains a few basic strategies. Modify CustomStrategy as you wish using the editor on the Strategy screen (s key), or by accessing it in the Python site-packages directory. Any other strategy classes you add to the strategies directory will show up in the drop-down.
 
@@ -25,7 +25,7 @@ Contains a few basic strategies. Modify CustomStrategy as you wish using the edi
 
 - 📈 Real-time price monitoring with interactive charts.
 - 📈 Real-time data API support (FMP)
-- 👁️ Broker API support (Alpaca, Robinhood (in progress))
+- 👁️ Broker API support (Alpaca).
 - 🧠 Supports MACD, Bollinger Bands, and Volume / VWAP.
 - 📈 Advanced hot-keys for quick sells of current position: 100% - `Ctrl+Z`, 50% - `Ctrl+X`, and 25% - `Ctrl+C`.
 - 🗑️ Remove the current symbol from the watch list with `Ctrl+D`.
@@ -45,12 +45,11 @@ Contains a few basic strategies. Modify CustomStrategy as you wish using the edi
 
 ## 🤝 Broker Support
 
-Currently focusing on Alpaca for broker and FMP for data. Robinhood currently broken / untested!
+Currently focusing on Alpaca for broker and FMP for data.
 
 | Broker    | Real Trading | Historical Data | Notes                                                                       |
 | --------- | ------------ | --------------- |-----------------------------------------------------------------------------|
 | Alpaca    | ✅            | ⚠️               | Real-time data requires \$99 / month sub. See FMP for \$20-30/month option. |
-| Robinhood | ⚠️            | ⚠️ (limited)     | Currently has login issues, see robin-stocks repo for info.                 |
 | FMP       | ❌            | ✅               | Read-only via API key                                                       |
 
 
@@ -116,8 +115,8 @@ PYTHONPATH=src python -m spectr.spectr
 | Flag                | Description                                             |
 |---------------------|---------------------------------------------------------|
 | `--symbols`         | List of stock tickers to track (e.g., NVDA,AAPL,BTCUSD). If omitted, last used list is loaded from cache. |
-| `--broker`          | `alpaca` or `robinhood`                                 |
-| `--data_api`        | `alpaca`, `fmp`, or `robinhood`                         |
+| `--broker`          | `alpaca` |
+| `--data_api`        | `alpaca` or `fmp`    |
 | `--real_trades`     | If set, will place real trades.                         |
 | `--macd_thresh`     | Threshold for MACD crossover (default: 0.1)             |
 | `--bb_period`       | Bollinger Band period (default: 200)                    |
