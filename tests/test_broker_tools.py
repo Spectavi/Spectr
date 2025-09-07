@@ -216,3 +216,46 @@ def test_submit_order_manual_qty(monkeypatch):
 
     assert broker.submitted["quantity"] == 3.5
     assert broker.submitted["extended_hours"] is False
+
+
+def test_submit_order_success_sound_without_voice(monkeypatch):
+    quote = {"ask": 10.0, "bid": 9.0}
+    broker = DummyBroker(qty=5, quote=quote)
+    monkeypatch.setattr(broker_tools, "is_market_open_now", lambda tz=None: True)
+
+    played = []
+    monkeypatch.setattr(broker_tools, "play_sound", lambda path: played.append(path))
+
+    broker_tools.submit_order(
+        broker,
+        "NVDA",
+        OrderSide.BUY,
+        price=10.0,
+        trade_amount=10.0,
+        auto_trading_enabled=True,
+        success_sound_path="res/order_success.mp3",
+    )
+
+    assert played == ["res/order_success.mp3"]
+
+
+def test_submit_order_no_success_sound_with_voice(monkeypatch):
+    quote = {"ask": 10.0, "bid": 9.0}
+    broker = DummyBroker(qty=5, quote=quote)
+    monkeypatch.setattr(broker_tools, "is_market_open_now", lambda tz=None: True)
+
+    played = []
+    monkeypatch.setattr(broker_tools, "play_sound", lambda path: played.append(path))
+
+    broker_tools.submit_order(
+        broker,
+        "NVDA",
+        OrderSide.BUY,
+        price=10.0,
+        trade_amount=10.0,
+        auto_trading_enabled=True,
+        voice_agent=object(),
+        success_sound_path="res/order_success.mp3",
+    )
+
+    assert played == []

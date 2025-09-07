@@ -3,7 +3,7 @@ import math
 import traceback
 
 from .fetch.broker_interface import BrokerInterface, OrderSide, OrderType
-from .utils import is_market_open_now, is_crypto_symbol
+from .utils import is_market_open_now, is_crypto_symbol, play_sound
 
 log = logging.getLogger(__name__)
 
@@ -66,8 +66,7 @@ def submit_order(
     *,
     qty: float | None = None,
     voice_agent=None,
-    buy_sound_path: str | None = None,
-    sell_sound_path: str | None = None,
+    success_sound_path: str | None = None,
 ) -> object | None:
     """Prepare and submit an order, handling fractional reattempts.
 
@@ -103,8 +102,8 @@ def submit_order(
             market_price=price,
             extended_hours=extended_hours,
         )
-        # if buy_sound_path and sell_sound_path:
-            # play_sound(buy_sound_path if side == OrderSide.BUY else sell_sound_path)
+        if voice_agent is None and success_sound_path:
+            play_sound(success_sound_path)
         return order
     except Exception as e:  # noqa: BLE001
         err_msg = str(e)
@@ -144,10 +143,8 @@ def submit_order(
                         market_price=price,
                         extended_hours=extended_hours,
                     )
-                    if buy_sound_path and sell_sound_path:
-                        play_sound(
-                            buy_sound_path if side == OrderSide.BUY else sell_sound_path
-                        )
+                    if voice_agent is None and success_sound_path:
+                        play_sound(success_sound_path)
                     retried = True
                     order = res
                 except Exception as exc2:  # noqa: BLE001

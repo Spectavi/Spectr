@@ -56,6 +56,7 @@ from .views.trades_screen import TradesScreen
 BUY_SOUND_PATH = "res/buy.mp3"
 SELL_SOUND_PATH = "res/sell.mp3"
 INTRO_SOUND_PATH = "res/intro.mp3"
+ORDER_SUCCESS_SOUND_PATH = "res/order_success.mp3"
 
 REFRESH_INTERVAL = 60  # seconds
 SCANNER_INTERVAL = REFRESH_INTERVAL
@@ -350,8 +351,7 @@ class SpectrApp(App):
                     self.trade_amount,
                     self.auto_trading_enabled,
                     voice_agent=self.voice_agent,
-                    buy_sound_path=BUY_SOUND_PATH,
-                    sell_sound_path=SELL_SOUND_PATH,
+                    success_sound_path=ORDER_SUCCESS_SOUND_PATH,
                 )
                 self.call_from_thread(
                     cache.attach_order_to_last_signal,
@@ -628,8 +628,7 @@ class SpectrApp(App):
                             self.trade_amount,
                             self.auto_trading_enabled,
                             voice_agent=self.voice_agent,
-                            buy_sound_path=BUY_SOUND_PATH,
-                            sell_sound_path=SELL_SOUND_PATH,
+                            success_sound_path=ORDER_SUCCESS_SOUND_PATH,
                         )
                         # Save to cache.
                         cache.attach_order_to_last_signal(
@@ -1049,8 +1048,7 @@ class SpectrApp(App):
                 self.auto_trading_enabled,
                 qty=msg.qty,
                 voice_agent=self.voice_agent,
-                buy_sound_path=BUY_SOUND_PATH,
-                sell_sound_path=SELL_SOUND_PATH,
+                success_sound_path=ORDER_SUCCESS_SOUND_PATH,
             )
             cache.attach_order_to_last_signal(
                 self.strategy_signals,
