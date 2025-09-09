@@ -2,6 +2,7 @@ import logging
 
 import backtrader as bt
 import pandas as pd
+from types import SimpleNamespace
 
 from . import utils
 from .strategies import metrics

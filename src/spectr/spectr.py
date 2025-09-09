@@ -31,6 +31,7 @@ from . import broker_tools
 from .backtest import run_backtest
 from .views.backtest_input_dialog import BacktestInputDialog
 from .views.backtest_result_screen import BacktestResultScreen
+from .views.graph_view import GraphView
 from .views.order_dialog import OrderDialog
 from .views.portfolio_screen import PortfolioScreen
 from .views.splash_screen import SplashScreen
@@ -54,6 +55,8 @@ from .views.trades_screen import TradesScreen
 # --- SOUND PATHS ---
 BUY_SOUND_PATH = "res/buy.mp3"
 SELL_SOUND_PATH = "res/sell.mp3"
+INTRO_SOUND_PATH = "res/intro.mp3"
+ORDER_SUCCESS_SOUND_PATH = "res/order_success.mp3"
 
 REFRESH_INTERVAL = 60  # seconds
 SCANNER_INTERVAL = REFRESH_INTERVAL
@@ -138,7 +141,6 @@ class SpectrApp(App):
         ("tab", "toggle_trades", "Trades Table"),
         ("p", "toggle_portfolio", "Portfolio"),
         ("s", "toggle_strategy_signals", "Strategy Signals"),
-        ("v", "ask_agent", "Voice Assistant"),
     ]
 
     ticker_symbols = reactive([])
@@ -229,21 +231,24 @@ class SpectrApp(App):
         if cached_amount is not None:
             self.trade_amount = cached_amount
 
-        self.voice_agent = VoiceAgent(
-            broker_api=BROKER_API,
-            data_api=DATA_API,
-            get_cached_orders=lambda: self._portfolio_orders_cache,
-            add_symbol=self.add_symbol,
-            remove_symbol=self.remove_symbol,
-            get_strategy_code=lambda: (
-                get_strategy_code(self.strategy_name) if self.strategy_name else ""
-            ),
-            stream_voice=getattr(args, "voice_streaming", False),
-        )
-        if getattr(args, "listen", False):
-            self.voice_agent.start_wake_word_listener(
-                getattr(args, "wake_word", "spectr")
+        self.voice_agent = None
+        if os.getenv("OPENAI_API_KEY"):
+            self.bind("v", "ask_agent", description="Voice Assistant")
+            self.voice_agent = VoiceAgent(
+                broker_api=BROKER_API,
+                data_api=DATA_API,
+                get_cached_orders=lambda: self._portfolio_orders_cache,
+                add_symbol=self.add_symbol,
+                remove_symbol=self.remove_symbol,
+                get_strategy_code=lambda: (
+                    get_strategy_code(self.strategy_name) if self.strategy_name else ""
+                ),
+                stream_voice=getattr(args, "voice_streaming", False),
             )
+            if getattr(args, "listen", False):
+                self.voice_agent.start_wake_word_listener(
+                    getattr(args, "wake_word", "spectr")
+                )
 
         # Available background scanners
         self.available_scanners = list_scanners()
@@ -346,8 +351,7 @@ class SpectrApp(App):
                     self.trade_amount,
                     self.auto_trading_enabled,
                     voice_agent=self.voice_agent,
-                    buy_sound_path=BUY_SOUND_PATH,
-                    sell_sound_path=SELL_SOUND_PATH,
+                    success_sound_path=ORDER_SUCCESS_SOUND_PATH,
                 )
                 self.call_from_thread(
                     cache.attach_order_to_last_signal,
@@ -374,20 +378,23 @@ class SpectrApp(App):
                 "strategy": self.strategy_name,
             },
         )
-        if signal:
-            self.voice_agent.say(f"{signal.capitalize()} signal for {symbol}")
+        if signal == "buy":
+            utils.play_sound(BUY_SOUND_PATH)
+        elif signal == "sell":
+            utils.play_sound(SELL_SOUND_PATH)
 
     async def on_mount(self, event: events.Mount) -> None:
         await self.push_screen(SplashScreen(id="splash"), wait_for_dismiss=False)
         self.refresh()
 
         overlay = self.overlay
-        self.voice_agent._on_speech_start = lambda: self.call_from_thread(
-            overlay.start_voice_animation
-        )
-        self.voice_agent._on_speech_end = lambda: self.call_from_thread(
-            overlay.stop_voice_animation
-        )
+        if self.voice_agent:
+            self.voice_agent._on_speech_start = lambda: self.call_from_thread(
+                overlay.start_voice_animation
+            )
+            self.voice_agent._on_speech_end = lambda: self.call_from_thread(
+                overlay.stop_voice_animation
+            )
 
         # Set symbols and active symbol
         self.ticker_symbols = self.args.symbols
@@ -482,9 +489,10 @@ class SpectrApp(App):
                         )
 
                     self.call_from_thread(_flash_error)
-                    self.call_from_thread(
-                        self.voice_agent.say, f"Strategy error: {exc}"
-                    )
+                    if self.voice_agent:
+                        self.call_from_thread(
+                            self.voice_agent.say, f"Strategy error: {exc}"
+                        )
                     if self._is_splash_active():
                         self.call_from_thread(self.pop_screen)
                     return
@@ -498,7 +506,10 @@ class SpectrApp(App):
             if symbol == self.ticker_symbols[self.active_symbol_index]:
                 if self._is_splash_active():
                     self.call_from_thread(self.pop_screen)
-                    self.voice_agent.say("Welcome to Spectr", wait=True)
+                    if self.voice_agent:
+                        self.voice_agent.say("Welcome to Spectr", wait=True)
+                    else:
+                        utils.play_sound(INTRO_SOUND_PATH)
                 # refresh the active view from the UI thread
                 self.call_from_thread(
                     self.update_view, self.ticker_symbols[self.active_symbol_index]
@@ -602,9 +613,10 @@ class SpectrApp(App):
                         if BROKER_API.has_pending_order(_sym):
                             log.warning(f"Pending order for {_sym}; ignoring signal!")
                             self.signal_detected.remove(signal)
-                            self.voice_agent.say(
-                                f"Ignoring {_sig.capitalize()} signal for {_sym}, pending order already exists."
-                            )
+                            if self.voice_agent:
+                                self.voice_agent.say(
+                                    f"Ignoring {_sig.capitalize()} signal for {_sym}, pending order already exists."
+                                )
                             continue
 
                         self.signal_detected.remove(signal)
@@ -616,8 +628,7 @@ class SpectrApp(App):
                             self.trade_amount,
                             self.auto_trading_enabled,
                             voice_agent=self.voice_agent,
-                            buy_sound_path=BUY_SOUND_PATH,
-                            sell_sound_path=SELL_SOUND_PATH,
+                            success_sound_path=ORDER_SUCCESS_SOUND_PATH,
                         )
                         # Save to cache.
                         cache.attach_order_to_last_signal(
@@ -780,7 +791,8 @@ class SpectrApp(App):
                 with contextlib.suppress(asyncio.CancelledError):
                     self._consumer_task = None
 
-            self.voice_agent.stop_wake_word_listener()
+            if self.voice_agent:
+                self.voice_agent.stop_wake_word_listener()
 
         except Exception:
             log.exception("on_shutdown encountered an error")
@@ -977,10 +989,11 @@ class SpectrApp(App):
             )
 
     def action_ask_agent(self) -> None:
-        if self._is_splash_active():
+        if not self.voice_agent or self._is_splash_active():
             return
         if self._voice_worker and self._voice_worker.is_running:
-            self.voice_agent.stop()
+            if self.voice_agent:
+                self.voice_agent.stop()
             self._voice_worker.cancel()
             self.overlay.clear_prompt()
             self.update_status_bar()
@@ -989,6 +1002,8 @@ class SpectrApp(App):
 
     def _ask_agent(self) -> None:
         """Run the voice assistant and display errors in the overlay."""
+        if not self.voice_agent:
+            return
         overlay = self.overlay
         self.call_from_thread(overlay.show_prompt, "Listening...")
         try:
@@ -1033,8 +1048,7 @@ class SpectrApp(App):
                 self.auto_trading_enabled,
                 qty=msg.qty,
                 voice_agent=self.voice_agent,
-                buy_sound_path=BUY_SOUND_PATH,
-                sell_sound_path=SELL_SOUND_PATH,
+                success_sound_path=ORDER_SUCCESS_SOUND_PATH,
             )
             cache.attach_order_to_last_signal(
                 self.strategy_signals,
@@ -1267,7 +1281,8 @@ class SpectrApp(App):
                     f"I'm sorry, you currently have an open position for {sym}. "
                     "If we remove it from the watchlist we could miss a sell signal."
                 )
-                self.voice_agent.say(msg)
+                if self.voice_agent:
+                    self.voice_agent.say(msg)
                 self.overlay.flash_message(
                     f"Failed to remove {sym}, has open position!",
                     duration=6.0,
@@ -1388,16 +1403,24 @@ class SpectrApp(App):
             # left-join adds open/high/low/volume from the original df
             df = df.join(price_df[["buy_signals", "sell_signals"]])
 
+            # Pre-render the graph off the UI thread for responsiveness
+            graph = GraphView(
+                df=df,
+                args=self.args,
+                indicators=(
+                    self.strategy_class.get_indicators()
+                    if self.strategy_class is not None
+                    else []
+                ),
+                id="backtest-graph",
+            )
+            graph.is_backtest = True
+            graph.pre_rendered = await asyncio.to_thread(graph.build_graph)
+
             # Show results screen with summary information
             await self.push_screen(
                 BacktestResultScreen(
-                    df,
-                    self.args,
-                    indicators=(
-                        self.strategy_class.get_indicators()
-                        if self.strategy_class is not None
-                        else []
-                    ),
+                    graph,
                     symbol=symbol,
                     start_date=form["from"],
                     end_date=form["to"],

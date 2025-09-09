@@ -89,9 +89,10 @@ class BacktestInputDialog(ModalScreen):
             }
             self.dismiss()
 
-            # Await callback if needed.
-            result = self._callback(vals)
-            if inspect.isawaitable(result):
-                asyncio.create_task(result)
+            # Run the callback without blocking the UI thread.
+            if inspect.iscoroutinefunction(self._callback):
+                asyncio.create_task(self._callback(vals))
+            else:
+                asyncio.create_task(asyncio.to_thread(self._callback, vals))
         else:
             self.dismiss()

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 from datetime import datetime
@@ -23,29 +24,49 @@ class GraphView(Static):
     def update_symbol(self, value: str):
         self.symbol = value
 
-    def __init__(self, df=None, args=None, indicators=None, **kwargs):
+    def __init__(
+        self, df=None, args=None, indicators=None, pre_rendered=None, **kwargs
+    ):
         super().__init__(**kwargs)
         self.df = df
         self.args = args
         self.indicators = indicators or []
+        self.pre_rendered = pre_rendered
 
     def on_mount(self):
         if not self.is_backtest:
             self.set_interval(0.5, self.refresh)  # Force refresh loop, optional
 
-    def on_resize(self, event):
-        self.refresh()  # Force redraw when size changes
+    async def on_resize(self, event):
+        """Handle resize events.
+
+        For back-test graphs the render can be expensive, so rebuild the
+        graph off the UI thread when the widget is resized.  Live graphs are
+        lightweight, so they simply trigger a normal refresh.
+        """
+        if self.is_backtest:
+            # Keep the previous render until the updated one is ready to avoid
+            # blocking the interface.
+            self.pre_rendered = await asyncio.to_thread(self.build_graph)
+            self.refresh()
+        else:
+            self.pre_rendered = None
+            self.refresh()  # Force redraw when size changes
 
     def watch_df(self, old, new):
+        self.pre_rendered = None
         self.refresh()
 
     def watch_symbol(self, old, new):
+        self.pre_rendered = None
         self.refresh()
 
     def watch_quote(self, old, new):
+        self.pre_rendered = None
         self.refresh()
 
     def watch_is_backtest(self, old, new):
+        self.pre_rendered = None
         self.refresh()
 
     def load_df(self, df, args, indicators=None):
@@ -54,9 +75,12 @@ class GraphView(Static):
         self.args = args
         if indicators is not None:
             self.indicators = indicators
+        self.pre_rendered = None
         self.refresh()
 
     def render(self):
+        if self.pre_rendered is not None:
+            return self.pre_rendered
         return self.build_graph()
 
     def build_graph(self):
@@ -213,22 +237,36 @@ class GraphView(Static):
             )
 
         last_x = dates[-1]
-        last_y = df["Close"].iloc[-1]
-        price_label = f"${last_y:.2f}"
+        current_price = df["Close"].iloc[-1]
+        price_label = f"${current_price:.2f}"
 
-        plt.text(
-            price_label,
-            last_x,
-            last_y + 0.5,
-            color="green",
-            style="#price_label",
-            yside="right",
-        )
-        plt.title(f"{self.symbol} - {price_label}")
+        if not self.is_backtest:
+            plt.text(
+                price_label,
+                last_x,
+                current_price + 0.5,
+                color="green",
+                style="#price_label",
+                yside="right",
+                alignment="right",
+            )
+            plt.title(f"{self.symbol} - {price_label}")
+        else:
+            plt.title(self.symbol)
 
         # Align the latest price_label in a center vertically
-        current_price = df["Close"].iloc[-1]
-        plt.ylim(current_price * 0.90, current_price * 1.1)
+        y_min = current_price * 0.90
+        y_max = current_price * 1.1
+        plt.ylim(y_min, y_max)
+
+        # Show the current price on the y-axis and ensure it isn't truncated
+        ticks = np.linspace(y_min, y_max, 5).tolist()
+        labels = [f"{t:.2f}" for t in ticks]
+        if current_price not in ticks:
+            ticks.append(current_price)
+            labels.append(price_label)
+            ticks, labels = zip(*sorted(zip(ticks, labels)))
+        plt.yticks(ticks, labels, yside="right")
 
         width = max(self.size.width, 20)  # leave some margin
         height = max(self.size.height, 10)  # reasonable min height

@@ -584,6 +584,11 @@ class PortfolioScreen(ModalScreen):
             except Exception:
                 log.warning("Failed to copy order id to clipboard")
 
+    def on_key(self, event: events.Key) -> None:
+        if event.key == "ctrl+a":
+            event.stop()
+            self.app.action_arm_auto_trading()
+
     def _get_order_reason(self, order_id) -> str:
         """Return the cached signal reason for an order, if available."""
         if not order_id:
