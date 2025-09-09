@@ -136,6 +136,7 @@ class BacktestResultApp(App):
             end_value=0.0,
             num_buys=0,
             num_sells=0,
+            trades=[],
         )
         await self.push_screen(self.scr)
 

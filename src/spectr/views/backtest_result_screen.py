@@ -1,5 +1,5 @@
 from textual.screen import ModalScreen
-from textual.widgets import Static
+from textual.widgets import Static, DataTable
 from textual.containers import Vertical
 
 from .graph_view import GraphView
@@ -23,6 +23,7 @@ class BacktestResultScreen(ModalScreen):
         end_value: float,
         num_buys: int,
         num_sells: int,
+        trades: list[dict],
     ) -> None:
         super().__init__()
         self._graph = graph
@@ -35,12 +36,25 @@ class BacktestResultScreen(ModalScreen):
         self.end_value = end_value
         self.num_buys = num_buys
         self.num_sells = num_sells
+        self.trades = trades
 
     def compose(self):
         self.report.update(self._make_report())
+        table = DataTable(id="backtest-trades", zebra_stripes=True)
+        table.styles.height = 10
+        table.add_columns("Signal", "Price", "Quantity", "Value", "Reason")
+        for trade in self.trades:
+            table.add_row(
+                trade["type"].upper(),
+                f"${trade['price']:.2f}",
+                f"{trade.get('quantity', 0):.4f}",
+                f"${trade['value']:.2f}" if trade.get("value") is not None else "—",
+                trade.get("reason", ""),
+            )
         yield Vertical(
             self._graph,
             self.report,
+            table,
             id="backtest-result-container",
         )
 
