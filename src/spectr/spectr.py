@@ -1428,6 +1428,7 @@ class SpectrApp(App):
                     end_value=result["final_value"],
                     num_buys=num_buys,
                     num_sells=num_sells,
+                    trades=trades,
                 )
             )
 

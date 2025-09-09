@@ -157,6 +157,8 @@ class TradingStrategy(bt.Strategy):
                     "type": "sell",
                     "time": self.datas[0].datetime.datetime(0),
                     "price": self.datas[0].close[0],
+                    "quantity": qty,
+                    "reason": signal.get("reason"),
                 }
             )
             self.entry_price = None
@@ -164,15 +166,20 @@ class TradingStrategy(bt.Strategy):
 
         if signal and signal.get("signal") == "buy" and not qty:
             log.debug(f"[BACKTEST]: Buy signal detected: {signal['reason']}")
+            cash = self.broker.getcash()
+            price = self.datas[0].close[0]
+            quantity = cash / price if price else 0
             self.buy()
             self.buy_signals.append(
                 {
                     "type": "buy",
                     "time": self.datas[0].datetime.datetime(0),
-                    "price": self.datas[0].close[0],
+                    "price": price,
+                    "quantity": quantity,
+                    "reason": signal.get("reason"),
                 }
             )
-            self.entry_price = self.datas[0].close[0]
+            self.entry_price = price
 
     def next(self) -> None:
         lookback = self.get_lookback()

@@ -399,6 +399,10 @@ BacktestResultScreen {
     background: black;
 }
 
+#backtest-trades {
+    height: 10;
+}
+
 
 
 # Strategy Screen ------- */
