@@ -237,25 +237,36 @@ class GraphView(Static):
             )
 
         last_x = dates[-1]
-        last_y = df["Close"].iloc[-1]
-        price_label = f"${last_y:.2f}"
+        current_price = df["Close"].iloc[-1]
+        price_label = f"${current_price:.2f}"
 
         if not self.is_backtest:
             plt.text(
                 price_label,
                 last_x,
-                last_y + 0.5,
+                current_price + 0.5,
                 color="green",
                 style="#price_label",
                 yside="right",
+                alignment="right",
             )
             plt.title(f"{self.symbol} - {price_label}")
         else:
             plt.title(self.symbol)
 
         # Align the latest price_label in a center vertically
-        current_price = df["Close"].iloc[-1]
-        plt.ylim(current_price * 0.90, current_price * 1.1)
+        y_min = current_price * 0.90
+        y_max = current_price * 1.1
+        plt.ylim(y_min, y_max)
+
+        # Show the current price on the y-axis and ensure it isn't truncated
+        ticks = np.linspace(y_min, y_max, 5).tolist()
+        labels = [f"{t:.2f}" for t in ticks]
+        if current_price not in ticks:
+            ticks.append(current_price)
+            labels.append(price_label)
+            ticks, labels = zip(*sorted(zip(ticks, labels)))
+        plt.yticks(ticks, labels, yside="right")
 
         width = max(self.size.width, 20)  # leave some margin
         height = max(self.size.height, 10)  # reasonable min height
