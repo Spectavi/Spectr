@@ -257,7 +257,8 @@ class GraphView(Static):
         # Align the latest price_label in a center vertically
         y_min = current_price * 0.90
         y_max = current_price * 1.1
-        plt.ylim(y_min, y_max)
+        # Apply limits to the right-hand axis where the price data is plotted
+        plt.ylim(y_min, y_max, yside="right")
 
         # Show the current price on the y-axis and ensure it isn't truncated
         ticks = np.linspace(y_min, y_max, 5).tolist()
