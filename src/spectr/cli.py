@@ -3,6 +3,7 @@ import os
 import sys
 
 from dotenv import load_dotenv
+import logging
 
 from . import cache
 from .views.setup_app import SetupApp
@@ -80,6 +81,10 @@ def main() -> None:
     )
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
+
+    # Enable verbose logging when --debug is passed
+    if args.debug:
+        logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
     if args.reset_cache:
         cache.clear_cached_data()

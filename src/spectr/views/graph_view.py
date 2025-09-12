@@ -254,9 +254,62 @@ class GraphView(Static):
         else:
             plt.title(self.symbol)
 
-        # Align the latest price_label in a center vertically
-        y_min = current_price * 0.90
-        y_max = current_price * 1.1
+        # Compute y-range based on visible data with ±5% padding
+        y_series = []
+        # Base price data (candles or close line)
+        if self.args.candles and all(col in df.columns for col in ["High", "Low"]):
+            y_series.append(df["High"])  # highs
+            y_series.append(df["Low"])   # lows
+        elif "Close" in df.columns:
+            y_series.append(df["Close"])  # line mode
+
+        # Overlays that are plotted on the right axis
+        if "bollingerbands" in inds:
+            for col in ("bb_upper", "bb_mid", "bb_lower"):
+                if col in df.columns and not df[col].isna().all():
+                    y_series.append(df[col])
+        if "vwap" in inds and "VWAP" in df.columns:
+            y_series.append(df["VWAP"])
+        if "sma" in inds:
+            for spec in self.indicators:
+                if spec.name.lower() != "sma":
+                    continue
+                col_type = spec.params.get("type")
+                if col_type:
+                    col = f"ma_{col_type}"
+                else:
+                    window = spec.params.get("window", 20)
+                    col = f"sma_{window}"
+                if col in df.columns:
+                    y_series.append(df[col])
+
+        # Flatten and filter numeric values
+        vals = []
+        for s in y_series:
+            try:
+                arr = np.asarray(s.dropna(), dtype=float)
+                if arr.size:
+                    vals.extend(arr.tolist())
+            except Exception:
+                pass
+
+        if vals:
+            y_min_raw = min(vals)
+            y_max_raw = max(vals)
+        else:
+            # Fallback to current price if no series collected
+            y_min_raw = float(current_price)
+            y_max_raw = float(current_price)
+
+        if y_min_raw == y_max_raw:
+            pad = abs(y_min_raw) * 0.02 or 1.0
+            y_min = y_min_raw - pad
+            y_max = y_max_raw + pad
+        else:
+            diff = y_max_raw - y_min_raw
+            y_min = y_min_raw - (diff * 0.1)
+            y_max = y_max_raw + (diff * 0.1)
+
         # Apply limits to the right-hand axis where the price data is plotted
         plt.ylim(y_min, y_max, yside="right")
 

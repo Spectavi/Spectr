@@ -15,6 +15,7 @@ from types import SimpleNamespace
 import pandas as pd
 from textual import events
 from textual.app import App, ComposeResult
+from textual.screen import ModalScreen
 from textual.reactive import reactive
 
 from . import cache
@@ -1332,7 +1333,7 @@ class SpectrApp(App):
             self.overlay.flash_message("No active strategy", style="bold red")
             return
         try:
-            log.debug("Backtest starting...")
+            log.info("Backtest starting for %s", form.get("symbol"))
             overlay = self.overlay
             overlay.update_status("Running backtest...")
             symbol = form["symbol"]
@@ -1366,7 +1367,7 @@ class SpectrApp(App):
                 strategy_cls,
                 starting_cash,
             )
-            log.debug("Backtest completed successfully.")
+            log.info("Backtest completed successfully for %s", symbol)
 
             num_buys = len(result.get("buy_signals", []))
             num_sells = len(result.get("sell_signals", []))
@@ -1418,6 +1419,7 @@ class SpectrApp(App):
             graph.pre_rendered = await asyncio.to_thread(graph.build_graph)
 
             # Show results screen with summary information
+            log.debug("Pushing BacktestResultScreen for %s", symbol)
             await self.push_screen(
                 BacktestResultScreen(
                     graph,
@@ -1431,10 +1433,11 @@ class SpectrApp(App):
                     trades=trades,
                 )
             )
+            log.debug("BacktestResultScreen dismissed for %s", symbol)
 
         except Exception as exc:
             self.overlay.flash_message(f"Back-test error: {exc}", style="bold red")
-            log.error("Back-test error: %s", traceback.format_exc())
+            log.exception("Back-test error")
 
     def _exit_backtest(self) -> None:
         """Return to live data when the user presses 0-9."""

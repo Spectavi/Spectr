@@ -52,6 +52,11 @@ class TickerInputDialog(ModalScreen):
             self.scanner_names[0] if self.scanner_names else ""
         )
         self.set_scanner_cb = set_scanner_cb
+        # Track sort state per table to toggle asc/desc
+        self._sort_state: dict[str, dict[str, object]] = {
+            "gainers-table": {"column": None, "reverse": False},
+            "scanner-table": {"column": None, "reverse": False},
+        }
 
     def compose(self):
         yield Vertical(
@@ -276,3 +281,65 @@ class TickerInputDialog(ModalScreen):
         if results and results != self.gainers_list:
             self.gainers_list = results
             await self.refresh_top_movers(rows=results)
+
+    # ---- Sorting helpers and events -----------------------------------------
+    def _sort_key_for_value(self, value):
+        """Return a sort key for a given cell value.
+
+        Attempts to coerce monetary, percentage, and human-formatted quantities
+        to floats for numeric sorting. Falls back to case-insensitive strings.
+        """
+        if value is None:
+            return float("-inf")
+        if isinstance(value, (int, float)):
+            return float(value)
+        # Most cells are strings
+        s = str(value).strip()
+        if not s:
+            return float("-inf")
+
+        # Normalize currency and percent
+        if s.startswith("$"):
+            s = s[1:].strip()
+        if s.endswith("%"):
+            try:
+                return float(s[:-1].replace(",", "").strip())
+            except ValueError:
+                pass
+
+        # Human formatted quantities like 1.2K, 3.4M, 5B, 1.1T
+        mult = 1.0
+        if s[-1:].upper() in {"K", "M", "B", "T", "P"} and len(s) > 1:
+            unit = s[-1:].upper()
+            try:
+                base = float(s[:-1].replace(",", "").strip())
+                mult = {"K": 1e3, "M": 1e6, "B": 1e9, "T": 1e12, "P": 1e15}[unit]
+                return base * mult
+            except ValueError:
+                pass
+
+        # Plain float / int text
+        try:
+            return float(s.replace(",", ""))
+        except ValueError:
+            # Non-numeric – use case-insensitive string for deterministic ordering
+            return s.upper()
+
+    def on_data_table_header_selected(self, event: DataTable.HeaderSelected) -> None:
+        """Sort the clicked table by the selected column; toggle asc/desc."""
+        table_id = event.data_table.id or ""
+        col_key = getattr(event, "column_key", None)
+        if not table_id or col_key is None:
+            return
+
+        state = self._sort_state.get(table_id, {"column": None, "reverse": False})
+        if state.get("column") == col_key:
+            # Toggle order on repeated clicks
+            reverse = not bool(state.get("reverse", False))
+        else:
+            reverse = False  # New column -> start with ascending
+
+        self._sort_state[table_id] = {"column": col_key, "reverse": reverse}
+
+        # Apply sort to the table
+        event.data_table.sort(col_key, key=self._sort_key_for_value, reverse=reverse)

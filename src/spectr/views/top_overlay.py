@@ -29,7 +29,7 @@ class TopOverlay(Static):
         else:
             self.update_status(f"Auto-Trades: DISABLED {self.live_icon}")
 
-    def flash_message(self, msg: str, duration: float = 10.0, style: str = "bold red"):
+    def flash_message(self, msg: str, duration: float = 2.0, style: str = "bold red"):
         self.alert_text = f"[{style}]{msg}[/{style}]"
         if self._timer:
             self._timer.stop()

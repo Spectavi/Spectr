@@ -1,8 +1,12 @@
+import logging
 from textual.screen import ModalScreen
 from textual.widgets import Static, DataTable
 from textual.containers import Vertical
 
 from .graph_view import GraphView
+
+
+log = logging.getLogger(__name__)
 
 
 class BacktestResultScreen(ModalScreen):
@@ -39,6 +43,7 @@ class BacktestResultScreen(ModalScreen):
         self.trades = trades
 
     def compose(self):
+        log.debug("BacktestResultScreen.compose")
         self.report.update(self._make_report())
         table = DataTable(id="backtest-trades", zebra_stripes=True)
         table.styles.height = 10
@@ -57,6 +62,12 @@ class BacktestResultScreen(ModalScreen):
             table,
             id="backtest-result-container",
         )
+
+    async def on_mount(self) -> None:
+        log.debug("BacktestResultScreen mounted")
+
+    async def on_unmount(self) -> None:
+        log.debug("BacktestResultScreen unmounted")
 
     def _make_report(self) -> str:
         return (

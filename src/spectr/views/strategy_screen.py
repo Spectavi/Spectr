@@ -162,7 +162,7 @@ class StrategyScreen(ModalScreen):
                 self.app.set_strategy_active(True)
                 self.app.overlay.flash_message(
                     "Strategy activated",
-                    duration=3.0,
+                    duration=1.5,
                     style="bold green",
                 )
         elif event.button.id == "strategy-deactivate":
@@ -170,7 +170,7 @@ class StrategyScreen(ModalScreen):
                 self.app.set_strategy_active(False)
                 self.app.overlay.flash_message(
                     "Strategy deactivated",
-                    duration=3.0,
+                    duration=1.5,
                     style="bold yellow",
                 )
 
