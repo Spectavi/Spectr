@@ -310,8 +310,7 @@ class GraphView(Static):
             y_min = y_min_raw - (diff * 0.1)
             y_max = y_max_raw + (diff * 0.1)
 
-        # Apply limits to the right-hand axis where the price data is plotted
-        plt.ylim(y_min, y_max, yside="right")
+        plt.ylim(y_min, y_max)
 
         # Show the current price on the y-axis and ensure it isn't truncated
         ticks = np.linspace(y_min, y_max, 5).tolist()
