@@ -74,11 +74,13 @@ tests/test_holdings_ask_value.py
 tests/test_order_status_persistence.py
 tests/test_overlay_screens.py
 tests/test_pending_order.py
+tests/test_portfolio_ctrl_a.py
 tests/test_process_updates_pending.py
 tests/test_remove_symbol_action.py
 tests/test_set_strategy.py
 tests/test_setup_app.py
 tests/test_setup_dialog.py
+tests/test_signal_audio.py
 tests/test_status_bar.py
 tests/test_strategies.py
 tests/test_strategy_active.py

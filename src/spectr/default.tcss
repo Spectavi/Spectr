@@ -380,12 +380,13 @@ BacktestResultScreen {
 
 #backtest-result-container {
     width: 66%;
-    height: 42;
+    height: 54;
     background: #1a1a1a;
     border: solid green;
     padding: 1 2;
     content-align-horizontal: center;
     content-align-vertical: top;
+    overflow: auto;
 }
 
 #backtest-report {

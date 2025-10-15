@@ -147,13 +147,21 @@ def run_backtest(
         strat.buy_signals = buy_signals
         strat.sell_signals = sell_signals
 
-    portfolio_values = [strat.broker.get_value()]
-    timestamps = df.index.tolist()
-    equity_curve = list(zip(timestamps, portfolio_values))
+    # Build equity curve from values recorded each bar by the strategy
+    try:
+        timestamps = list(getattr(strat, "equity_times", []))
+        equity_curve = list(getattr(strat, "equity_values", []))
+        # Fallback: if nothing recorded, at least align constant value to index
+        if not timestamps or not equity_curve:
+            timestamps = df.index.tolist()
+            equity_curve = [float(cerebro.broker.getvalue())] * len(timestamps)
+    except Exception:  # pragma: no cover - defensive
+        timestamps = df.index.tolist()
+        equity_curve = [float(cerebro.broker.getvalue())] * len(timestamps)
 
     return {
         "final_value": cerebro.broker.getvalue(),
-        "equity_curve": equity_curve,
+        "equity_curve": equity_curve,  # list[float] aligned with timestamps
         "price_data": df[["close"]].copy(),
         "timestamps": timestamps,
         "buy_signals": strat.buy_signals,

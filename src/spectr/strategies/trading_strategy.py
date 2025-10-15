@@ -142,6 +142,15 @@ class TradingStrategy(bt.Strategy):
             log.debug("[Backtest] No indicators found.")
         return df
 
+    # Backtrader lifecycle hook – initialize per-run tracking containers
+    def start(self) -> None:  # pragma: no cover - exercised via backtests
+        try:
+            # Track portfolio value over time for equity curve output
+            self.equity_times: list = []
+            self.equity_values: list[float] = []
+        except Exception:
+            pass
+
     def handle_signal(self, signal: Optional[dict]) -> None:
         """Execute orders based on the provided *signal*."""
         if signal:
@@ -204,3 +213,16 @@ class TradingStrategy(bt.Strategy):
             **filtered,
         )
         self.handle_signal(signal)
+
+        # Record equity after handling potential orders
+        try:
+            t = self.datas[0].datetime.datetime(0)
+            v = float(self.broker.getvalue())
+            # Containers are created in start(); create on-demand if missing
+            if not hasattr(self, "equity_times"):
+                self.equity_times = []
+                self.equity_values = []
+            self.equity_times.append(t)
+            self.equity_values.append(v)
+        except Exception:  # pragma: no cover - defensive
+            pass
