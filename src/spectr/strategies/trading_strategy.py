@@ -33,7 +33,28 @@ def get_order_sides(orders: Optional[Iterable]) -> set[str]:
                 if isinstance(order, dict):
                     side = order.get("side")
                 else:
-                    side = getattr(order, "side", None)
+                    # Backtrader orders don't expose a 'side' attribute but
+                    # provide 'isbuy()' / 'issell()' helpers.
+                    try:
+                        # Skip terminal orders if a status attribute is present
+                        status = getattr(order, "status", None)
+                        if status is not None:
+                            terminal = {
+                                getattr(bt.Order, "Completed", object()),
+                                getattr(bt.Order, "Canceled", object()),
+                                getattr(bt.Order, "Rejected", object()),
+                                getattr(bt.Order, "Expired", object()),
+                            }
+                            if status in terminal:
+                                continue
+                        if hasattr(order, "isbuy") and callable(order.isbuy) and order.isbuy():
+                            side = "buy"
+                        elif hasattr(order, "issell") and callable(order.issell) and order.issell():
+                            side = "sell"
+                        else:
+                            side = getattr(order, "side", None)
+                    except Exception:
+                        side = getattr(order, "side", None)
                 if side is not None:
                     sides.add(_normalize_side(side))
     except Exception:
@@ -148,6 +169,8 @@ class TradingStrategy(bt.Strategy):
             # Track portfolio value over time for equity curve output
             self.equity_times: list = []
             self.equity_values: list[float] = []
+            # Lightweight pending-side flag to prevent duplicate submits
+            self._pending_side: Optional[str] = None  # 'buy' or 'sell'
         except Exception:
             pass
 
@@ -158,7 +181,20 @@ class TradingStrategy(bt.Strategy):
 
         current_position = self.getposition(self.datas[0])
         qty = getattr(current_position, "qty", getattr(current_position, "size", 0))
-        if signal and signal.get("signal") == "sell" and qty:
+        # Prevent duplicate orders if one of the same side is pending
+        if self._pending_side is not None:
+            log.debug(f"[BACKTEST] Skipping signal, pending={self._pending_side}")
+            return
+
+        # Also consult broker open orders as a safety net
+        open_orders = []
+        try:
+            open_orders = list(self.broker.get_orders_open(safe=True))
+        except Exception:
+            open_orders = []
+        open_sides = get_order_sides(open_orders)
+
+        if signal and signal.get("signal") == "sell" and qty and "sell" not in open_sides:
             log.debug(f"[BACKTEST]: Sell signal detected: {signal['reason']}")
             self.sell()
             self.sell_signals.append(
@@ -170,10 +206,11 @@ class TradingStrategy(bt.Strategy):
                     "reason": signal.get("reason"),
                 }
             )
+            self._pending_side = "sell"
             self.entry_price = None
             return
 
-        if signal and signal.get("signal") == "buy" and not qty:
+        if signal and signal.get("signal") == "buy" and not qty and "buy" not in open_sides:
             log.debug(f"[BACKTEST]: Buy signal detected: {signal['reason']}")
             cash = self.broker.getcash()
             price = self.datas[0].close[0]
@@ -188,6 +225,7 @@ class TradingStrategy(bt.Strategy):
                     "reason": signal.get("reason"),
                 }
             )
+            self._pending_side = "buy"
             self.entry_price = price
 
     def next(self) -> None:
@@ -198,6 +236,17 @@ class TradingStrategy(bt.Strategy):
         allowed = set(params) - {"self", "df", "symbol", "position", "orders"}
         filtered = {k: v for k, v in kwargs.items() if k in allowed}
 
+        # Clear pending flag when position updates reflect a fill
+        try:
+            pos_qty = getattr(self.position, "qty", getattr(self.position, "size", 0))
+            if self._pending_side == "buy" and pos_qty:
+                self._pending_side = None
+            elif self._pending_side == "sell" and not pos_qty:
+                self._pending_side = None
+        except Exception:
+            pass
+
+        # Provide open orders to detect_signals so strategies can self-guard
         open_orders = []
         try:
             open_orders = list(self.broker.get_orders_open(safe=True))
