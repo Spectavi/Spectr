@@ -5,6 +5,7 @@ log = logging.getLogger(__name__)
 def apply_patch():
     try:
         import plotext._monitor as _monitor
+        import plotext._build as _build
         import plotext._utility as ut
     except Exception as exc:
         log.debug("plotext not available, skipping patch: %s", exc)
@@ -58,3 +59,56 @@ def apply_patch():
             )
 
     _monitor.monitor_class.draw_bar = draw_bar
+
+    # Some plotext versions raise IndexError during build when internal
+    # lists (e.g. marker/color/style) are shorter than the number of
+    # signals stored in `self.x`. This can happen when mixed plot types
+    # (candlestick, lines, scatter) are combined. Ensure these lists are
+    # padded to match `len(self.x)` before build.
+
+    original_build_plot = _build.build_class.build_plot
+
+    def _pad_plot_lists(self):
+        try:
+            signals = len(getattr(self, "x", []))
+        except Exception:
+            return
+
+        def ensure(name, default_factory):
+            seq = getattr(self, name, [])
+            if seq is None:
+                seq = []
+            # Pad up to number of signals
+            while len(seq) < signals:
+                s = len(seq)
+                npoints = 0
+                try:
+                    npoints = len(self.x[s])
+                except Exception:
+                    npoints = 0
+                val = default_factory(npoints)
+                seq.append(val)
+            setattr(self, name, seq)
+
+        # Factories produce lists sized for each signal
+        ensure(
+            "marker",
+            lambda n: ut.to_list(getattr(self.default, "marker", "."), n),
+        )
+        ensure(
+            "color",
+            lambda n: ut.to_list(getattr(self, "ticks_color", ut.no_color), n),
+        )
+        ensure("style", lambda n: ut.to_list(ut.no_color, n))
+
+    def safe_build_plot(self):
+        # Pre-emptively normalize internal arrays to avoid IndexError
+        _pad_plot_lists(self)
+        try:
+            return original_build_plot(self)
+        except IndexError as exc:
+            # As a fallback, attempt one more normalization then retry
+            _pad_plot_lists(self)
+            return original_build_plot(self)
+
+    _build.build_class.build_plot = safe_build_plot

@@ -215,3 +215,39 @@ def get_live_data(data_api: data_interface, symbol: str):
     )
     quote = data_api.fetch_quote(symbol)
     return df, quote
+
+
+def simulate_portfolio_end_value(trades: list[dict], price_df: pd.DataFrame, starting_cash: float) -> float:
+    """Simulate end-of-period portfolio value from trades and last close.
+
+    Assumes buys invest available cash and sells exit the recorded quantity.
+    Ignores fees/commissions.
+    """
+    cash = float(starting_cash)
+    qty = 0.0
+
+    def _key(t: dict):
+        return t.get("time")
+
+    for tr in sorted(trades, key=_key):
+        typ = str(tr.get("type", "")).lower()
+        price = float(tr.get("price", 0) or 0)
+        if typ == "buy":
+            q = tr.get("quantity")
+            if q is None:
+                q = cash / price if price else 0.0
+            qty = float(q)
+            cash = 0.0
+        elif typ == "sell":
+            q = tr.get("quantity")
+            if q is None:
+                q = qty
+            cash += float(q) * price
+            qty = 0.0
+
+    # Value any remaining position at final close
+    last_close = None
+    if price_df is not None and not price_df.empty:
+        close_col = "close" if "close" in price_df.columns else "Close"
+        last_close = float(price_df[close_col].iloc[-1])
+    return cash + (qty * (last_close or 0.0))

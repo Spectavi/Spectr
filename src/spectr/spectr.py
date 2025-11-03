@@ -519,11 +519,17 @@ class SpectrApp(App):
             log.error(f"[poll] {symbol}: {traceback.format_exc()}")
 
     async def _polling_loop(self) -> None:
-        """Poll all symbols at regular intervals."""
-        if self.is_backtest:
-            return
+        """Poll all symbols at regular intervals.
 
+        While a backtest is active, pause polling to avoid mutating UI/state.
+        """
         while not self.exit_event.is_set():
+            # Pause polling entirely while the backtest results are visible
+            if self.is_backtest:
+                try:
+                    await asyncio.wait_for(self.exit_event.wait(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    continue
             try:
                 quotes = DATA_API.fetch_quotes(list(self.ticker_symbols))
             except Exception as exc:
@@ -562,6 +568,10 @@ class SpectrApp(App):
             if symbol is None:
                 log.debug("_process_updates exit")
                 return
+            # While viewing backtest results, ignore live updates/signals so
+            # nothing mutates UI state behind the modal or steals focus.
+            if self.is_backtest:
+                continue
             # If the update is for the symbol the user is currently looking at,
             # push it straight into the Graph/MACD views.
             # If a buy signal was triggered, switch to that symbol
@@ -1333,6 +1343,8 @@ class SpectrApp(App):
             self.overlay.flash_message("No active strategy", style="bold red")
             return
         try:
+            # Enter backtest mode to pause live polling/updates while preparing results
+            self.is_backtest = True
             log.info("Backtest starting for %s", form.get("symbol"))
             overlay = self.overlay
             overlay.update_status("Running backtest...")
@@ -1394,6 +1406,8 @@ class SpectrApp(App):
             overlay.update_status(
                 f"Backtest completed. Final portfolio value: ${result['final_value']:,.2f} | Buy count: {num_buys}"
             )
+            # Use the backtest price data for the chart, not the current live df.
+            # This ensures the graph reflects only the tested time window.
             price_df = result["price_data"].copy()
 
             buy_times = {sig["time"] for sig in result["buy_signals"]}
@@ -1401,43 +1415,49 @@ class SpectrApp(App):
 
             price_df["buy_signals"] = price_df.index.isin(buy_times)
             price_df["sell_signals"] = price_df.index.isin(sell_times)
-            # left-join adds open/high/low/volume from the original df
-            df = df.join(price_df[["buy_signals", "sell_signals"]])
-
-            # Pre-render the graph off the UI thread for responsiveness
-            graph = GraphView(
-                df=df,
-                args=self.args,
-                indicators=(
-                    self.strategy_class.get_indicators()
-                    if self.strategy_class is not None
-                    else []
-                ),
-                id="backtest-graph",
-            )
-            graph.is_backtest = True
-            graph.pre_rendered = await asyncio.to_thread(graph.build_graph)
 
             # Show results screen with summary information
             log.debug("Pushing BacktestResultScreen for %s", symbol)
+            # Compute end value from trades + last close for robustness
+            try:
+                end_value_calc = utils.simulate_portfolio_end_value(
+                    trades, price_df, starting_cash
+                )
+            except Exception:
+                # Fallbacks to equity curve or final broker value
+                try:
+                    if isinstance(equity_curve, pd.Series):
+                        end_value_calc = float(equity_curve.iloc[-1])
+                    elif isinstance(equity_curve, pd.DataFrame):
+                        last_row = equity_curve.iloc[-1]
+                        end_value_calc = float(next((v for v in last_row[::-1] if pd.notna(v)), result["final_value"]))
+                    else:
+                        end_value_calc = float(equity_curve[-1]) if equity_curve else float(result["final_value"])
+                except Exception:
+                    end_value_calc = float(result["final_value"]) 
+
             await self.push_screen(
                 BacktestResultScreen(
-                    graph,
+                    price_df,
                     symbol=symbol,
                     start_date=form["from"],
                     end_date=form["to"],
                     start_value=starting_cash,
-                    end_value=result["final_value"],
+                    end_value=end_value_calc,
                     num_buys=num_buys,
                     num_sells=num_sells,
                     trades=trades,
+                    args_snapshot=self.args,
                 )
             )
-            log.debug("BacktestResultScreen dismissed for %s", symbol)
+            # Note: push_screen returns after push, not dismissal in this context
+            log.debug("BacktestResultScreen shown for %s", symbol)
 
         except Exception as exc:
             self.overlay.flash_message(f"Back-test error: {exc}", style="bold red")
             log.exception("Back-test error")
+            # Ensure we resume normal operation if dialog didn't open
+            self.is_backtest = False
 
     def _exit_backtest(self) -> None:
         """Return to live data when the user presses 0-9."""

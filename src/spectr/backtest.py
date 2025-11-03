@@ -162,7 +162,8 @@ def run_backtest(
     return {
         "final_value": cerebro.broker.getvalue(),
         "equity_curve": equity_curve,  # list[float] aligned with timestamps
-        "price_data": df[["close"]].copy(),
+        # Provide full OHLC so candlesticks render in results dialog
+        "price_data": df[["open", "high", "low", "close", "volume"]].copy(),
         "timestamps": timestamps,
         "buy_signals": strat.buy_signals,
         "sell_signals": strat.sell_signals,

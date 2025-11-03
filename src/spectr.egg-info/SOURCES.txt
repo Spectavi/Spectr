@@ -36,6 +36,7 @@ src/spectr/strategies/metrics.py
 src/spectr/strategies/spectavi_strategy.py
 src/spectr/strategies/trading_strategy.py
 src/spectr/views/__init__.py
+src/spectr/views/backtest_graph_view.py
 src/spectr/views/backtest_input_dialog.py
 src/spectr/views/backtest_result_screen.py
 src/spectr/views/equity_curve_view.py
@@ -59,6 +60,7 @@ tests/test_alpaca_order_tif.py
 tests/test_alpaca_quote.py
 tests/test_alpaca_symbol.py
 tests/test_attach_order_reason.py
+tests/test_backtest_end_value_integration.py
 tests/test_backtest_input_dialog.py
 tests/test_backtest_run.py
 tests/test_broker_outputs.py
@@ -67,6 +69,7 @@ tests/test_cache_migration.py
 tests/test_cached_auth.py
 tests/test_clear_cached_data.py
 tests/test_detect_signal_error.py
+tests/test_end_value_calc.py
 tests/test_get_order_sides.py
 tests/test_has_pending_order.py
 tests/test_has_pending_orders.py

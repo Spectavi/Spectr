@@ -20,6 +20,14 @@ class GraphView(Static):
     quote: reactive[dict] = reactive(None)
     is_backtest: reactive[bool] = reactive(False)
     indicators: reactive[list] = reactive([])
+    frozen: reactive[bool] = reactive(False)
+    # When True, limit data to what fits widget width; when False, plot all rows
+    crop_to_width: reactive[bool] = reactive(True)
+    # Disable periodic refresh loop (used by backtest results modal)
+    auto_refresh_enabled: bool = True
+
+    # Internal: handle to periodic refresh timer
+    _refresh_timer = None
 
     def update_symbol(self, value: str):
         self.symbol = value
@@ -34,8 +42,11 @@ class GraphView(Static):
         self.pre_rendered = pre_rendered
 
     def on_mount(self):
-        if not self.is_backtest:
-            self.set_interval(0.5, self.refresh)  # Force refresh loop, optional
+        if self.frozen:
+            return
+        # Only start a periodic refresh for live views when enabled
+        if self.auto_refresh_enabled and not self.is_backtest:
+            self._refresh_timer = self.set_interval(0.5, self.refresh)
 
     async def on_resize(self, event):
         """Handle resize events.
@@ -44,6 +55,9 @@ class GraphView(Static):
         graph off the UI thread when the widget is resized.  Live graphs are
         lightweight, so they simply trigger a normal refresh.
         """
+        if self.frozen:
+            # Do not rebuild or refresh when frozen
+            return
         if self.is_backtest:
             # Keep the previous render until the updated one is ready to avoid
             # blocking the interface.
@@ -54,23 +68,51 @@ class GraphView(Static):
             self.refresh()  # Force redraw when size changes
 
     def watch_df(self, old, new):
-        self.pre_rendered = None
-        self.refresh()
+        if not self.frozen:
+            self.pre_rendered = None
+            self.refresh()
 
     def watch_symbol(self, old, new):
-        self.pre_rendered = None
-        self.refresh()
+        if not self.frozen:
+            self.pre_rendered = None
+            self.refresh()
 
     def watch_quote(self, old, new):
-        self.pre_rendered = None
-        self.refresh()
+        if not self.frozen:
+            self.pre_rendered = None
+            self.refresh()
 
     def watch_is_backtest(self, old, new):
-        self.pre_rendered = None
-        self.refresh()
+        if not self.frozen:
+            self.pre_rendered = None
+            self.refresh()
+        # Stop periodic refresh when entering backtest mode
+        if new and self._refresh_timer is not None:
+            try:
+                self._refresh_timer.stop()
+            except Exception:
+                pass
+            self._refresh_timer = None
+
+    def watch_crop_to_width(self, old, new):
+        if not self.frozen:
+            self.pre_rendered = None
+            self.refresh()
+
+    async def on_unmount(self) -> None:
+        # Ensure any periodic timer is stopped when the widget is removed
+        if self._refresh_timer is not None:
+            try:
+                self._refresh_timer.stop()
+            except Exception:
+                pass
+            self._refresh_timer = None
 
     def load_df(self, df, args, indicators=None):
         """Store the DataFrame and redraw on next refresh."""
+        if self.frozen:
+            # Ignore updates when frozen to preserve the rendered snapshot
+            return
         self.df = df
         self.args = args
         if indicators is not None:
@@ -81,6 +123,10 @@ class GraphView(Static):
     def render(self):
         if self.pre_rendered is not None:
             return self.pre_rendered
+        if self.frozen:
+            # Build once and keep
+            self.pre_rendered = self.build_graph()
+            return self.pre_rendered
         return self.build_graph()
 
     def build_graph(self):
@@ -89,18 +135,27 @@ class GraphView(Static):
 
         max_points = max(int(self.size.width * self.args.scale), 10)
 
-        if not self.is_backtest and len(self.df) > max_points:
-            # Live view: only show the tail that fits the terminal width
+        if self.crop_to_width and len(self.df) > max_points:
+            # Only show the tail that reasonably fits the terminal width
             df = self.df.tail(max_points)
-        elif self.is_backtest:
-            # Back-test or small frame: show everything
-            df = self.df.copy()
         else:
+            # Show the entire range (used by backtest results)
             df = self.df.copy()
 
-        # Extract time labels and prices
-
-        dates = df.index.tz_convert("UTC").strftime("%Y-%m-%d %H:%M:%S")
+        # Extract time labels robustly (handle naive and tz-aware indices)
+        idx = df.index
+        if not isinstance(idx, pd.DatetimeIndex):
+            try:
+                idx = pd.to_datetime(idx, errors="coerce")
+            except Exception:
+                return "Invalid time index"
+        try:
+            if idx.tz is not None:
+                idx = idx.tz_convert("UTC")
+        except Exception:
+            # If conversion fails, keep as-is
+            pass
+        dates = idx.strftime("%Y-%m-%d %H:%M:%S")
         # ohlc_data = list(zip(df['open'], df['high'], df['low'], df['close']))
 
         # Rename the 'open' column to 'Open'
@@ -121,11 +176,16 @@ class GraphView(Static):
         plt.axes_color("default")
         plt.ticks_color("default")
         plt.grid(False)
-        plt.date_form(
-            input_form="Y-m-d H:M:S", output_form="H:M:S"
-        )  # for times like 13:45:12
+        # Include date on backtest charts to disambiguate multi-day ranges
+        if self.is_backtest:
+            plt.date_form(input_form="Y-m-d H:M:S", output_form="m/d/Y H:M")
+        else:
+            plt.date_form(input_form="Y-m-d H:M:S", output_form="H:M:S")
 
         inds = {spec.name.lower() for spec in self.indicators}
+        # In backtest results we want a clean price view only
+        if self.is_backtest:
+            inds = set()
 
         # Plot Bollinger Bands
         if "bollingerbands" in inds:
@@ -182,11 +242,16 @@ class GraphView(Static):
                         dates, df[col], yside="right", label=col.upper(), marker="dot"
                     )
 
-        if self.args.candles:
-            # Add candlesticks
-            plt.candlestick(dates, df[["Open", "Close", "High", "Low"]], yside="right")
+        # Prefer candles when requested and OHLC columns exist; otherwise fall back to a close line
+        ohlc_cols = ["Open", "Close", "High", "Low"]
+        if self.args.candles and all(col in df.columns for col in ohlc_cols):
+            plt.candlestick(dates, df[ohlc_cols], yside="right")
         else:
-            plt.plot(dates, df["Close"], yside="right", marker="hd", color="green")
+            if "Close" in df.columns:
+                plt.plot(dates, df["Close"], yside="right", marker="hd", color="green")
+            else:
+                # Nothing to plot; return a friendly message
+                return "No plottable price series available."
 
         # -------- BUY / SELL MARKERS ---------
         last_buy_y = last_buy_x = None
@@ -321,8 +386,10 @@ class GraphView(Static):
             ticks, labels = zip(*sorted(zip(ticks, labels)))
         plt.yticks(ticks, labels, yside="right")
 
-        width = max(self.size.width, 20)  # leave some margin
-        height = max(self.size.height, 10)  # reasonable min height
-        plt.plotsize(width - 3, height)
+        # Size the plot to the widget's allocated size.
+        # Keep a small margin to avoid clipping borders.
+        width = max(int(self.size.width), 20)
+        height = max(int(self.size.height), 10)
+        plt.plotsize(max(width - 2, 10), max(height - 1, 8))
 
         return Text.from_ansi(plt.build())

@@ -174,6 +174,24 @@ class TradingStrategy(bt.Strategy):
         except Exception:
             pass
 
+    def stop(self) -> None:  # pragma: no cover - exercised via backtests
+        """Ensure a final equity point is recorded at the end of the run.
+
+        Some backtests may end on a bar without triggering another `next()`
+        call after fills. Record a last snapshot to align with the final candle.
+        """
+        try:
+            t = self.datas[0].datetime.datetime(0)
+            v = float(self.broker.getvalue())
+            if not hasattr(self, "equity_times"):
+                self.equity_times = []
+                self.equity_values = []
+            if not self.equity_times or self.equity_times[-1] != t:
+                self.equity_times.append(t)
+                self.equity_values.append(v)
+        except Exception:
+            pass
+
     def handle_signal(self, signal: Optional[dict]) -> None:
         """Execute orders based on the provided *signal*."""
         if signal:
