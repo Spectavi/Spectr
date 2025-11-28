@@ -32,6 +32,7 @@ from . import broker_tools
 from .backtest import run_backtest
 from .views.backtest_input_dialog import BacktestInputDialog
 from .views.backtest_result_screen import BacktestResultScreen
+from .views.backtest_loading_screen import BacktestLoadingScreen
 from .views.graph_view import GraphView
 from .views.order_dialog import OrderDialog
 from .views.portfolio_screen import PortfolioScreen
@@ -209,6 +210,10 @@ class SpectrApp(App):
         self._equity_worker = None
         self._order_status_worker = None
         self._voice_worker = None
+        self._backtest_cancelled = False
+        # Debug flags to throttle logs while backtest is active
+        self._bt_paused_poll = False
+        self._bt_skipping_updates = False
         self.df_cache = {symbol: pd.DataFrame() for symbol in self.ticker_symbols}
         if not os.path.exists(cache.CACHE_DIR):
             os.mkdir(cache.CACHE_DIR)
@@ -526,10 +531,17 @@ class SpectrApp(App):
         while not self.exit_event.is_set():
             # Pause polling entirely while the backtest results are visible
             if self.is_backtest:
+                if not self._bt_paused_poll:
+                    log.debug("Polling paused during backtest")
+                    self._bt_paused_poll = True
                 try:
                     await asyncio.wait_for(self.exit_event.wait(), timeout=1.0)
                 except asyncio.TimeoutError:
                     continue
+            else:
+                if self._bt_paused_poll:
+                    log.debug("Polling resumed after backtest")
+                    self._bt_paused_poll = False
             try:
                 quotes = DATA_API.fetch_quotes(list(self.ticker_symbols))
             except Exception as exc:
@@ -564,14 +576,27 @@ class SpectrApp(App):
     async def _process_updates(self) -> None:
         """Runs in Textual’s event loop; applies any fresh data to the UI."""
         while True:
+            # While viewing backtest results, ignore live updates/signals so
+            # nothing mutates UI state behind the modal or steals focus.
+            if self.is_backtest:
+                if not self._bt_skipping_updates:
+                    log.debug("UI updates skipped during backtest")
+                    self._bt_skipping_updates = True
+                # Drain one item to prevent unbounded queue growth then loop
+                sentinel = await asyncio.to_thread(self._update_queue.get)
+                if sentinel is None:
+                    log.debug("_process_updates exit (sentinel during backtest)")
+                    return
+                continue
+            else:
+                if self._bt_skipping_updates:
+                    log.debug("UI updates resumed after backtest")
+                    self._bt_skipping_updates = False
+
             symbol: str = await asyncio.to_thread(self._update_queue.get)
             if symbol is None:
                 log.debug("_process_updates exit")
                 return
-            # While viewing backtest results, ignore live updates/signals so
-            # nothing mutates UI state behind the modal or steals focus.
-            if self.is_backtest:
-                continue
             # If the update is for the symbol the user is currently looking at,
             # push it straight into the Graph/MACD views.
             # If a buy signal was triggered, switch to that symbol
@@ -827,6 +852,9 @@ class SpectrApp(App):
     # ------------ Action Functions -------------
 
     def action_select_symbol(self, key: str):
+        # Keyguard: ignore symbol navigation while backtest dialogs/results are active
+        if self.is_backtest:
+            return
         self._exit_backtest()
         index = (int(key) - 1) if key != "0" else 9
 
@@ -841,6 +869,9 @@ class SpectrApp(App):
             self.update_view(symbol)
 
     def action_prev_symbol(self):
+        # Keyguard: ignore symbol navigation while backtest dialogs/results are active
+        if self.is_backtest:
+            return
         self._exit_backtest()
         new_index = self.active_symbol_index - 1
         if new_index < 0:
@@ -853,6 +884,9 @@ class SpectrApp(App):
         self.update_view(symbol)
 
     def action_next_symbol(self):
+        # Keyguard: ignore symbol navigation while backtest dialogs/results are active
+        if self.is_backtest:
+            return
         self._exit_backtest()
         new_index = self.active_symbol_index + 1
         if new_index > len(self.ticker_symbols) - 1:
@@ -1322,6 +1356,15 @@ class SpectrApp(App):
         """Open the back-test input dialog (bound to the ‘b’ key)."""
         if self._is_splash_active():
             return
+        # Enter backtest mode immediately to pause polling and UI updates
+        self.is_backtest = True
+        # Remove the live symbol view so it can't be updated/rendered underneath
+        try:
+            sv = self.query_one("#symbol-view", SymbolView)
+            if sv is not None:
+                self.remove(sv)
+        except Exception:
+            pass
         current_symbol = self.ticker_symbols[self.active_symbol_index]
         self.push_screen(
             BacktestInputDialog(
@@ -1331,6 +1374,26 @@ class SpectrApp(App):
                 current_strategy=self.strategy_name,
             )
         )
+
+    def cancel_backtest(self) -> None:
+        """Cancel the in-flight backtest and restore the live view.
+
+        Note: The underlying worker thread may continue computing, but its
+        results are ignored. This is a UI-cancel that returns control fast.
+        """
+        self._backtest_cancelled = True
+        # Pop the loading screen if it's visible
+        try:
+            if self.screen_stack and isinstance(self.screen_stack[-1], BacktestLoadingScreen):
+                self.pop_screen()
+        except Exception:
+            pass
+        # Exit backtest mode and restore live symbol view
+        self._exit_backtest()
+        try:
+            self.overlay.flash_message("Backtest canceled", duration=4.0, style="bold yellow")
+        except Exception:
+            pass
 
     async def on_backtest_submit(self, form: dict) -> None:
         """
@@ -1345,10 +1408,22 @@ class SpectrApp(App):
         try:
             # Enter backtest mode to pause live polling/updates while preparing results
             self.is_backtest = True
-            log.info("Backtest starting for %s", form.get("symbol"))
+            self._backtest_cancelled = False
+            # Ensure the live SymbolView is not mounted/running (user may have
+            # switched symbols while the input dialog was open which remounts it).
+            try:
+                sv = self.query_one("#symbol-view", SymbolView)
+                if sv is not None:
+                    self.remove(sv)
+            except Exception:
+                pass
+            symbol = form["symbol"]
+            log.info("Backtest starting for %s", symbol)
+            # Show a full-screen loading screen while work runs
+            loading = BacktestLoadingScreen(message=f"Running backtest for {symbol}...")
+            await self.push_screen(loading, wait_for_dismiss=False)
             overlay = self.overlay
             overlay.update_status("Running backtest...")
-            symbol = form["symbol"]
             starting_cash = float(form["cash"])
             strategy_name = form.get("strategy", self.strategy_name)
             strategy_cls = load_strategy(strategy_name)
@@ -1380,6 +1455,11 @@ class SpectrApp(App):
                 starting_cash,
             )
             log.info("Backtest completed successfully for %s", symbol)
+
+            # If canceled while running, drop results silently
+            if self._backtest_cancelled:
+                self.is_backtest = False
+                return
 
             num_buys = len(result.get("buy_signals", []))
             num_sells = len(result.get("sell_signals", []))
@@ -1436,6 +1516,13 @@ class SpectrApp(App):
                 except Exception:
                     end_value_calc = float(result["final_value"]) 
 
+            # Close loading screen before showing results
+            try:
+                if self.screen_stack and isinstance(self.screen_stack[-1], BacktestLoadingScreen):
+                    self.pop_screen()
+            except Exception:
+                pass
+
             await self.push_screen(
                 BacktestResultScreen(
                     price_df,
@@ -1454,6 +1541,12 @@ class SpectrApp(App):
             log.debug("BacktestResultScreen shown for %s", symbol)
 
         except Exception as exc:
+            # Close loading screen on error
+            try:
+                if self.screen_stack and isinstance(self.screen_stack[-1], BacktestLoadingScreen):
+                    self.pop_screen()
+            except Exception:
+                pass
             self.overlay.flash_message(f"Back-test error: {exc}", style="bold red")
             log.exception("Back-test error")
             # Ensure we resume normal operation if dialog didn't open
@@ -1463,10 +1556,30 @@ class SpectrApp(App):
         """Return to live data when the user presses 0-9."""
         if self.is_backtest:
             self.is_backtest = False
-            # Turn is_backtest off for every graph shown.
-            self.symbol_view.graph.is_backtest = False
-            self.symbol_view.macd.is_backtest = False
+            # Ensure a SymbolView exists; it may have been removed entering backtest
+            sv = None
+            try:
+                sv = self.query_one("#symbol-view", SymbolView)
+            except Exception:
+                sv = None
+            if sv is None:
+                try:
+                    self.mount(SymbolView(id="symbol-view"))
+                    sv = self.query_one("#symbol-view", SymbolView)
+                except Exception:
+                    sv = None
+            self.symbol_view = sv
 
+            # Turn off backtest mode flags on subviews if present
+            try:
+                if self.symbol_view and getattr(self.symbol_view, "graph", None):
+                    self.symbol_view.graph.is_backtest = False
+                if self.symbol_view and getattr(self.symbol_view, "macd", None):
+                    self.symbol_view.macd.is_backtest = False
+            except Exception:
+                pass
+
+            # Restore current symbol view and resume live updates
             current = self.ticker_symbols[self.active_symbol_index]
             self.update_view(current)
 

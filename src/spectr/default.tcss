@@ -118,23 +118,26 @@ TickerInputDialog {
 /* ------- Backtest Input Dialog ------- */
 
 BacktestInputDialog {
+    /* Full-screen with centered content */
     align: center middle;
-    background: transparent;
+    background: $background;
 }
 
 #backtest-input-body {
-    width: 66%;
-    border: solid green;
-    padding: 1 2;
+#   Fullscreen container so the dialog covers the app and replaces the symbol view
+    width: 100%;
+    height: 100%;
+    padding: 2 4;
     content-align-horizontal: center;
+    content-align-vertical: middle;
     background: #1a1a1a;
-    height: 44;
 }
 
 #backtest-input-body Input,
 #backtest-input-body Select {
     background: #262626;
     color: #00ff55;
+    width: 60%;
 }
 #backtest-input-body Label {
     height: 3;
@@ -145,6 +148,7 @@ BacktestInputDialog {
 #backtest-title {
     text-align: center;
     padding: 0 1;
+    width: 100%;
     height: 2;
 }
 
@@ -376,6 +380,39 @@ PortfolioScreen {
 BacktestResultScreen {
     align: center middle;
     background: transparent;
+}
+
+/* Backtest Loading Screen */
+BacktestLoadingScreen {
+    align: center middle;
+    background: transparent;
+}
+
+#backtest-loading-container {
+    width: 80%;
+    height: 10;
+    background: #1a1a1a;
+    border: solid yellow;
+    padding: 1 2;
+    content-align-horizontal: center;
+    content-align-vertical: middle;
+}
+
+#backtest-loading-label {
+    text-align: center;
+    height: 3;
+}
+
+#backtest-loading-buttons {
+    width: 100%;
+    height: 3;
+    content-align-horizontal: center;
+    align: center middle;
+    margin: 1 0;
+}
+
+#backtest-cancel-btn {
+    width: 16;
 }
 
 #backtest-result-container {

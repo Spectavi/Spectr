@@ -9,6 +9,7 @@ src/spectr/cache.py
 src/spectr/cli.py
 src/spectr/exceptions.py
 src/spectr/news.py
+src/spectr/plot_lock.py
 src/spectr/plotext_fix.py
 src/spectr/spectr.py
 src/spectr/utils.py
@@ -38,6 +39,7 @@ src/spectr/strategies/trading_strategy.py
 src/spectr/views/__init__.py
 src/spectr/views/backtest_graph_view.py
 src/spectr/views/backtest_input_dialog.py
+src/spectr/views/backtest_loading_screen.py
 src/spectr/views/backtest_result_screen.py
 src/spectr/views/equity_curve_view.py
 src/spectr/views/graph_view.py

@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 
-from textual.screen import ModalScreen
+from textual.screen import Screen
 from textual.widgets import Input, Button, Label, Static, Select
 from textual.app import ComposeResult
 from textual.containers import Vertical, Horizontal
@@ -8,8 +8,8 @@ import asyncio
 import inspect
 
 
-class BacktestInputDialog(ModalScreen):
-    """Modal form for selecting symbol, strategy and date range."""
+class BacktestInputDialog(Screen):
+    """Full-screen form for selecting symbol, strategy and date range."""
 
     BINDINGS = [
         ("escape", "app.pop_screen", "Cancel"),
@@ -28,6 +28,9 @@ class BacktestInputDialog(ModalScreen):
         self._current_strategy = current_strategy or (
             self._strategies[0] if self._strategies else ""
         )
+        # Track whether user clicked Run so the app stays in backtest mode
+        # when this screen is dismissed.
+        self._proceed_to_results = False
 
         # --- Figure out last week’s Monday-Friday ---
         today = date.today()  # uses local timezone
@@ -80,6 +83,7 @@ class BacktestInputDialog(ModalScreen):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "run":
+            self._proceed_to_results = True
             vals = {
                 "symbol": self.query_one("#symbol", Input).value.strip().upper(),
                 "strategy": self.query_one("#strategy-select", Select).value,
@@ -96,3 +100,15 @@ class BacktestInputDialog(ModalScreen):
                 asyncio.create_task(asyncio.to_thread(self._callback, vals))
         else:
             self.dismiss()
+
+    async def on_unmount(self) -> None:
+        # If the user cancelled (didn't press Run), leave backtest mode and
+        # allow the app to restore the symbol view and resume polling.
+        if not self._proceed_to_results:
+            try:
+                if hasattr(self.app, "_exit_backtest"):
+                    self.app._exit_backtest()
+                else:
+                    self.app.is_backtest = False
+            except Exception:
+                pass

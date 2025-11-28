@@ -5,6 +5,7 @@ import plotext as plt
 from rich.text import Text
 from textual.reactive import reactive
 from textual.widgets import Static
+from ..plot_lock import PLOT_LOCK
 
 try:  # textual < 0.60
     from textual._ansi_theme import rgb  # type: ignore
@@ -25,9 +26,11 @@ class MACDView(Static):
         super().__init__(**kwargs)
         self.df = df
         self.args = args
+        self._refresh_timer = None
 
     def on_mount(self):
-        self.set_interval(0.5, self.refresh)  # Force refresh loop, optional
+        # Keep a handle so we can reliably stop it on unmount
+        self._refresh_timer = self.set_interval(0.5, self.refresh)
 
     def on_resize(self, event):
         self.refresh()  # Force redraw when size changes
@@ -42,6 +45,15 @@ class MACDView(Static):
 
     def watch_is_backtest(self, old, new):
         self.refresh()
+
+    async def on_unmount(self) -> None:
+        # Ensure the periodic timer is stopped when removed from the DOM
+        if self._refresh_timer is not None:
+            try:
+                self._refresh_timer.stop()
+            except Exception:
+                pass
+            self._refresh_timer = None
 
     def render(self):
         return self.build_graph()
@@ -77,34 +89,35 @@ class MACDView(Static):
 
         times = df.index.strftime("%Y-%m-%d %H:%M:%S")
 
-        plt.clf()
-        plt.canvas_color("default")
-        plt.axes_color("default")
-        plt.ticks_color("grey")
-        plt.xticks([], [])  # No xticks for indicators, cleans up UI.
-        plt.grid(False)
-        plt.date_form("Y-m-d H:M:S")
+        with PLOT_LOCK:
+            plt.clf()
+            plt.canvas_color("default")
+            plt.axes_color("default")
+            plt.ticks_color("grey")
+            plt.xticks([], [])  # No xticks for indicators, cleans up UI.
+            plt.grid(False)
+            plt.date_form("Y-m-d H:M:S")
 
-        baseline_x = [times[0], times[-1]]
-        plt.plot(baseline_x, [0, 0], marker="-", color="gray", yside="right", label="")
-        plt.plot(
-            times, df["macd"], color="green", label="MACD", marker="hd", yside="right"
-        )
-        plt.plot(
-            times,
-            df["macd_signal"],
-            color="red",
-            label="Signal",
-            marker="hd",
-            yside="right",
-        )
+            baseline_x = [times[0], times[-1]]
+            plt.plot(baseline_x, [0, 0], marker="-", color="gray", yside="right", label="")
+            plt.plot(
+                times, df["macd"], color="green", label="MACD", marker="hd", yside="right"
+            )
+            plt.plot(
+                times,
+                df["macd_signal"],
+                color="red",
+                label="Signal",
+                marker="hd",
+                yside="right",
+            )
 
-        # Y range adjustment
-        macd_range = max(df["macd"]) - min(df["macd_signal"])
-        center = df["macd"][-1]
-        margin = macd_range * 1.2 if macd_range else 1
-        plt.ylim(center - margin, center + margin)
+            # Y range adjustment
+            macd_range = max(df["macd"]) - min(df["macd_signal"])
+            center = df["macd"][-1]
+            margin = macd_range * 1.2 if macd_range else 1
+            plt.ylim(center - margin, center + margin)
 
-        plt.plotsize(self.size.width - 5, self.size.height)
+            plt.plotsize(self.size.width - 5, self.size.height)
 
-        return Text.from_ansi(plt.build())
+            return Text.from_ansi(plt.build())

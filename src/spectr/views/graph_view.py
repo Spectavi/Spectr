@@ -11,6 +11,7 @@ from rich.text import Text
 from textual.reactive import reactive
 from textual.widgets import Static
 import numpy
+from ..plot_lock import PLOT_LOCK
 
 log = logging.getLogger(__name__)
 
@@ -170,226 +171,230 @@ class GraphView(Static):
             }
         )
 
-        # Clear and configure plotext
-        plt.clf()
-        plt.canvas_color("default")
-        plt.axes_color("default")
-        plt.ticks_color("default")
-        plt.grid(False)
-        # Include date on backtest charts to disambiguate multi-day ranges
-        if self.is_backtest:
-            plt.date_form(input_form="Y-m-d H:M:S", output_form="m/d/Y H:M")
-        else:
-            plt.date_form(input_form="Y-m-d H:M:S", output_form="H:M:S")
+        # All plotext drawing must be serialized; it's not thread-safe.
+        with PLOT_LOCK:
+            # Clear and configure plotext
+            plt.clf()
+            plt.canvas_color("default")
+            plt.axes_color("default")
+            plt.ticks_color("default")
+            plt.grid(False)
+            # Include date on backtest charts to disambiguate multi-day ranges
+            if self.is_backtest:
+                plt.date_form(input_form="Y-m-d H:M:S", output_form="m/d/Y H:M")
+            else:
+                plt.date_form(input_form="Y-m-d H:M:S", output_form="H:M:S")
 
-        inds = {spec.name.lower() for spec in self.indicators}
-        # In backtest results we want a clean price view only
-        if self.is_backtest:
-            inds = set()
+        # Serialize the entire plotting phase to avoid global-state races.
+        with PLOT_LOCK:
+            inds = {spec.name.lower() for spec in self.indicators}
+            # In backtest results we want a clean price view only
+            if self.is_backtest:
+                inds = set()
 
-        # Plot Bollinger Bands
-        if "bollingerbands" in inds:
-            if "bb_upper" in df.columns and not df["bb_upper"].isna().all():
-                plt.plot(
-                    dates,
-                    df["bb_upper"],
-                    color="red",
-                    label="BB Upper",
-                    yside="right",
-                    marker="dot",
-                )
-            if "bb_mid" in df.columns and not df["bb_mid"].isna().all():
-                plt.plot(
-                    dates,
-                    df["bb_mid"],
-                    color="blue",
-                    label="BB Mid",
-                    yside="right",
-                    marker="-",
-                )
-            if "bb_lower" in df.columns and not df["bb_lower"].isna().all():
-                plt.plot(
-                    dates,
-                    df["bb_lower"],
-                    color="green",
-                    label="BB Lower",
-                    yside="right",
-                    marker="dot",
-                )
-
-        if "vwap" in inds and "VWAP" in df.columns:
-            plt.plot(
-                dates,
-                df["VWAP"],
-                yside="right",
-                marker="hd",
-                color="orange",
-                label="VWAP",
-            )
-
-        if "sma" in inds:
-            for spec in self.indicators:
-                if spec.name.lower() != "sma":
-                    continue
-                col_type = spec.params.get("type")
-                if col_type:
-                    col = f"ma_{col_type}"
-                else:
-                    window = spec.params.get("window", 20)
-                    col = f"sma_{window}"
-                if col in df.columns:
+            # Plot Bollinger Bands
+            if "bollingerbands" in inds:
+                if "bb_upper" in df.columns and not df["bb_upper"].isna().all():
                     plt.plot(
-                        dates, df[col], yside="right", label=col.upper(), marker="dot"
+                        dates,
+                        df["bb_upper"],
+                        color="red",
+                        label="BB Upper",
+                        yside="right",
+                        marker="dot",
+                    )
+                if "bb_mid" in df.columns and not df["bb_mid"].isna().all():
+                    plt.plot(
+                        dates,
+                        df["bb_mid"],
+                        color="blue",
+                        label="BB Mid",
+                        yside="right",
+                        marker="-",
+                    )
+                if "bb_lower" in df.columns and not df["bb_lower"].isna().all():
+                    plt.plot(
+                        dates,
+                        df["bb_lower"],
+                        color="green",
+                        label="BB Lower",
+                        yside="right",
+                        marker="dot",
                     )
 
-        # Prefer candles when requested and OHLC columns exist; otherwise fall back to a close line
-        ohlc_cols = ["Open", "Close", "High", "Low"]
-        if self.args.candles and all(col in df.columns for col in ohlc_cols):
-            plt.candlestick(dates, df[ohlc_cols], yside="right")
-        else:
-            if "Close" in df.columns:
-                plt.plot(dates, df["Close"], yside="right", marker="hd", color="green")
+            if "vwap" in inds and "VWAP" in df.columns:
+                plt.plot(
+                    dates,
+                    df["VWAP"],
+                    yside="right",
+                    marker="hd",
+                    color="orange",
+                    label="VWAP",
+                )
+
+            if "sma" in inds:
+                for spec in self.indicators:
+                    if spec.name.lower() != "sma":
+                        continue
+                    col_type = spec.params.get("type")
+                    if col_type:
+                        col = f"ma_{col_type}"
+                    else:
+                        window = spec.params.get("window", 20)
+                        col = f"sma_{window}"
+                    if col in df.columns:
+                        plt.plot(
+                            dates, df[col], yside="right", label=col.upper(), marker="dot"
+                        )
+
+            # Prefer candles when requested and OHLC columns exist; otherwise fall back to a close line
+            ohlc_cols = ["Open", "Close", "High", "Low"]
+            if self.args.candles and all(col in df.columns for col in ohlc_cols):
+                plt.candlestick(dates, df[ohlc_cols], yside="right")
             else:
-                # Nothing to plot; return a friendly message
-                return "No plottable price series available."
-
-        # -------- BUY / SELL MARKERS ---------
-        last_buy_y = last_buy_x = None
-        last_sell_y = last_sell_x = None
-        if "buy_signals" in df.columns:
-            buy_mask = df["buy_signals"].astype(bool)
-
-            # Plot green ▲ for buys
-            if buy_mask.any():
-                buy_x = np.array(dates)[buy_mask]
-                buy_y = df.loc[buy_mask, "Close"]
-                plt.scatter(
-                    buy_x, buy_y, marker="O", color="green", label="Buy", yside="right"
-                )
-                last_buy_x, last_buy_y = buy_x[-1], float(buy_y.iloc[-1])
-
-        if "sell_signals" in df.columns:
-            sell_mask = df["sell_signals"].astype(bool)
-
-            # Plot red ▼ for sells
-            if sell_mask.any():
-                sell_x = np.array(dates)[sell_mask]
-                sell_y = df.loc[sell_mask, "Close"]
-                plt.scatter(
-                    sell_x, sell_y, marker="X", color="red", label="Sell", yside="right"
-                )
-                # remember the LAST sell to label on the right
-                last_sell_x, last_sell_y = sell_x[-1], float(sell_y.iloc[-1])
-
-        # -------- PRICE LABELS ON THE RIGHT EDGE -------------------------
-
-        if last_buy_y is not None:
-            plt.text(
-                f"${last_buy_y:.2f}",
-                last_buy_x,
-                last_buy_y,
-                color="green",
-                yside="right",
-            )
-
-        if last_sell_y is not None:
-            plt.text(
-                f"${last_sell_y:.2f}",
-                last_sell_x,
-                last_sell_y,
-                color="red",
-                yside="right",
-            )
-
-        last_x = dates[-1]
-        current_price = df["Close"].iloc[-1]
-        price_label = f"${current_price:.2f}"
-
-        if not self.is_backtest:
-            plt.text(
-                price_label,
-                last_x,
-                current_price + 0.5,
-                color="green",
-                style="#price_label",
-                yside="right",
-                alignment="right",
-            )
-            plt.title(f"{self.symbol} - {price_label}")
-        else:
-            plt.title(self.symbol)
-
-        # Compute y-range based on visible data with ±5% padding
-        y_series = []
-        # Base price data (candles or close line)
-        if self.args.candles and all(col in df.columns for col in ["High", "Low"]):
-            y_series.append(df["High"])  # highs
-            y_series.append(df["Low"])   # lows
-        elif "Close" in df.columns:
-            y_series.append(df["Close"])  # line mode
-
-        # Overlays that are plotted on the right axis
-        if "bollingerbands" in inds:
-            for col in ("bb_upper", "bb_mid", "bb_lower"):
-                if col in df.columns and not df[col].isna().all():
-                    y_series.append(df[col])
-        if "vwap" in inds and "VWAP" in df.columns:
-            y_series.append(df["VWAP"])
-        if "sma" in inds:
-            for spec in self.indicators:
-                if spec.name.lower() != "sma":
-                    continue
-                col_type = spec.params.get("type")
-                if col_type:
-                    col = f"ma_{col_type}"
+                if "Close" in df.columns:
+                    plt.plot(dates, df["Close"], yside="right", marker="hd", color="green")
                 else:
-                    window = spec.params.get("window", 20)
-                    col = f"sma_{window}"
-                if col in df.columns:
-                    y_series.append(df[col])
+                    # Nothing to plot; return a friendly message
+                    return "No plottable price series available."
 
-        # Flatten and filter numeric values
-        vals = []
-        for s in y_series:
-            try:
-                arr = np.asarray(s.dropna(), dtype=float)
-                if arr.size:
-                    vals.extend(arr.tolist())
-            except Exception:
-                pass
+            # -------- BUY / SELL MARKERS ---------
+            last_buy_y = last_buy_x = None
+            last_sell_y = last_sell_x = None
+            if "buy_signals" in df.columns:
+                buy_mask = df["buy_signals"].astype(bool)
 
-        if vals:
-            y_min_raw = min(vals)
-            y_max_raw = max(vals)
-        else:
-            # Fallback to current price if no series collected
-            y_min_raw = float(current_price)
-            y_max_raw = float(current_price)
+                # Plot green ▲ for buys
+                if buy_mask.any():
+                    buy_x = np.array(dates)[buy_mask]
+                    buy_y = df.loc[buy_mask, "Close"]
+                    plt.scatter(
+                        buy_x, buy_y, marker="O", color="green", label="Buy", yside="right"
+                    )
+                    last_buy_x, last_buy_y = buy_x[-1], float(buy_y.iloc[-1])
 
-        if y_min_raw == y_max_raw:
-            pad = abs(y_min_raw) * 0.02 or 1.0
-            y_min = y_min_raw - pad
-            y_max = y_max_raw + pad
-        else:
-            diff = y_max_raw - y_min_raw
-            y_min = y_min_raw - (diff * 0.1)
-            y_max = y_max_raw + (diff * 0.1)
+            if "sell_signals" in df.columns:
+                sell_mask = df["sell_signals"].astype(bool)
 
-        plt.ylim(y_min, y_max)
+                # Plot red ▼ for sells
+                if sell_mask.any():
+                    sell_x = np.array(dates)[sell_mask]
+                    sell_y = df.loc[sell_mask, "Close"]
+                    plt.scatter(
+                        sell_x, sell_y, marker="X", color="red", label="Sell", yside="right"
+                    )
+                    # remember the LAST sell to label on the right
+                    last_sell_x, last_sell_y = sell_x[-1], float(sell_y.iloc[-1])
 
-        # Show the current price on the y-axis and ensure it isn't truncated
-        ticks = np.linspace(y_min, y_max, 5).tolist()
-        labels = [f"{t:.2f}" for t in ticks]
-        if current_price not in ticks:
-            ticks.append(current_price)
-            labels.append(price_label)
-            ticks, labels = zip(*sorted(zip(ticks, labels)))
-        plt.yticks(ticks, labels, yside="right")
+            # -------- PRICE LABELS ON THE RIGHT EDGE -------------------------
 
-        # Size the plot to the widget's allocated size.
-        # Keep a small margin to avoid clipping borders.
-        width = max(int(self.size.width), 20)
-        height = max(int(self.size.height), 10)
-        plt.plotsize(max(width - 2, 10), max(height - 1, 8))
+            if last_buy_y is not None:
+                plt.text(
+                    f"${last_buy_y:.2f}",
+                    last_buy_x,
+                    last_buy_y,
+                    color="green",
+                    yside="right",
+                )
 
-        return Text.from_ansi(plt.build())
+            if last_sell_y is not None:
+                plt.text(
+                    f"${last_sell_y:.2f}",
+                    last_sell_x,
+                    last_sell_y,
+                    color="red",
+                    yside="right",
+                )
+
+            last_x = dates[-1]
+            current_price = df["Close"].iloc[-1]
+            price_label = f"${current_price:.2f}"
+
+            if not self.is_backtest:
+                plt.text(
+                    price_label,
+                    last_x,
+                    current_price + 0.5,
+                    color="green",
+                    style="#price_label",
+                    yside="right",
+                    alignment="right",
+                )
+                plt.title(f"{self.symbol} - {price_label}")
+            else:
+                plt.title(self.symbol)
+
+            # Compute y-range based on visible data with ±5% padding
+            y_series = []
+            # Base price data (candles or close line)
+            if self.args.candles and all(col in df.columns for col in ["High", "Low"]):
+                y_series.append(df["High"])  # highs
+                y_series.append(df["Low"])   # lows
+            elif "Close" in df.columns:
+                y_series.append(df["Close"])  # line mode
+
+            # Overlays that are plotted on the right axis
+            if "bollingerbands" in inds:
+                for col in ("bb_upper", "bb_mid", "bb_lower"):
+                    if col in df.columns and not df[col].isna().all():
+                        y_series.append(df[col])
+            if "vwap" in inds and "VWAP" in df.columns:
+                y_series.append(df["VWAP"])
+            if "sma" in inds:
+                for spec in self.indicators:
+                    if spec.name.lower() != "sma":
+                        continue
+                    col_type = spec.params.get("type")
+                    if col_type:
+                        col = f"ma_{col_type}"
+                    else:
+                        window = spec.params.get("window", 20)
+                        col = f"sma_{window}"
+                    if col in df.columns:
+                        y_series.append(df[col])
+
+            # Flatten and filter numeric values
+            vals = []
+            for s in y_series:
+                try:
+                    arr = np.asarray(s.dropna(), dtype=float)
+                    if arr.size:
+                        vals.extend(arr.tolist())
+                except Exception:
+                    pass
+
+            if vals:
+                y_min_raw = min(vals)
+                y_max_raw = max(vals)
+            else:
+                # Fallback to current price if no series collected
+                y_min_raw = float(current_price)
+                y_max_raw = float(current_price)
+
+            if y_min_raw == y_max_raw:
+                pad = abs(y_min_raw) * 0.02 or 1.0
+                y_min = y_min_raw - pad
+                y_max = y_max_raw + pad
+            else:
+                diff = y_max_raw - y_min_raw
+                y_min = y_min_raw - (diff * 0.1)
+                y_max = y_max_raw + (diff * 0.1)
+
+            plt.ylim(y_min, y_max)
+
+            # Show the current price on the y-axis and ensure it isn't truncated
+            ticks = np.linspace(y_min, y_max, 5).tolist()
+            labels = [f"{t:.2f}" for t in ticks]
+            if current_price not in ticks:
+                ticks.append(current_price)
+                labels.append(price_label)
+                ticks, labels = zip(*sorted(zip(ticks, labels)))
+            plt.yticks(ticks, labels, yside="right")
+
+            # Size the plot to the widget's allocated size.
+            # Keep a small margin to avoid clipping borders.
+            width = max(int(self.size.width), 20)
+            height = max(int(self.size.height), 10)
+            plt.plotsize(max(width - 2, 10), max(height - 1, 8))
+
+            return Text.from_ansi(plt.build())
