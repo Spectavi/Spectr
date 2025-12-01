@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 
-from textual.screen import Screen
+from textual.screen import Screen, ModalScreen
 from textual.widgets import Input, Button, Label, Static, Select
 from textual.app import ComposeResult
 from textual.containers import Vertical, Horizontal
@@ -8,7 +8,7 @@ import asyncio
 import inspect
 
 
-class BacktestInputDialog(Screen):
+class BacktestInputDialog(ModalScreen):
     """Full-screen form for selecting symbol, strategy and date range."""
 
     BINDINGS = [
@@ -46,18 +46,18 @@ class BacktestInputDialog(Screen):
     def compose(self) -> ComposeResult:
         yield Vertical(
             Static("Back-test Parameters", id="backtest-title", classes="title"),
-            Label("Symbol:"),
-            Input(
-                value=self._default_symbol,
-                placeholder="Symbol (e.g. NVDA)",
-                id="symbol",
-            ),
             Label("Strategy:"),
             Select(
                 id="strategy-select",
                 prompt="",
                 value=self._current_strategy,
                 options=[(s, s) for s in self._strategies],
+            ),
+            Label("Symbol:"),
+            Input(
+                value=self._default_symbol,
+                placeholder="Symbol (e.g. NVDA)",
+                id="symbol-input",
             ),
             Label("From:"),
             Input(
@@ -91,8 +91,6 @@ class BacktestInputDialog(Screen):
                 "to": self.query_one("#to", Input).value.strip(),
                 "cash": self.query_one("#cash", Input).value.strip(),
             }
-            self.dismiss()
-
             # Run the callback without blocking the UI thread.
             if inspect.iscoroutinefunction(self._callback):
                 asyncio.create_task(self._callback(vals))

@@ -1409,6 +1409,12 @@ class SpectrApp(App):
             # Enter backtest mode to pause live polling/updates while preparing results
             self.is_backtest = True
             self._backtest_cancelled = False
+            # Ensure the input dialog is removed before we push the loading screen
+            try:
+                if self.screen_stack and isinstance(self.screen_stack[-1], BacktestInputDialog):
+                    await self.pop_screen()
+            except Exception:
+                pass
             # Ensure the live SymbolView is not mounted/running (user may have
             # switched symbols while the input dialog was open which remounts it).
             try:
