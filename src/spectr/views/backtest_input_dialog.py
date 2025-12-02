@@ -50,7 +50,7 @@ class BacktestInputDialog(Screen):
             Input(
                 value=self._default_symbol,
                 placeholder="Symbol (e.g. NVDA)",
-                id="symbol",
+                id="symbol-input",
             ),
             Label("Strategy:"),
             Select(
