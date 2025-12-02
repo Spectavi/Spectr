@@ -3,8 +3,8 @@ import asyncio
 from types import SimpleNamespace
 import pandas as pd
 from textual.screen import ModalScreen
-from textual.widgets import Static, DataTable
-from textual.containers import Vertical
+from textual.widgets import Static, DataTable, Button
+from textual.containers import Vertical, Horizontal
 
 from .backtest_graph_view import BacktestGraphView
 
@@ -101,7 +101,13 @@ class BacktestResultScreen(ModalScreen):
                 profit_s,
                 trade.get("reason", ""),
             )
-        yield Vertical(self._graph, self.report, table, id="backtest-result-container")
+        close_row = Horizontal(
+            Button("Close", id="backtest-close-btn", variant="primary"),
+            id="backtest-close-row",
+        )
+        yield Vertical(
+            self._graph, self.report, table, close_row, id="backtest-result-container"
+        )
 
     async def on_mount(self) -> None:
         log.debug("BacktestResultScreen mounted")
@@ -139,7 +145,24 @@ class BacktestResultScreen(ModalScreen):
         except Exception:
             pass
 
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "backtest-close-btn":
+            try:
+                self.app.pop_screen()
+            except Exception:
+                pass
+
     def _make_report(self) -> str:
+        # Compute Profit Amount (end - start)
+        profit_line = "Profit Amount: —"
+        try:
+            if self.start_value is not None and self.end_value is not None:
+                profit = float(self.end_value) - float(self.start_value)
+                sign = "+" if profit > 0 else ("-" if profit < 0 else "")
+                profit_line = f"Profit Amount: {sign}${abs(profit):,.2f}"
+        except Exception:
+            pass
+
         # Compute Buy & Hold profit using the price series in the backtest range
         buy_hold_line = "Buy & Hold: —"
         try:
@@ -160,10 +183,11 @@ class BacktestResultScreen(ModalScreen):
         return (
             f"Symbol: {self.symbol}\n"
             f"From: {self.start_date}\n"
-            f"To: {self.end_date}\n"
+            f"To: {self.end_date}\n\n"
             f"Start Value: ${self.start_value:,.2f}\n"
-            f"End Value: ${self.end_value:,.2f}\n"
-            f"{buy_hold_line}\n"
+            f"End Value: ${self.end_value:,.2f}\n\n"
+            f"{profit_line}\n"
+            f"{buy_hold_line}\n\n"
             f"Buys: {self.num_buys}\n"
             f"Sells: {self.num_sells}"
         )
