@@ -119,6 +119,7 @@ Currently focusing on Alpaca for broker and FMP for data.
 | `Ctrl+X` | Sell 50% of position           |
 | `Ctrl+C` | Sell 25% of position           |
 | `Ctrl+D` | Remove current symbol from watch list |
+| `V`      | Push-to-talk voice assistant   |
 
 
 ## 📦 Installation
@@ -148,6 +149,7 @@ pip install -r requirements.txt
 ```bash
    sudo dnf install portaudio libsndfile
 ````
+The voice agent uses your system default input/output devices; there is no in-app audio settings dialog.
 
 # Usage
 ```bash
@@ -155,7 +157,7 @@ pip install -e .
 
 # After installation you can launch the UI with the `spectr` command
 spectr
-
+ 
 # Alternatively without installing you can run
 PYTHONPATH=src python -m spectr.spectr
 ```

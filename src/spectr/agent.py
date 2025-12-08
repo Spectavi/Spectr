@@ -53,6 +53,9 @@ class VoiceAgent:
         on_speech_start: Optional[Callable[[], None]] | None = None,
         on_speech_end: Optional[Callable[[], None]] | None = None,
         stream_voice: bool = False,
+        mic_device: Optional[int] = None,
+        mic_gain: float = 1.0,
+        tts_volume: float = 1.0,
     ) -> None:
         """Initialize the voice agent and OpenAI client."""
         self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -68,6 +71,16 @@ class VoiceAgent:
         self._on_speech_start = on_speech_start
         self._on_speech_end = on_speech_end
         self.stream_voice = stream_voice
+        # Audio IO preferences
+        self.mic_device = mic_device
+        try:
+            self.mic_gain = float(mic_gain)
+        except Exception:
+            self.mic_gain = 1.0
+        try:
+            self.tts_volume = max(0.0, min(1.0, float(tts_volume)))
+        except Exception:
+            self.tts_volume = 1.0
         pygame.mixer.init()
         self._stop_event = threading.Event()
         self._current_channel: pygame.mixer.Channel | None = None
@@ -96,6 +109,27 @@ class VoiceAgent:
         self.wake_word = "spectr"
         self._wake_event: threading.Event | None = None
         self._listen_thread: threading.Thread | None = None
+
+    def _candidate_sample_rates(self, preferred: int) -> list[int]:
+        """Return a list of sample rates to try for the selected mic."""
+        rates: list[int] = []
+        if preferred not in rates:
+            rates.append(preferred)
+        try:
+            info = sd.query_devices(self.mic_device, "input") if sd else None  # type: ignore[call-arg]
+        except Exception:
+            info = None
+        if info:
+            try:
+                default_sr = int(info.get("default_samplerate") or 0)
+                if default_sr > 0 and default_sr not in rates:
+                    rates.append(default_sr)
+            except Exception:
+                pass
+        for sr in (44100, 48000, 16000):
+            if sr not in rates:
+                rates.append(sr)
+        return rates
 
     def _serialize(self, obj):
         """Recursively convert *obj* into JSON serialisable primitives."""
@@ -697,6 +731,10 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
             fname = f.name
         sound = pygame.mixer.Sound(fname)
         channel = sound.play()
+        try:
+            channel.set_volume(self.tts_volume)
+        except Exception:
+            pass
         self._current_channel = channel
         while channel.get_busy():
             if self._stop_event.is_set():
@@ -706,7 +744,13 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
         self._current_channel = None
         self._stop_event.clear()
 
-    def listen_and_answer(self, cancel_event: threading.Event | None = None) -> str:
+    def listen_and_answer(
+        self,
+        cancel_event: threading.Event | None = None,
+        stop_record_event: threading.Event | None = None,
+        status_cb: Optional[Callable[[str], None]] = None,
+        use_silence_detection: bool = True,
+    ) -> str:
         """Record a short audio question and reply with a spoken answer.
 
         If ``cancel_event`` is set while recording or generating a response the
@@ -719,37 +763,91 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
                 "sounddevice and soundfile are required for voice features"
             )
         sample_rate = 16_000
-        max_duration = 60  # safety valve to avoid runaway recording
-        silence_threshold = 0.01
-        silence_secs = 1.5
+        # Cap worst-case recording duration to reduce perceived latency
+        max_duration = 60
+        # Treat lower amplitudes as silence; end recording a bit sooner
+        silence_secs = 1.0
         buffers: list[np.ndarray] = []
         silence_start: float | None = None
         start_time = time.time()
-        with sd.InputStream(samplerate=sample_rate, channels=1) as stream:
-            while True:
-                if cancel_event.is_set():
-                    return ""
-                data, _ = stream.read(int(sample_rate * 0.1))
-                buffers.append(data.copy())
-                # compute RMS amplitude to detect silence
-                amp = float(np.sqrt(np.mean(data ** 2)))
-                if amp < silence_threshold:
-                    if silence_start is None:
-                        silence_start = time.time()
-                    elif time.time() - silence_start >= silence_secs:
-                        break
-                else:
-                    silence_start = None
+        if status_cb:
+            try:
+                status_cb("listening")
+            except Exception:
+                pass
+        # Adaptive noise floor calibration
+        last_error: Exception | None = None
+        for sr in self._candidate_sample_rates(sample_rate):
+            noise_floor = 0.001
+            try:
+                with sd.InputStream(samplerate=sr, channels=1, device=self.mic_device, dtype="float32") as stream:
+                    data, _ = stream.read(int(sr * 0.3))
+                    noise_floor = float(np.sqrt(np.mean(data ** 2)))
+            except Exception:
+                # Keep default noise_floor if calibration fails; we may still record.
+                pass
+            dyn_threshold = max(0.005, noise_floor * 3.0)
+            try:
+                with sd.InputStream(samplerate=sr, channels=1, device=self.mic_device, dtype="float32") as stream:
+                    while True:
+                        if cancel_event.is_set():
+                            return ""
+                        if stop_record_event is not None and stop_record_event.is_set():
+                            sample_rate = sr
+                            break
+                        data, _ = stream.read(int(sr * 0.1))
+                        buffers.append(data.copy())
+                        if not use_silence_detection:
+                            if time.time() - start_time > max_duration:
+                                sample_rate = sr
+                                break
+                            continue
+                        # compute RMS amplitude to detect silence
+                        amp = float(np.sqrt(np.mean(data ** 2)))
+                        if amp < dyn_threshold:
+                            if silence_start is None:
+                                silence_start = time.time()
+                            elif time.time() - silence_start >= silence_secs:
+                                sample_rate = sr
+                                break
+                        else:
+                            silence_start = None
 
-                if cancel_event.is_set():
-                    return ""
-                if time.time() - start_time > max_duration:
+                        if cancel_event.is_set():
+                            return ""
+                        if time.time() - start_time > max_duration:
+                            sample_rate = sr
+                            break
+                    else:
+                        # Shouldn't happen; defensive to keep the loop consistent
+                        sample_rate = sr
                     break
+            except Exception as e:
+                last_error = e
+                continue
+        else:
+            if last_error:
+                log.error(f"Mic stream error: {last_error}")
+            return ""
 
         rec = np.concatenate(buffers, axis=0)
+        # Apply simple automatic gain control if very quiet
+        try:
+            rms = float(np.sqrt(np.mean(rec ** 2)))
+            target_rms = 0.05
+            scale = max(self.mic_gain, min(5.0, target_rms / (rms + 1e-6)))
+            if scale != 1.0:
+                rec = np.clip(rec * scale, -1.0, 1.0)
+        except Exception:
+            pass
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as f:
             sf.write(f.name, rec, sample_rate)
             wav_path = f.name
+        if status_cb:
+            try:
+                status_cb("processing")
+            except Exception:
+                pass
         if cancel_event.is_set():
             return ""
         with open(wav_path, "rb") as audio_file:
@@ -847,7 +945,12 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
         sample_rate = 16_000
         duration = 2
         while not self._wake_event.is_set():
-            rec = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1)
+            rec = sd.rec(
+                int(duration * sample_rate),
+                samplerate=sample_rate,
+                channels=1,
+                device=self.mic_device,
+            )
             sd.wait()
             with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as f:
                 sf.write(f.name, rec, sample_rate)
@@ -863,4 +966,3 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
                     self.listen_and_answer()
             except Exception:
                 pass
-

@@ -210,6 +210,8 @@ class SpectrApp(App):
         self._equity_worker = None
         self._order_status_worker = None
         self._voice_worker = None
+        self._voice_stop_event: threading.Event | None = None
+        self._voice_is_recording = False
         self._backtest_cancelled = False
         # Debug flags to throttle logs while backtest is active
         self._bt_paused_poll = False
@@ -239,7 +241,19 @@ class SpectrApp(App):
 
         self.voice_agent = None
         if os.getenv("OPENAI_API_KEY"):
+            # Bind 'v' for push-to-talk voice assistant
             self.bind("v", "ask_agent", description="Voice Assistant")
+            # Optional mic and volume overrides via env for convenience
+            def _parse_float(env, default):
+                try:
+                    return float(os.getenv(env, "")) if os.getenv(env) else default
+                except Exception:
+                    return default
+            def _parse_int(env):
+                try:
+                    return int(os.getenv(env, "")) if os.getenv(env) else None
+                except Exception:
+                    return None
             self.voice_agent = VoiceAgent(
                 broker_api=BROKER_API,
                 data_api=DATA_API,
@@ -250,6 +264,9 @@ class SpectrApp(App):
                     get_strategy_code(self.strategy_name) if self.strategy_name else ""
                 ),
                 stream_voice=getattr(args, "voice_streaming", False),
+                mic_device=_parse_int("MIC_DEVICE"),
+                mic_gain=_parse_float("MIC_GAIN", 1.0),
+                tts_volume=_parse_float("TTS_VOLUME", 1.0),
             )
             if getattr(args, "listen", False):
                 self.voice_agent.start_wake_word_listener(
@@ -798,6 +815,19 @@ class SpectrApp(App):
             self.auto_trading_enabled = False
             self._shutting_down = True
 
+            # Immediately stop any voice playback/recording and listeners
+            try:
+                if self.voice_agent:
+                    self.voice_agent.stop()
+            except Exception:
+                pass
+            try:
+                if self._voice_worker and self._voice_worker.is_running:
+                    self._voice_worker.cancel()
+                    self._voice_worker = None
+            except Exception:
+                pass
+
             cache.save_symbols_cache(self.ticker_symbols)
 
             if self._scanner_worker:
@@ -828,7 +858,10 @@ class SpectrApp(App):
                     self._consumer_task = None
 
             if self.voice_agent:
-                self.voice_agent.stop_wake_word_listener()
+                try:
+                    self.voice_agent.stop_wake_word_listener()
+                except Exception:
+                    pass
 
         except Exception:
             log.exception("on_shutdown encountered an error")
@@ -1037,22 +1070,49 @@ class SpectrApp(App):
         if not self.voice_agent or self._is_splash_active():
             return
         if self._voice_worker and self._voice_worker.is_running:
-            if self.voice_agent:
-                self.voice_agent.stop()
-            self._voice_worker.cancel()
-            self.overlay.clear_prompt()
-            self.update_status_bar()
+            if self._voice_is_recording and self._voice_stop_event:
+                self._voice_stop_event.set()
+            else:
+                if self.voice_agent:
+                    self.voice_agent.stop()
+                self._voice_worker.cancel()
+                self.overlay.clear_prompt()
+                self.update_status_bar()
             return
-        self._voice_worker = self.run_worker(self._ask_agent, thread=True)
+        self._voice_stop_event = threading.Event()
+        self._voice_is_recording = True
+        self._voice_worker = self.run_worker(
+            lambda: self._ask_agent(self._voice_stop_event),
+            thread=True,
+        )
 
-    def _ask_agent(self) -> None:
+    def _ask_agent(self, stop_event: threading.Event | None = None) -> None:
         """Run the voice assistant and display errors in the overlay."""
         if not self.voice_agent:
             return
         overlay = self.overlay
-        self.call_from_thread(overlay.show_prompt, "Listening...")
+        self.call_from_thread(
+            overlay.show_prompt, "Recording... press V to stop"
+        )
+        def _status(ev: str) -> None:
+            # Update the overlay prompt text from the worker thread
+            try:
+                if ev == "processing":
+                    self._voice_is_recording = False
+                    self.call_from_thread(overlay.show_prompt, "Processing...")
+                elif ev == "listening":
+                    self._voice_is_recording = True
+                    self.call_from_thread(
+                        overlay.show_prompt, "Recording... press V to stop"
+                    )
+            except Exception:
+                pass
         try:
-            self.voice_agent.listen_and_answer()
+            self.voice_agent.listen_and_answer(
+                status_cb=_status,
+                stop_record_event=stop_event,
+                use_silence_detection=False,
+            )
         except Exception as exc:
             log.error("Voice agent error: %s", traceback.format_exc())
             self.call_from_thread(overlay.clear_prompt)
@@ -1063,6 +1123,8 @@ class SpectrApp(App):
         else:
             self.call_from_thread(overlay.clear_prompt)
         finally:
+            self._voice_stop_event = None
+            self._voice_is_recording = False
             self.call_from_thread(self.update_status_bar)
             self._voice_worker = None
 
