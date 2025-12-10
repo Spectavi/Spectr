@@ -9,6 +9,8 @@ import inspect
 
 log = logging.getLogger(__name__)
 
+_TRAIL_STATE: dict[int, dict[str, float]] = {}
+
 
 def _normalize_side(side: Any) -> str:
     """Return ``side`` as a lower-case string."""
@@ -92,24 +94,46 @@ def check_stop_levels(
     position: Optional[object],
     stop_loss_pct: float,
     take_profit_pct: float,
+    *,
+    trailing_stop: bool = False,
 ) -> Optional[dict[str, str]]:
     """Return an exit signal dict if stop levels are hit."""
     qty = get_position_qty(position)
     if qty == 0:
+        if position is not None:
+            _TRAIL_STATE.pop(id(position), None)
         return None
 
     entry_price = get_entry_price(position)
     if entry_price is None:
         return None
 
+    trail_key = id(position) if position is not None else None
+    trail = _TRAIL_STATE.get(trail_key) if trailing_stop and trail_key else None
+    if trailing_stop and trail_key is not None and trail is None:
+        trail = {"high": entry_price, "low": entry_price}
+        _TRAIL_STATE[trail_key] = trail
+
+    stop_reason = "Stop loss"
+    stop_ref = entry_price
+
+    if trailing_stop and trail is not None:
+        if qty > 0:
+            trail["high"] = max(trail["high"], price)
+            stop_ref = trail["high"]
+        elif qty < 0:
+            trail["low"] = min(trail["low"], price)
+            stop_ref = trail["low"]
+        stop_reason = "Trailing stop loss"
+
     if qty > 0:
-        if price <= entry_price * (1 - stop_loss_pct):
-            return {"signal": "sell", "reason": "Stop loss"}
+        if price <= stop_ref * (1 - stop_loss_pct):
+            return {"signal": "sell", "reason": stop_reason}
         if price >= entry_price * (1 + take_profit_pct):
             return {"signal": "sell", "reason": "Take profit"}
     elif qty < 0:
-        if price >= entry_price * (1 + stop_loss_pct):
-            return {"signal": "buy", "reason": "Stop loss"}
+        if price >= stop_ref * (1 + stop_loss_pct):
+            return {"signal": "buy", "reason": stop_reason}
         if price <= entry_price * (1 - take_profit_pct):
             return {"signal": "buy", "reason": "Take profit"}
     return None

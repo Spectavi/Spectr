@@ -1,3 +1,4 @@
+import inspect
 import logging
 import math
 import traceback
@@ -20,30 +21,57 @@ def prepare_order_details(
     order_type = OrderType.MARKET
     limit_price: float | None = None
 
+    def _round_with_tick(raw: float | None, *, side: OrderSide) -> float | None:
+        """Round price using per-tick precision while preserving buffer direction."""
+        if raw is None or raw <= 0:
+            return None
+        tick = 0.01 if raw >= 1 else 0.0001
+        factor = math.ceil(raw / tick) if side == OrderSide.BUY else math.floor(raw / tick)
+        rounded = factor * tick
+        return round(rounded, 2 if tick >= 0.01 else 4)
+
     # Crypto is 24hrs so no need for limit orders.
-    if not is_market_open_now() and not is_crypto_symbol(symbol):
-        quote = broker.fetch_quote(symbol)
+    extended_hours = not is_market_open_now() and not is_crypto_symbol(symbol)
+    if extended_hours:
+        quote = {}
+        try:
+            fetch_fn = getattr(broker, "fetch_quote", None)
+            if fetch_fn:
+                sig = inspect.signature(fetch_fn)
+                if "afterhours" in sig.parameters:
+                    quote = fetch_fn(symbol, afterhours=True)
+                else:
+                    quote = fetch_fn(symbol)
+        except Exception as exc:  # noqa: BLE001
+            log.warning(f"Failed to fetch quote for {symbol}: {exc}")
+            quote = {}
+
+        quote = quote or {}
         order_type = OrderType.LIMIT
         if side == OrderSide.BUY:
-            limit_price = (
+            src_price = (
                 quote.get("ask")
                 or quote.get("ask_price")
                 or quote.get("askPrice")
                 or quote.get("price")
             )
-            if limit_price:
-                limit_price *= 1.003
-                limit_price = round(limit_price, 2)
+            if src_price:
+                limit_price = _round_with_tick(src_price * 1.003, side=side)
         else:
-            limit_price = (
+            src_price = (
                 quote.get("bid")
                 or quote.get("bid_price")
                 or quote.get("bidPrice")
                 or quote.get("price")
             )
-            if limit_price:
-                limit_price *= 0.997
-                limit_price = round(limit_price, 2)
+            if src_price:
+                limit_price = _round_with_tick(src_price * 0.997, side=side)
+
+        if limit_price is None:
+            log.warning(
+                "No after-hours quote available for %s; limit price could not be calculated",
+                symbol,
+            )
 
     log.debug(
         f"Order details for {symbol}: type={order_type}, limit_price={limit_price}"
@@ -76,6 +104,13 @@ def submit_order(
         The order object returned by ``broker.submit_order`` when available.
     """
     order_type, limit_price = prepare_order_details(symbol, side, broker)
+
+    if order_type == OrderType.LIMIT and limit_price is None:
+        msg = f"No quote available for {symbol}; cannot place after-hours {side.name.lower()} order."
+        log.warning(msg)
+        if voice_agent is not None:
+            voice_agent.say(text=msg)
+        return None
 
     qty_from_trade_amount = qty is None
     if qty_from_trade_amount:
