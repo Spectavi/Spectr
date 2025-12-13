@@ -21,6 +21,7 @@ STRATEGY_NAME_FILE = pathlib.Path.home() / ".spectr_selected_strategy.json"  # l
 SCANNER_NAME_FILE = pathlib.Path.home() / ".spectr_selected_scanner.json"  # legacy
 TRADE_AMOUNT_FILE = pathlib.Path.home() / ".spectr_trade_amount.json"  # legacy
 ONBOARD_FILE = pathlib.Path.home() / ".spectr_onboard.json"
+LAST_BACKTEST_FILE = pathlib.Path.home() / ".spectr_last_backtest.json"
 
 COMBINED_CACHE_FILE = pathlib.Path.home() / ".spectr_cache.json"
 
@@ -180,6 +181,29 @@ def load_backtest_cache(symbol: str, from_date: str, to_date: str, interval: str
     except Exception as exc:  # pragma: no cover - defensive
         log.warning("Failed to load backtest cache: %s", exc)
     return pd.DataFrame()
+
+
+def save_last_backtest(payload: dict, path: pathlib.Path | None = None) -> None:
+    """Persist the latest backtest metadata/results to JSON."""
+    if path is None:
+        path = LAST_BACKTEST_FILE
+    try:
+        path.write_text(json.dumps(payload, default=_default, indent=2))
+        log.debug("Saved last backtest to %s", path)
+    except Exception as exc:  # pragma: no cover - logging only
+        log.warning("Failed to save last backtest: %s", exc)
+
+
+def load_last_backtest(path: pathlib.Path | None = None) -> dict:
+    """Return the last saved backtest payload (or {})."""
+    if path is None:
+        path = LAST_BACKTEST_FILE
+    try:
+        if path.exists():
+            return json.loads(path.read_text())
+    except Exception:  # pragma: no cover - defensive
+        log.warning("Failed to load last backtest", exc_info=True)
+    return {}
 
 
 def save_scanner_cache(

@@ -33,6 +33,7 @@ from .backtest import run_backtest, split_backtest_frames
 from .views.backtest_input_dialog import BacktestInputDialog
 from .views.backtest_result_screen import BacktestResultScreen
 from .views.backtest_loading_screen import BacktestLoadingScreen
+from .views.backtest_error_screen import BacktestErrorScreen
 from .views.graph_view import GraphView
 from .views.order_dialog import OrderDialog
 from .views.portfolio_screen import PortfolioScreen
@@ -1595,6 +1596,52 @@ class SpectrApp(App):
             self._last_backtest_trades = trades
             log.debug(f"trades: {trades}")
 
+            # Persist a summary for the voice agent / future reference.
+            try:
+                def _iso(val):
+                    return val.isoformat() if hasattr(val, "isoformat") else str(val)
+
+                equity_serialized = []
+                try:
+                    if isinstance(equity_curve, pd.Series):
+                        equity_serialized = [
+                            {"time": _iso(ts), "value": float(val)}
+                            for ts, val in equity_curve.items()
+                        ]
+                    elif isinstance(equity_curve, pd.DataFrame):
+                        equity_serialized = [
+                            {"time": _iso(ts), "value": float(row.iloc[-1])}
+                            for ts, row in equity_curve.iterrows()
+                        ]
+                    elif isinstance(equity_curve, list):
+                        equity_serialized = [{"time": i, "value": float(v)} for i, v in enumerate(equity_curve)]
+                except Exception:
+                    pass
+
+                cache.save_last_backtest(
+                    {
+                        "symbol": symbol,
+                        "from": form["from"],
+                        "to": form["to"],
+                        "strategy": strategy_name,
+                        "starting_cash": starting_cash,
+                        "final_value": end_value_calc,
+                        "num_buys": num_buys,
+                        "num_sells": num_sells,
+                        "trades": [
+                            {
+                                **r,
+                                "time": _iso(r.get("time")),
+                            }
+                            for r in trades
+                        ],
+                        "equity_curve": equity_serialized,
+                        "config": self.config.__dict__,
+                    }
+                )
+            except Exception:  # pragma: no cover - best-effort
+                log.warning("Failed to save last backtest", exc_info=True)
+
             overlay.update_status(
                 f"Backtest completed. Final portfolio value: ${result['final_value']:,.2f} | Buy count: {num_buys}"
             )
@@ -1659,9 +1706,14 @@ class SpectrApp(App):
                     self.pop_screen()
             except Exception:
                 pass
-            self.overlay.flash_message(f"Back-test error: {exc}", style="bold red")
             log.exception("Back-test error")
-            # Ensure we resume normal operation if dialog didn't open
+            try:
+                await self.push_screen(
+                    BacktestErrorScreen(f"Backtest failed:\n{exc}")
+                )
+            except Exception:
+                self.overlay.flash_message(f"Back-test error: {exc}", style="bold red")
+            # Ensure we resume normal operation; user can close the dialog to return.
             self.is_backtest = False
 
     def _exit_backtest(self) -> None:

@@ -215,6 +215,14 @@ class VoiceAgent:
                     "parameters": {"type": "object", "properties": {}, "required": []},
                 },
             },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_last_backtest",
+                    "description": "Return the most recent backtest summary and trades if available",
+                    "parameters": {"type": "object", "properties": {}, "required": []},
+                },
+            },
         ]
 
         if self._add_symbol:
@@ -521,6 +529,9 @@ class VoiceAgent:
             ),
             "get_gainers_cache": lambda: json.dumps(
                 self._serialize(cache.load_gainers_cache())
+            ),
+            "get_last_backtest": lambda: json.dumps(
+                self._serialize(cache.load_last_backtest())
             ),
         }
 
