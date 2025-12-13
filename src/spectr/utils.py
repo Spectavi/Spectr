@@ -9,6 +9,7 @@ import threading
 import warnings
 
 from .strategies import metrics
+from . import cache
 
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 warnings.filterwarnings(
@@ -171,15 +172,46 @@ def get_historical_data(
     log.debug(f"dt_from: {dt_from}")
     log.debug(f"extended_from: {extended_from}")
 
-    # Pull the data and quote
-    df = data_api.fetch_chart_data_for_backtest(
-        symbol, from_date=extended_from, to_date=to_date
-    )
+    def _covers_requested_range(frame: pd.DataFrame, *, tolerance_days: int = 0) -> bool:
+        if frame.empty:
+            return False
+        data_from = frame.index.min().date()
+        data_to = frame.index.max().date()
+        req_from = datetime.strptime(from_date, "%Y-%m-%d").date()
+        req_to = datetime.strptime(to_date, "%Y-%m-%d").date()
+        return data_from <= req_from + timedelta(days=tolerance_days) and data_to >= req_to
 
-    # Fallback to 5min data if 1min isn't present.
+    def _fetch_with_cache(interval: str | None) -> pd.DataFrame:
+        tf = interval or "1min"
+        cached = cache.load_backtest_cache(symbol, extended_from, to_date, tf)
+        if not cached.empty and _covers_requested_range(cached, tolerance_days=1):
+            log.debug("Using cached backtest data for %s [%s→%s, %s]", symbol, extended_from, to_date, tf)
+            return cached
+
+        df_live = data_api.fetch_chart_data_for_backtest(
+            symbol, from_date=extended_from, to_date=to_date, interval=interval
+        )
+        if not df_live.empty and _covers_requested_range(df_live):
+            cache.save_backtest_cache(symbol, extended_from, to_date, tf, df_live)
+        return df_live
+
+    # Pull the data and quote, preferring cached frames when available.
+    df = _fetch_with_cache(None)
+
+    # Fallback to 5min data if 1min is missing or incomplete.
+    if not _covers_requested_range(df, tolerance_days=1):
+        df = _fetch_with_cache("5min")
     if df.empty:
-        df = data_api.fetch_chart_data_for_backtest(
-            symbol, from_date=extended_from, to_date=to_date, interval="5min"
+        raise ValueError(
+            f"No historical data returned for {symbol} from {extended_from} to {to_date} "
+            "using 1min or 5min intraday."
+        )
+    if not _covers_requested_range(df, tolerance_days=1):
+        data_from = df.index.min()
+        data_to = df.index.max()
+        raise ValueError(
+            f"Data available {data_from} → {data_to} does not cover requested "
+            f"range {from_date} → {to_date} (allowing 1-day start tolerance)"
         )
     # Compute indicators on the *full* frame (needs the extra bar)
     if indicators is None:

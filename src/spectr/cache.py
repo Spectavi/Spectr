@@ -138,6 +138,50 @@ def load_cache(symbol: str) -> pd.DataFrame:
     return pd.DataFrame()
 
 
+def _backtest_cache_path(symbol: str, from_date: str, to_date: str, interval: str) -> pathlib.Path:
+    """Return a path for cached historical data keyed by symbol/date/interval."""
+    safe_symbol = symbol.replace("/", "_").upper()
+    fname = f"{safe_symbol}_{from_date}_{to_date}_{interval}.pkl"
+    return pathlib.Path(CACHE_DIR) / fname
+
+
+def save_backtest_cache(symbol: str, from_date: str, to_date: str, interval: str, df: pd.DataFrame) -> None:
+    """Persist historical backtest data to parquet for reuse."""
+    if df is None or df.empty:
+        return
+    try:
+        path = _backtest_cache_path(symbol, from_date, to_date, interval)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        df_to_save = df.copy()
+        if (
+            isinstance(df_to_save.index, pd.DatetimeIndex)
+            and df_to_save.index.tz is not None
+        ):
+            df_to_save.index = df_to_save.index.tz_convert("UTC")
+        df_to_save.to_pickle(path)
+        log.debug("Cached backtest data → %s", path)
+    except Exception as exc:  # pragma: no cover - defensive
+        log.warning("Failed to cache backtest data: %s", exc)
+
+
+def load_backtest_cache(symbol: str, from_date: str, to_date: str, interval: str) -> pd.DataFrame:
+    """Load cached backtest data if present."""
+    path = _backtest_cache_path(symbol, from_date, to_date, interval)
+    try:
+        if path.exists():
+            log.debug("Loading cached backtest data ← %s", path)
+            df = pd.read_pickle(path)
+            if (
+                isinstance(df.index, pd.DatetimeIndex)
+                and df.index.tz is not None
+            ):
+                df.index = df.index.tz_convert("UTC")
+            return df
+    except Exception as exc:  # pragma: no cover - defensive
+        log.warning("Failed to load backtest cache: %s", exc)
+    return pd.DataFrame()
+
+
 def save_scanner_cache(
     rows: list[dict], path: pathlib.Path = COMBINED_CACHE_FILE
 ) -> None:

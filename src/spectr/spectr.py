@@ -29,7 +29,7 @@ from .utils import (
     get_historical_data,
 )
 from . import broker_tools
-from .backtest import run_backtest
+from .backtest import run_backtest, split_backtest_frames
 from .views.backtest_input_dialog import BacktestInputDialog
 from .views.backtest_result_screen import BacktestResultScreen
 from .views.backtest_loading_screen import BacktestLoadingScreen
@@ -74,6 +74,32 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 log = logging.getLogger(__name__)
+
+
+def _coerce_timestamp_to_index(value, index) -> pd.Timestamp:
+    """Align ``value`` to the timezone of ``index`` for safe comparisons."""
+    ts = pd.to_datetime(value)
+    index_tz = getattr(index, "tz", None)
+    if index_tz is None:
+        if getattr(ts, "tzinfo", None) is not None:
+            ts = ts.tz_convert(None)
+    else:
+        if getattr(ts, "tzinfo", None) is None:
+            ts = ts.tz_localize(index_tz)
+        else:
+            ts = ts.tz_convert(index_tz)
+    return ts
+
+
+def _index_covers_date_range(index, requested_from, requested_to) -> tuple[bool, tuple]:
+    """Return True if ``index`` spans the date range; also returns coerced timestamps."""
+    data_from = _coerce_timestamp_to_index(index.min(), index)
+    data_to = _coerce_timestamp_to_index(index.max(), index)
+    req_from = _coerce_timestamp_to_index(requested_from, index)
+    req_to = _coerce_timestamp_to_index(requested_to, index)
+
+    covers = data_from.date() <= req_from.date() and data_to.date() >= req_to.date()
+    return covers, (data_from, data_to, req_from, req_to)
 
 
 @dataclass
@@ -1506,6 +1532,30 @@ class SpectrApp(App):
             else:
                 log.debug(f"Found {len(df)} data points for {symbol}.")
 
+            try:
+                data_index = df.index
+                covers, (data_from, data_to, requested_from, requested_to) = _index_covers_date_range(
+                    data_index, form["from"], form["to"]
+                )
+                if data_from is None or data_to is None or requested_from is None or requested_to is None:
+                    raise ValueError("Backtest data has no index.")
+                # Allow a 1-day tolerance on the start to accommodate market holidays.
+                if not covers:
+                    # If the start is within 1 calendar day of requested (e.g., holiday), accept with warning.
+                    start_tolerance = requested_from + pd.Timedelta(days=1)
+                    if data_from.date() <= start_tolerance.date():
+                        log.warning(
+                            "Data starts later than requested (%s→%s) but within 1-day tolerance; proceeding.",
+                            requested_from,
+                            data_from,
+                        )
+                    else:
+                        raise ValueError(
+                            f"Data available {data_from} → {data_to} does not cover requested range {requested_from} → {requested_to}"
+                        )
+            except Exception as exc:
+                raise ValueError(f"Incomplete data for requested range: {exc}") from exc
+
             # Run the back-test
             log.debug(f"Running backtest for {symbol}.")
             result = await asyncio.to_thread(
@@ -1550,20 +1600,20 @@ class SpectrApp(App):
             )
             # Use the backtest price data for the chart, not the current live df.
             # This ensures the graph reflects only the tested time window.
-            price_df = result["price_data"].copy()
+            calc_df, graph_df = split_backtest_frames(result)
 
             buy_times = {sig["time"] for sig in result["buy_signals"]}
             sell_times = {sig["time"] for sig in result["sell_signals"]}
 
-            price_df["buy_signals"] = price_df.index.isin(buy_times)
-            price_df["sell_signals"] = price_df.index.isin(sell_times)
+            graph_df["buy_signals"] = graph_df.index.isin(buy_times)
+            graph_df["sell_signals"] = graph_df.index.isin(sell_times)
 
             # Show results screen with summary information
             log.debug("Pushing BacktestResultScreen for %s", symbol)
             # Compute end value from trades + last close for robustness
             try:
                 end_value_calc = utils.simulate_portfolio_end_value(
-                    trades, price_df, starting_cash
+                    trades, calc_df, starting_cash
                 )
             except Exception:
                 # Fallbacks to equity curve or final broker value
@@ -1587,7 +1637,7 @@ class SpectrApp(App):
 
             await self.push_screen(
                 BacktestResultScreen(
-                    price_df,
+                    graph_df,
                     symbol=symbol,
                     start_date=form["from"],
                     end_date=form["to"],

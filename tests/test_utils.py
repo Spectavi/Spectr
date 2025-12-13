@@ -128,6 +128,28 @@ def test_get_historical_data_with_fallback(monkeypatch):
     assert len(df) == 2
 
 
+def test_get_historical_data_fallback_on_incomplete_coverage(monkeypatch):
+    # First call returns only the last day; fallback should return full span.
+    idx_first = pd.date_range("2024-01-02", periods=1, freq="D")
+    idx_second = pd.date_range("2023-12-31", periods=3, freq="D")
+    df_first = pd.DataFrame(
+        {"open": [2], "high": [2], "low": [2], "close": [2], "volume": [2]},
+        index=idx_first,
+    )
+    df_second = pd.DataFrame(
+        {"open": [1, 2, 3], "high": [1, 2, 3], "low": [1, 2, 3], "close": [1, 2, 3], "volume": [1, 1, 1]},
+        index=idx_second,
+    )
+    api = DummyAPI(df_first, df_second)
+    monkeypatch.setattr(utils.metrics, "analyze_indicators", lambda df, *args, **kw: df)
+
+    df, _ = utils.get_historical_data(api, 20, 2, 0.01, "TEST", "2024-01-01", "2024-01-02")
+
+    assert ("backtest", "TEST", "2023-12-31", "2024-01-02", None) in api.calls
+    assert ("backtest", "TEST", "2023-12-31", "2024-01-02", "5min") in api.calls
+    assert len(df) == 2
+
+
 def test_get_live_data(monkeypatch):
     idx = pd.date_range("2024-01-02", periods=1, freq="D")
     df_live = pd.DataFrame({"open": [1], "high": [1], "low": [1], "close": [1], "volume": [1]}, index=idx)
