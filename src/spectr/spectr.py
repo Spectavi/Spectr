@@ -15,7 +15,6 @@ from types import SimpleNamespace
 import pandas as pd
 from textual import events
 from textual.app import App, ComposeResult
-from textual.screen import ModalScreen
 from textual.reactive import reactive
 
 from . import cache
@@ -34,6 +33,8 @@ from .views.backtest_input_dialog import BacktestInputDialog
 from .views.backtest_result_screen import BacktestResultScreen
 from .views.backtest_loading_screen import BacktestLoadingScreen
 from .views.backtest_error_screen import BacktestErrorScreen
+from .views.log_overlay import ErrorLogOverlay
+from .views.markdown_modal import MarkdownModal
 from .views.graph_view import GraphView
 from .views.order_dialog import OrderDialog
 from .views.portfolio_screen import PortfolioScreen
@@ -131,7 +132,6 @@ class SpectrApp(App):
     BINDINGS = [
         ("escape", "quit", "Quit"),
         ("t", "prompt_symbol", "Change Ticker"),  # T key
-        ("`", "prompt_symbol", "Change Ticker"),  # ~ key
         ("ctrl+a", "arm_auto_trading", "Arms Auto-Trading - REAL trades will occur!"),
         ("ctrl+q", "buy_current_symbol", "Opens buy dialog for current symbol."),
         (
@@ -182,12 +182,36 @@ class SpectrApp(App):
     confirm_quit: reactive[bool] = reactive(False)
 
     symbol_view: reactive[SymbolView] = reactive(None)
+    log_screen: reactive[ErrorLogOverlay | None] = reactive(None)
 
-    def on_key(self, event) -> None:
+    async def on_key(self, event) -> None:
+        key = getattr(event, "key", "")
+        char = getattr(event, "character", None)
+        is_log_key = key in {"`", "~", "grave"} or char in {"`", "~"}
+        log_screen_active = bool(self.screen_stack and isinstance(self.screen_stack[-1], ErrorLogOverlay))
+        if is_log_key:
+            # When the log screen is already active, let it handle the toggle so
+            # we don't immediately re-toggle and close it.
+            if log_screen_active:
+                return
+            try:
+                event.stop()
+            except Exception:
+                pass
+            await self.action_toggle_log_overlay()
+            return
+
         if self.confirm_quit and isinstance(event, events.Key):
             if event.key.lower() == "y":
                 event.stop()
-                asyncio.create_task(self._shutdown())
+                try:
+                    self._shutdown_requested_reason = f"confirm_quit=y key={event.key!r} char={char!r}"
+                    self._shutdown_requested_stack = "".join(traceback.format_stack(limit=35))
+                    log.info("Shutdown requested via keypress: %s", self._shutdown_requested_reason)
+                    log.debug("Shutdown requested stack:\n%s", self._shutdown_requested_stack)
+                except Exception:
+                    pass
+                asyncio.create_task(self._shutdown_and_exit())
             elif event.key.lower() == "n":
                 event.stop()
                 self.confirm_quit = False
@@ -226,6 +250,7 @@ class SpectrApp(App):
 
     def __init__(self, args, config: AppConfig):
         super().__init__()
+        log.debug("SpectrApp __init__ start")
         if not hasattr(self, "exit_event"):
             self.exit_event = asyncio.Event()
         self._consumer_task = None
@@ -246,6 +271,7 @@ class SpectrApp(App):
         self.df_cache = {symbol: pd.DataFrame() for symbol in self.ticker_symbols}
         if not os.path.exists(cache.CACHE_DIR):
             os.mkdir(cache.CACHE_DIR)
+        log.debug("SpectrApp __init__ complete")
 
         self._update_queue: queue.Queue[str] = queue.Queue()
         self.signal_detected = []
@@ -281,24 +307,29 @@ class SpectrApp(App):
                     return int(os.getenv(env, "")) if os.getenv(env) else None
                 except Exception:
                     return None
-            self.voice_agent = VoiceAgent(
-                broker_api=BROKER_API,
-                data_api=DATA_API,
-                get_cached_orders=lambda: self._portfolio_orders_cache,
-                add_symbol=self.add_symbol,
-                remove_symbol=self.remove_symbol,
-                get_strategy_code=lambda: (
-                    get_strategy_code(self.strategy_name) if self.strategy_name else ""
-                ),
-                stream_voice=getattr(args, "voice_streaming", False),
-                mic_device=_parse_int("MIC_DEVICE"),
-                mic_gain=_parse_float("MIC_GAIN", 1.0),
-                tts_volume=_parse_float("TTS_VOLUME", 1.0),
-            )
-            if getattr(args, "listen", False):
-                self.voice_agent.start_wake_word_listener(
-                    getattr(args, "wake_word", "spectr")
+            try:
+                self.voice_agent = VoiceAgent(
+                    broker_api=BROKER_API,
+                    data_api=DATA_API,
+                    get_cached_orders=lambda: self._portfolio_orders_cache,
+                    add_symbol=self.add_symbol,
+                    remove_symbol=self.remove_symbol,
+                    get_strategy_code=lambda: (
+                        get_strategy_code(self.strategy_name) if self.strategy_name else ""
+                    ),
+                    show_markdown=self._show_markdown_modal,
+                    stream_voice=getattr(args, "voice_streaming", False),
+                    mic_device=_parse_int("MIC_DEVICE"),
+                    mic_gain=_parse_float("MIC_GAIN", 1.0),
+                    tts_volume=_parse_float("TTS_VOLUME", 1.0),
                 )
+                if getattr(args, "listen", False):
+                    self.voice_agent.start_wake_word_listener(
+                        getattr(args, "wake_word", "spectr")
+                    )
+            except Exception:
+                log.exception("VoiceAgent initialization failed; continuing without voice features")
+                self.voice_agent = None
 
         # Available background scanners
         self.available_scanners = list_scanners()
@@ -330,9 +361,40 @@ class SpectrApp(App):
         return self.scanner.top_gainers
 
     def compose(self) -> ComposeResult:
+        print("compose start", flush=True)
+        log.debug("compose start")
         self.overlay = TopOverlay(id="overlay-text")
         yield self.overlay
         yield SymbolView(id="symbol-view")
+        log.debug("compose end")
+        print("compose end", flush=True)
+
+    async def action_toggle_log_overlay(self) -> None:
+        """Toggle the error log overlay visibility."""
+        try:
+            if self.screen_stack and isinstance(self.screen_stack[-1], ErrorLogOverlay):
+                await self.pop_screen()
+                return
+
+            # Fresh modal each time to mimic other dialogs and avoid reusing an
+            # unmounted screen.
+            self.log_screen = ErrorLogOverlay(id="log-overlay-screen")
+            await self.push_screen(self.log_screen)
+        except Exception:
+            log.error("Failed to toggle log overlay", exc_info=True)
+
+    def _open_markdown_modal(self, markdown: str, title: str | None = None) -> None:
+        """Open a modal with markdown content."""
+        modal = MarkdownModal(markdown, title=title, id="markdown-modal")
+        self.push_screen(modal)
+
+    def _show_markdown_modal(self, markdown: str, title: str | None = None) -> str:
+        """Thread-safe entry point for the voice agent to show markdown."""
+        try:
+            self.call_from_thread(self._open_markdown_modal, markdown, title)
+        except Exception:
+            log.error("Failed to schedule markdown modal", exc_info=True)
+        return "shown"
 
     def _fetch_data(self, symbol: str, quote: dict | None = None):
         """Fetch the latest data and inject the most recent quote."""
@@ -434,6 +496,8 @@ class SpectrApp(App):
             utils.play_sound(SELL_SOUND_PATH)
 
     async def on_mount(self, event: events.Mount) -> None:
+        print("on_mount start", flush=True)
+        log.debug("on_mount start")
         await self.push_screen(SplashScreen(id="splash"), wait_for_dismiss=False)
         self.refresh()
 
@@ -471,6 +535,16 @@ class SpectrApp(App):
             )
         log.debug("starting consumer task")
         self._consumer_task = asyncio.create_task(self._process_updates())
+        log.debug("on_mount complete")
+        print("on_mount complete", flush=True)
+
+    async def on_unmount(self, event: events.Unmount) -> None:
+        # Textual calls App._shutdown internally during teardown; avoid overriding
+        # that private method and do our cleanup here instead.
+        try:
+            await self._cleanup()
+        except Exception:
+            log.exception("Cleanup during unmount failed")
 
     def _normalize_position(self, position):
         """Return a copy of ``position`` with numeric qty/market_value fields."""
@@ -833,14 +907,20 @@ class SpectrApp(App):
 
         log.debug("_order_status_loop exit")
 
-    async def _shutdown(self) -> None:
-        """Stop background tasks and exit the application."""
-        log.info("on_shutdown start")
+    async def _cleanup(self) -> None:
+        """Stop background tasks and persist state (idempotent)."""
+        try:
+            if getattr(self, "_shutting_down", False):
+                return
+            self._shutting_down = True
+        except Exception:
+            pass
+
+        log.info("cleanup start")
         try:
             self.exit_event.set()
             self._exit_backtest()
             self.auto_trading_enabled = False
-            self._shutting_down = True
 
             # Immediately stop any voice playback/recording and listeners
             try:
@@ -891,14 +971,30 @@ class SpectrApp(App):
                     pass
 
         except Exception:
-            log.exception("on_shutdown encountered an error")
+            log.exception("cleanup encountered an error")
             os._exit(1)
 
-        log.info("on_shutdown complete")
+        log.info("cleanup complete")
+
+    async def _shutdown_and_exit(self) -> None:
+        """User-initiated shutdown that triggers cleanup and exits the app."""
+        print("_shutdown", flush=True)
+        try:
+            log.debug("_shutdown current stack:\n%s", "".join(traceback.format_stack(limit=35)))
+            reason = getattr(self, "_shutdown_requested_reason", None)
+            req_stack = getattr(self, "_shutdown_requested_stack", None)
+            if reason:
+                log.info("_shutdown requested reason: %s", reason)
+            if req_stack:
+                log.debug("_shutdown requested stack:\n%s", req_stack)
+        except Exception:
+            pass
+        await self._cleanup()
         self.exit(return_code=0)
 
     async def action_quit(self):
         """Prompt the user for confirmation before quitting."""
+        log.debug("action_quit invoked; confirm_quit=%s", self.confirm_quit)
         if not self.confirm_quit:
             self.confirm_quit = True
             self.overlay.show_prompt("Quit Y/N?", style="bold red")

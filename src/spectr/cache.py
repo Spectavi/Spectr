@@ -23,7 +23,35 @@ TRADE_AMOUNT_FILE = pathlib.Path.home() / ".spectr_trade_amount.json"  # legacy
 ONBOARD_FILE = pathlib.Path.home() / ".spectr_onboard.json"
 LAST_BACKTEST_FILE = pathlib.Path.home() / ".spectr_last_backtest.json"
 
-COMBINED_CACHE_FILE = pathlib.Path.home() / ".spectr_cache.json"
+_cache_root_env = os.environ.get("SPECTR_CACHE_DIR", "").strip()
+if _cache_root_env:
+    _cache_root = pathlib.Path(_cache_root_env).expanduser()
+    # Treat relative cache dirs as relative to the user's home directory so we
+    # don't accidentally drop cache files into the project working directory.
+    if not _cache_root.is_absolute():
+        _cache_root = pathlib.Path.home() / _cache_root
+else:
+    _cache_root = pathlib.Path.home()
+_cache_file_env = os.environ.get("SPECTR_CACHE_FILE", "").strip()
+if _cache_file_env:
+    _cache_path = pathlib.Path(_cache_file_env).expanduser()
+    if not _cache_path.is_absolute():
+        _cache_path = _cache_root / _cache_path
+else:
+    _cache_path = _cache_root / ".spectr_cache.json"
+
+COMBINED_CACHE_FILE = _cache_path
+
+_LEGACY_CACHE_FILES: tuple[pathlib.Path, ...] = (
+    SYMBOLS_CACHE_PATH,
+    SCANNER_CACHE_FILE,
+    GAINERS_CACHE_FILE,
+    STRATEGY_CACHE_FILE,
+    STRATEGY_NAME_FILE,
+    SCANNER_NAME_FILE,
+    TRADE_AMOUNT_FILE,
+    ONBOARD_FILE,
+)
 
 
 def _load_combined(path: pathlib.Path = COMBINED_CACHE_FILE) -> dict:
@@ -59,6 +87,7 @@ def _default(obj: object) -> object:
 
 def _save_combined(data: dict, path: pathlib.Path = COMBINED_CACHE_FILE) -> None:
     try:
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(data, indent=0, default=_default))
     except Exception as exc:  # pragma: no cover - logging only
         log.error(f"combined cache write failed: {exc}")
@@ -479,4 +508,5 @@ def clear_cached_data(
             pass
 
 
-_merge_legacy_caches()
+if any(path.exists() for path in _LEGACY_CACHE_FILES):
+    _merge_legacy_caches()

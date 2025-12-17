@@ -50,6 +50,7 @@ class VoiceAgent:
         add_symbol: Optional[Callable[[str], list]] | None = None,
         remove_symbol: Optional[Callable[[str], list]] | None = None,
         get_strategy_code: Optional[Callable[[], str]] | None = None,
+        show_markdown: Optional[Callable[[str, Optional[str]], object]] | None = None,
         on_speech_start: Optional[Callable[[], None]] | None = None,
         on_speech_end: Optional[Callable[[], None]] | None = None,
         stream_voice: bool = False,
@@ -68,6 +69,7 @@ class VoiceAgent:
         self._add_symbol = add_symbol
         self._remove_symbol = remove_symbol
         self._get_strategy_code = get_strategy_code
+        self._show_markdown = show_markdown
         self._on_speech_start = on_speech_start
         self._on_speech_end = on_speech_end
         self.stream_voice = stream_voice
@@ -81,7 +83,16 @@ class VoiceAgent:
             self.tts_volume = max(0.0, min(1.0, float(tts_volume)))
         except Exception:
             self.tts_volume = 1.0
-        pygame.mixer.init()
+
+        self._audio_enabled = False
+        try:
+            pygame.mixer.init()
+            self._audio_enabled = True
+        except Exception as exc:
+            # Headless environments (containers, CI, some Windows setups) may not
+            # have an audio device. Voice features should degrade gracefully.
+            log.warning("VoiceAgent audio disabled (pygame mixer init failed): %s", exc)
+
         self._stop_event = threading.Event()
         self._current_channel: pygame.mixer.Channel | None = None
         self._queue: queue.Queue[tuple[str, threading.Event | None]] = queue.Queue()
@@ -95,6 +106,7 @@ class VoiceAgent:
             Do NOT ever claim that you lack real-time data if you have a tool that gets you that data; instead call the tools and respond concisely.
             You should always be friendly and helpful, but also sound like a professional financial news anchor.
             Spectr should be pronounced "Spect-ER" and never like "Spect-RA".
+            When you prepare a formatted summary (e.g., news digest or report), render it for the user by calling the display_markdown tool.
         """
         )
         # Keep track of the full chat history so conversations persist between
@@ -516,6 +528,31 @@ class VoiceAgent:
                 },
             ])
 
+        if self._show_markdown:
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "display_markdown",
+                        "description": "Render markdown content in the Spectr UI for the user to read. Use this when you have a formatted summary to present.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "markdown": {
+                                    "type": "string",
+                                    "description": "Markdown to render in the modal. Keep it concise and well-formatted.",
+                                },
+                                "title": {
+                                    "type": "string",
+                                    "description": "Optional title to show above the markdown.",
+                                },
+                            },
+                            "required": ["markdown"],
+                        },
+                    },
+                }
+            )
+
         return tools
 
     def _build_tool_funcs(self) -> dict:
@@ -598,6 +635,12 @@ class VoiceAgent:
             funcs["get_strategy_code"] = lambda: json.dumps(
                 self._get_strategy_code()
             )
+
+        if self._show_markdown:
+            def _display_markdown(markdown, title=None):
+                result = self._show_markdown(markdown, title=title)
+                return json.dumps({"status": "shown", "result": result})
+            funcs["display_markdown"] = _display_markdown
 
         if self.broker:
             funcs.update(
@@ -691,6 +734,11 @@ class VoiceAgent:
 
     def _speak(self, text: str) -> None:
         """Speak *text* using OpenAI text-to-speech."""
+        if not self._audio_enabled:
+            # Keep API / UI flows alive even when local audio playback isn't available.
+            log.debug("Skipping TTS playback (audio disabled): %s", text[:80])
+            return
+
         params = dict(
             model=self.tts_model,
             voice=self.voice,

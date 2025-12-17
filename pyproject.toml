@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name            = "spectr"                     # pip install spectr
-version         = "0.9.0"                      # bump with each release
+version         = "0.9.7"                      # bump with each release
 description     = "Live Backtrader + Textual dashboard for multi-symbol monitoring"
 readme          = "README.md"
 license         = {file = "LICENSE"}

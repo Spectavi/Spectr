@@ -7,3 +7,4 @@ src/spectr/strategies/spectavi_strategy.py
 .idea
 .cache
 cache
+.spectr_cache.json

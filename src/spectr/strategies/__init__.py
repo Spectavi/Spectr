@@ -1,6 +1,7 @@
 import importlib
 import inspect
 import logging
+import pathlib
 import pkgutil
 from typing import Type
 

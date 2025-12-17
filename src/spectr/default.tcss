@@ -4,6 +4,12 @@ Screen {
     background: black;
 }
 
+/* Spectr theme variables (avoid clobbering Textual's built-in variables). */
+$spectr_primary: #00ff55;
+$spectr_panel: #1a1a1a;
+$spectr_background: black;
+$spectr_text: #d0d0d0;
+
 
 
 /* ------- Splash Screen ------- */
@@ -42,7 +48,7 @@ SymbolView > Vertical {
     padding: 0;
     height: 60%;
     overflow: auto;
-    scrollbar-color: $primary;
+    scrollbar-color: $spectr_primary;
 }
 
 #macd-view {
@@ -57,7 +63,7 @@ SymbolView > Vertical {
 }
 
 ScreenModal {
-    background: $panel;
+    background: $spectr_panel;
     border: round yellow;
 }
 
@@ -120,7 +126,7 @@ TickerInputDialog {
 BacktestInputDialog {
     /* Full-screen with centered content */
     align: center middle;
-    background: $background;
+    background: $spectr_background;
     width: 100%;
     height: 100%;
 }
@@ -175,7 +181,7 @@ BacktestInputDialog {
 }
 
 Static {
-    color: $text;
+    color: $spectr_text;
     text-style: none;
 }
 
@@ -394,6 +400,12 @@ BacktestErrorScreen {
     background: transparent;
 }
 
+ErrorLogOverlay {
+    layer: overlay;
+    background: transparent;
+    content-align-vertical: top;
+}
+
 #backtest-error-container {
     width: 40%;
     height: 12;
@@ -420,6 +432,25 @@ BacktestErrorScreen {
 
 #backtest-error-close-btn {
     width: 16;
+}
+
+#log-overlay-container {
+    width: 100%;
+    height: 35%;
+    background: #1a1a1a;
+    border: tall red;
+    padding: 1 2;
+    content-align-horizontal: left;
+    content-align-vertical: top;
+    overflow: auto;
+    dock: top;
+}
+
+#log-overlay-content {
+    width: 100%;
+    height: 100%;
+    color: red;
+    text-align: left;
 }
 
 #backtest-loading-container {
@@ -541,4 +572,53 @@ StrategyScreen {
     height: 3;
     padding: 0 0;
     content-align-horizontal: left;
+}
+
+MarkdownModal {
+    align: center middle;
+    background: transparent;
+}
+
+#markdown-modal-container {
+    width: 80%;
+    height: 80%;
+    background: #0f0f0f;
+    border: solid #444;
+    padding: 1 2;
+    content-align-vertical: top;
+}
+
+#markdown-modal-title {
+    height: auto;
+    width: 100%;
+    text-align: center;
+    content-align-horizontal: center;
+    padding: 0 0 1 0;
+    border-bottom: heavy #333;
+    margin: 0 0 1 0;
+}
+
+#markdown-modal-scroll {
+    width: 100%;
+    height: 1fr;
+    background: transparent;
+    border: none;
+    scrollbar-size-vertical: 2;
+}
+
+#markdown-modal-content {
+    width: 100%;
+    color: white;
+}
+
+#markdown-modal-actions {
+    width: 100%;
+    height: 3;
+    content-align-horizontal: center;
+    align: center middle;
+    margin: 1 0 0 0;
+}
+
+#markdown-modal-close {
+    width: 16;
 }

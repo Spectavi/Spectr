@@ -1,0 +1,14 @@
+---
+loop=<_UnixSelectorEventLoop running=True closed=False debug=False>
+features=frozenset()
+Writing logs to '/home/aem/Code/Spectr/textual.log'
+Load() >>> SpectrApp(title='SpectrApp', classes={'-dark-mode'}, pseudo_classes={'focus', 'dark'}) method=None
+driver=<LinuxDriver SpectrApp(title='SpectrApp', classes={'-dark-mode'}, pseudo_classes={'focus', 'dark'})>
+ready in 53 milliseconds
+Compose() >>> Screen(id='_default') method=<Widget.on_compose>
+Compose() >>> ToastRack(id='textual-toastrack') method=<Widget.on_compose>
+Mount() >>> ToastRack(id='textual-toastrack') method=<Widget.on_mount>
+Compose() >>> Tooltip(id='textual-tooltip') method=<Widget.on_compose>
+Mount() >>> Tooltip(id='textual-tooltip') method=<Widget.on_mount>
+Unmount() >>> ToastRack(id='textual-toastrack') method=<Widget.on_unmount>
+Unmount() >>> Tooltip(id='textual-tooltip') method=<Widget.on_unmount>

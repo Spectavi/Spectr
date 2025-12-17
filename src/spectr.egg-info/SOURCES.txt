@@ -37,13 +37,16 @@ src/spectr/strategies/metrics.py
 src/spectr/strategies/spectavi_strategy.py
 src/spectr/strategies/trading_strategy.py
 src/spectr/views/__init__.py
+src/spectr/views/backtest_error_screen.py
 src/spectr/views/backtest_graph_view.py
 src/spectr/views/backtest_input_dialog.py
 src/spectr/views/backtest_loading_screen.py
 src/spectr/views/backtest_result_screen.py
 src/spectr/views/equity_curve_view.py
 src/spectr/views/graph_view.py
+src/spectr/views/log_overlay.py
 src/spectr/views/macd_view.py
+src/spectr/views/markdown_modal.py
 src/spectr/views/order_dialog.py
 src/spectr/views/portfolio_screen.py
 src/spectr/views/setup_app.py
@@ -82,6 +85,8 @@ tests/test_get_order_sides.py
 tests/test_has_pending_order.py
 tests/test_has_pending_orders.py
 tests/test_holdings_ask_value.py
+tests/test_last_backtest_cache.py
+tests/test_log_overlay.py
 tests/test_order_status_persistence.py
 tests/test_overlay_screens.py
 tests/test_pending_order.py
@@ -96,6 +101,8 @@ tests/test_spectavi_trailing_stop.py
 tests/test_status_bar.py
 tests/test_strategies.py
 tests/test_strategy_active.py
+tests/test_strategy_source_code.py
+tests/test_stylesheet_parses.py
 tests/test_symbol_view.py
 tests/test_trade_amount_cache.py
 tests/test_trailing_stop_levels.py
