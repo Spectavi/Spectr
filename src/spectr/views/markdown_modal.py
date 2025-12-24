@@ -1,3 +1,7 @@
+import shutil
+import subprocess
+import webbrowser
+
 from textual.app import ComposeResult
 from textual.containers import Vertical, Horizontal, VerticalScroll
 from textual.screen import ModalScreen
@@ -29,8 +33,41 @@ class MarkdownModal(ModalScreen):
         if event.button.id == "markdown-modal-close":
             self.dismiss(None)
 
+    def on_markdown_link_clicked(self, event: Markdown.LinkClicked) -> None:
+        event.prevent_default()
+        url = event.href
+        if not url:
+            return
+        if not self._open_url(url):
+            try:
+                self.app.notify(
+                    f"Open this link in a browser: {url}",
+                    severity="warning",
+                )
+            except Exception:
+                pass
+
     def action_dismiss(self) -> None:
         try:
             self.dismiss(None)
         except Exception:
             pass
+
+    def _open_url(self, url: str) -> bool:
+        commands: list[list[str]] = []
+        if shutil.which("kioclient5"):
+            commands.append(["kioclient5", "exec", url])
+        if shutil.which("kde-open5"):
+            commands.append(["kde-open5", url])
+        if shutil.which("xdg-open"):
+            commands.append(["xdg-open", url])
+        for cmd in commands:
+            try:
+                subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return True
+            except Exception:
+                continue
+        try:
+            return webbrowser.open(url, new=2)
+        except Exception:
+            return False

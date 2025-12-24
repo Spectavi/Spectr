@@ -5,6 +5,7 @@ import json
 import threading
 import queue
 import time
+import re
 from typing import Callable, Optional
 
 from openai import OpenAI
@@ -107,6 +108,7 @@ class VoiceAgent:
             You should always be friendly and helpful, but also sound like a professional financial news anchor.
             Spectr should be pronounced "Spect-ER" and never like "Spect-RA".
             When you prepare a formatted summary (e.g., news digest or report), render it for the user by calling the display_markdown tool.
+            When a user asks to "see" or be "shown" something, respond by calling the display_markdown tool with a concise, well-formatted markdown view of the requested information.
         """
         )
         # Keep track of the full chat history so conversations persist between
@@ -920,6 +922,13 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
         self.chat_history.append({"role": "user", "content": user_text})
         log.info(f"User asked: {user_text}")
         tools = self.tools
+        wants_markdown = bool(self._show_markdown) and self._wants_markdown(user_text)
+        used_display_markdown = False
+        news_latest: str | None = None
+        news_recent: list[dict] = []
+        news_symbol: str | None = None
+        forced_markdown: str | None = None
+        forced_title: str | None = None
 
         if cancel_event.is_set():
             return ""
@@ -947,6 +956,17 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
                             )
                             return ""
                         raise
+                    if call.function.name == "display_markdown":
+                        used_display_markdown = True
+                    if call.function.name in {"get_latest_news", "get_recent_news"}:
+                        news_symbol = args.get("symbol") or news_symbol
+                        if call.function.name == "get_latest_news":
+                            news_latest = result
+                        else:
+                            try:
+                                news_recent = json.loads(result) if result else []
+                            except Exception:
+                                news_recent = []
                     self.chat_history.append(
                         {
                             "role": "tool",
@@ -969,8 +989,46 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
 
         if cancel_event.is_set():
             return ""
+        if wants_markdown and not used_display_markdown and "display_markdown" in self.tool_funcs:
+            if forced_markdown is None:
+                built = self._build_news_markdown(news_latest, news_recent, news_symbol)
+                if built:
+                    forced_markdown, forced_title = built
+            if forced_markdown is None:
+                forced_markdown = reply or "No details available."
+            self.tool_funcs["display_markdown"](forced_markdown, forced_title)
         self.say(reply)
         return reply
+
+    def _wants_markdown(self, text: str) -> bool:
+        if not text:
+            return False
+        return bool(re.search(r"\b(show|shown|see)\b", text.lower()))
+
+    def _build_news_markdown(
+        self,
+        latest: str | None,
+        recent: list[dict] | None,
+        symbol: str | None,
+    ) -> tuple[str, str] | None:
+        if not latest and not recent:
+            return None
+        lines: list[str] = []
+        if latest:
+            lines.append("Latest headline")
+            lines.append(f"- {latest}")
+        if recent:
+            lines.append("Recent headlines")
+            for item in (recent or [])[:10]:
+                title = item.get("title") or "Untitled"
+                date = item.get("date")
+                link = item.get("link")
+                entry = f"[{title}]({link})" if link else title
+                if date:
+                    entry = f"{entry} ({date})"
+                lines.append(f"- {entry}")
+        title = f"{symbol.upper()} News" if symbol else "Latest News"
+        return "\n".join(lines), title
 
     # ------------------------------------------------------------------
     # Real-time listening for a wake word

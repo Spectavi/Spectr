@@ -176,7 +176,7 @@ class SpectrApp(App):
     active_symbol_index = reactive(0)
     auto_trading_enabled: reactive[bool] = reactive(False)
     afterhours_enabled: reactive[bool] = reactive(True)
-    strategy_active: reactive[bool] = reactive(True)
+    strategy_active: reactive[bool] = reactive(False)
     is_backtest: reactive[bool] = reactive(False)
     trade_amount: reactive[float] = reactive(0.0)
     confirm_quit: reactive[bool] = reactive(False)
