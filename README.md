@@ -83,13 +83,24 @@ cd spectr
 python3 -m venv .venv
 source .venv/bin/activate
 
-pip install -r requirements.txt
+pip install -e .
+```
+
+To install the optional audio stack (pygame mixer + voice IO), use:
+```bash
+pip install -e ".[audio]"
+```
+For PyPI installs, use:
+```bash
+pip install "spectr[audio]"
 ```
 
 ### Voice features require additional system libraries.
  On Debian/Ubuntu, install them with:
 ```bash
    sudo apt install libportaudio2 libsndfile1
+   # If pygame builds from source, you may also need:
+   # sudo apt install libsdl2-dev
 ````
 
  On macOS, use Homebrew:

@@ -8,9 +8,11 @@ src/spectr/broker_tools.py
 src/spectr/cache.py
 src/spectr/cli.py
 src/spectr/exceptions.py
+src/spectr/mode.py
 src/spectr/news.py
 src/spectr/plot_lock.py
 src/spectr/plotext_fix.py
+src/spectr/services.py
 src/spectr/spectr.py
 src/spectr/utils.py
 src/spectr.egg-info/PKG-INFO

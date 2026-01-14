@@ -1,11 +1,14 @@
+from __future__ import annotations
+
 import logging
-import asyncio
 from types import SimpleNamespace
+
 import pandas as pd
 from textual.screen import ModalScreen
 from textual.widgets import Static, DataTable, Button
 from textual.containers import Vertical, Horizontal
 
+from ..backtest_models import BacktestReport
 from .backtest_graph_view import BacktestGraphView
 
 
@@ -13,7 +16,7 @@ log = logging.getLogger(__name__)
 
 
 class BacktestResultScreen(ModalScreen):
-    """Screen displaying the back‑test graph and summary metrics."""
+    """Screen displaying the back-test graph and summary metrics."""
 
     BINDINGS = [
         ("escape", "app.pop_screen", "Back"),
@@ -21,30 +24,17 @@ class BacktestResultScreen(ModalScreen):
 
     def __init__(
         self,
-        df: pd.DataFrame,
+        report: BacktestReport,
         *,
-        symbol: str,
-        start_date: str,
-        end_date: str,
-        start_value: float,
-        end_value: float,
-        num_buys: int,
-        num_sells: int,
-        trades: list[dict],
+        graph_df: pd.DataFrame,
         args_snapshot: object | None = None,
     ) -> None:
         super().__init__()
-        self._graph: GraphView | None = None
-        self._df = df
+        self._graph: BacktestGraphView | None = None
+        self._graph_df = graph_df
+        self._price_df = report.price_data
         self.report = Static(id="backtest-report")
-        self.symbol = symbol
-        self.start_date = start_date
-        self.end_date = end_date
-        self.start_value = start_value
-        self.end_value = end_value
-        self.num_buys = num_buys
-        self.num_sells = num_sells
-        self.trades = trades
+        self.report_data = report
         self._args_snapshot = args_snapshot
 
     def compose(self):
@@ -65,7 +55,7 @@ class BacktestResultScreen(ModalScreen):
 
         # Compute per-sell realized profit using equity deltas since last buy
         last_buy_value = None
-        for trade in self.trades:
+        for trade in self.report_data.trades:
             # Format timestamp
             t = trade.get("time")
             if hasattr(t, "strftime"):
@@ -125,10 +115,10 @@ class BacktestResultScreen(ModalScreen):
 
         # Prepare and load the graph
         try:
-            self._graph.update_symbol(self.symbol)
+            self._graph.update_symbol(self.report_data.symbol)
         except Exception:
-            self._graph.symbol = self.symbol
-        self._graph.load_df(self._df, bt_args, indicators=[])
+            self._graph.symbol = self.report_data.symbol
+        self._graph.load_df(self._graph_df, bt_args, indicators=[])
 
         # Allow layout to compute final size, then render once and freeze
         # BacktestGraphView self-freezes after its first render.
@@ -153,27 +143,27 @@ class BacktestResultScreen(ModalScreen):
                 pass
 
     def _make_report(self) -> str:
+        report = self.report_data
         # Compute Profit Amount (end - start)
         profit_line = "Profit Amount: —"
         try:
-            if self.start_value is not None and self.end_value is not None:
-                profit = float(self.end_value) - float(self.start_value)
-                sign = "+" if profit > 0 else ("-" if profit < 0 else "")
-                profit_line = f"Profit Amount: {sign}${abs(profit):,.2f}"
+            profit = float(report.end_value) - float(report.starting_cash)
+            sign = "+" if profit > 0 else ("-" if profit < 0 else "")
+            profit_line = f"Profit Amount: {sign}${abs(profit):,.2f}"
         except Exception:
             pass
 
         # Compute Buy & Hold profit using the price series in the backtest range
         buy_hold_line = "Buy & Hold: —"
         try:
-            s = self._df["close"].dropna() if isinstance(self._df, pd.DataFrame) else None
-            if s is not None and not s.empty and self.start_value is not None:
+            s = self._price_df["close"].dropna() if isinstance(self._price_df, pd.DataFrame) else None
+            if s is not None and not s.empty:
                 start_px = float(s.iloc[0])
                 end_px = float(s.iloc[-1])
                 if start_px > 0:
-                    shares = float(self.start_value) / start_px
+                    shares = float(report.starting_cash) / start_px
                     bh_end_value = shares * end_px
-                    bh_profit = bh_end_value - float(self.start_value)
+                    bh_profit = bh_end_value - float(report.starting_cash)
                     sign = "+" if bh_profit > 0 else ("-" if bh_profit < 0 else "")
                     buy_hold_line = f"Buy & Hold: {sign}${abs(bh_profit):,.2f}"
         except Exception:
@@ -181,13 +171,13 @@ class BacktestResultScreen(ModalScreen):
             pass
 
         return (
-            f"Symbol: {self.symbol}\n"
-            f"From: {self.start_date}\n"
-            f"To: {self.end_date}\n\n"
-            f"Start Value: ${self.start_value:,.2f}\n"
-            f"End Value: ${self.end_value:,.2f}\n\n"
+            f"Symbol: {report.symbol}\n"
+            f"From: {report.start_date}\n"
+            f"To: {report.end_date}\n\n"
+            f"Start Value: ${report.starting_cash:,.2f}\n"
+            f"End Value: ${report.end_value:,.2f}\n\n"
             f"{profit_line}\n"
             f"{buy_hold_line}\n\n"
-            f"Buys: {self.num_buys}\n"
-            f"Sells: {self.num_sells}"
+            f"Buys: {len(report.buy_signals)}\n"
+            f"Sells: {len(report.sell_signals)}"
         )

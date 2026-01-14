@@ -17,7 +17,10 @@ warnings.filterwarnings(
     category=UserWarning,
     module="pygame.pkgdata",
 )
-import pygame
+try:
+    import pygame
+except Exception:  # pragma: no cover - optional dependency
+    pygame = None
 try:  # optional voice dependencies
     import sounddevice as sd
     import soundfile as sf
@@ -39,6 +42,11 @@ log = logging.getLogger(__name__)
 
 class VoiceAgent:
     """Simple wrapper around OpenAI's voice features."""
+
+    _AUDIO_INSTALL_HINT = (
+        "Install the 'audio' extra (e.g. pip install \"spectr[audio]\") and "
+        "ensure portaudio/libsndfile system libraries are available."
+    )
 
     def __init__(
         self,
@@ -86,16 +94,28 @@ class VoiceAgent:
             self.tts_volume = 1.0
 
         self._audio_enabled = False
-        try:
-            pygame.mixer.init()
-            self._audio_enabled = True
-        except Exception as exc:
-            # Headless environments (containers, CI, some Windows setups) may not
-            # have an audio device. Voice features should degrade gracefully.
-            log.warning("VoiceAgent audio disabled (pygame mixer init failed): %s", exc)
+        self._recording_enabled = sd is not None and sf is not None
+        if not self._recording_enabled:
+            log.warning(
+                "VoiceAgent recording disabled (sounddevice/soundfile missing). %s",
+                self._AUDIO_INSTALL_HINT,
+            )
+        if pygame is None:
+            log.warning(
+                "VoiceAgent audio disabled (pygame not installed). "
+                "Install with the 'audio' extra to enable."
+            )
+        else:
+            try:
+                pygame.mixer.init()
+                self._audio_enabled = True
+            except Exception as exc:
+                # Headless environments (containers, CI, some Windows setups) may not
+                # have an audio device. Voice features should degrade gracefully.
+                log.warning("VoiceAgent audio disabled (pygame mixer init failed): %s", exc)
 
         self._stop_event = threading.Event()
-        self._current_channel: pygame.mixer.Channel | None = None
+        self._current_channel: object | None = None
         self._queue: queue.Queue[tuple[str, threading.Event | None]] = queue.Queue()
         self._worker = threading.Thread(target=self._speech_worker, daemon=True)
         self._worker.start()
@@ -715,6 +735,13 @@ class VoiceAgent:
                 pass
         self._stop_event.clear()
 
+    def _ensure_recording_ready(self) -> None:
+        if not self._recording_enabled:
+            raise RuntimeError(
+                "Voice recording requires sounddevice and soundfile. "
+                + self._AUDIO_INSTALL_HINT
+            )
+
     def _speech_worker(self) -> None:
         while True:
             text, done = self._queue.get()
@@ -790,6 +817,9 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
             f.write(audio_bytes)
             fname = f.name
+        if pygame is None:
+            log.warning("Skipping TTS playback (pygame not installed).")
+            return
         sound = pygame.mixer.Sound(fname)
         channel = sound.play()
         try:
@@ -817,12 +847,9 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
         If ``cancel_event`` is set while recording or generating a response the
         method will abort early.
         """
+        self._ensure_recording_ready()
         if cancel_event is None:
             cancel_event = self._stop_event
-        if sd is None or sf is None:
-            raise RuntimeError(
-                "sounddevice and soundfile are required for voice features"
-            )
         sample_rate = 16_000
         # Cap worst-case recording duration to reduce perceived latency
         max_duration = 60
@@ -1035,10 +1062,7 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
     # ------------------------------------------------------------------
     def start_wake_word_listener(self, wake_word: str = "spectr") -> None:
         """Begin a background thread listening for *wake_word*."""
-        if sd is None or sf is None:
-            raise RuntimeError(
-                "sounddevice and soundfile are required for voice features"
-            )
+        self._ensure_recording_ready()
         if self._listen_thread and self._listen_thread.is_alive():
             return
 
