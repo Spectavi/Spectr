@@ -34,10 +34,6 @@ Requires-Dist: textual[syntax]>=0.59
 Requires-Dist: pandas>=2.2
 Requires-Dist: requests>=2.32
 Requires-Dist: tzlocal>=5.0
-Requires-Dist: pygame>=2.5
-Requires-Dist: sounddevice>=0.4
-Requires-Dist: soundfile>=0.12
-Requires-Dist: playsound==1.2.2
 Requires-Dist: plotext>=5.2
 Requires-Dist: ta>=0.11
 Requires-Dist: openai>=1.0
@@ -45,6 +41,10 @@ Requires-Dist: python-dotenv>=1.0
 Requires-Dist: robin_stocks>=2.1
 Requires-Dist: pyperclip>=1.8
 Requires-Dist: black>=25.1.0
+Provides-Extra: audio
+Requires-Dist: pygame>=2.5; extra == "audio"
+Requires-Dist: sounddevice>=0.4; extra == "audio"
+Requires-Dist: soundfile>=0.12; extra == "audio"
 Dynamic: license-file
 
 # 📈 spectr — Open-Source Algo-Trading Terminal
@@ -132,13 +132,24 @@ cd spectr
 python3 -m venv .venv
 source .venv/bin/activate
 
-pip install -r requirements.txt
+pip install -e .
+```
+
+To install the optional audio stack (pygame mixer + voice IO), use:
+```bash
+pip install -e ".[audio]"
+```
+For PyPI installs, use:
+```bash
+pip install "spectr[audio]"
 ```
 
 ### Voice features require additional system libraries.
  On Debian/Ubuntu, install them with:
 ```bash
    sudo apt install libportaudio2 libsndfile1
+   # If pygame builds from source, you may also need:
+   # sudo apt install libsdl2-dev
 ````
 
  On macOS, use Homebrew:

@@ -149,11 +149,11 @@ def main() -> None:
     if args.broker == "alpaca":
         from .fetch.alpaca import AlpacaInterface
 
-        appmod.BROKER_API = AlpacaInterface(real_trades=args.real_trades)
+        broker_api = AlpacaInterface(real_trades=args.real_trades)
     elif args.broker == "robinhood":
         from .fetch.robinhood import RobinhoodInterface
 
-        appmod.BROKER_API = RobinhoodInterface()
+        broker_api = RobinhoodInterface()
     elif args.broker == "fmp":
         raise ValueError(
             "Invalid broker: FMP does not support broker services, only data."
@@ -165,21 +165,21 @@ def main() -> None:
         from .fetch.alpaca import AlpacaInterface
 
         if args.broker == "alpaca":
-            appmod.DATA_API = appmod.BROKER_API
+            data_api = broker_api
         else:
-            appmod.DATA_API = AlpacaInterface(real_trades=args.real_trades)
+            data_api = AlpacaInterface(real_trades=args.real_trades)
     elif args.data_api == "robinhood":
         from .fetch.robinhood import RobinhoodInterface
 
         if args.broker == "robinhood":
-            appmod.DATA_API = appmod.BROKER_API
+            data_api = broker_api
         else:
-            appmod.DATA_API = RobinhoodInterface()
+            data_api = RobinhoodInterface()
     elif args.data_api == "fmp":
         from .fetch.fmp import FMPInterface
 
         # FMP can only be a data_api, not valid for broker.
-        appmod.DATA_API = FMPInterface()
+        data_api = FMPInterface()
 
     config = appmod.AppConfig(
         macd_thresh=args.macd_thresh,
@@ -192,7 +192,8 @@ def main() -> None:
         scale=args.scale,
     )
 
-    app = appmod.SpectrApp(args, config)
+    deps = appmod.AppDependencies(broker_api=broker_api, data_api=data_api)
+    app = appmod.SpectrApp(args, config, deps)
     app.run()
 
 

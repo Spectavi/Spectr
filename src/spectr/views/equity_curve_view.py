@@ -1,12 +1,12 @@
 import logging
 from datetime import datetime, timedelta
 
-import plotext as plt
-from rich.text import Text
 from textual.widgets import Static
-from ..plot_lock import PLOT_LOCK
+
+from ..rendering import PlotRenderer, build_equity_model
 
 log = logging.getLogger(__name__)
+_RENDERER = PlotRenderer()
 
 
 class EquityCurveView(Static):
@@ -36,41 +36,12 @@ class EquityCurveView(Static):
 
     def render(self) -> str:
         if not self.data:
-            return "No equity data…"
+            return "No equity data..."
 
-        # Plotext's date handling can raise errors on some platforms when
-        # timestamps are converted to dates (e.g. Windows pre‑1970 support).
-        # To avoid this we plot using numeric X values and manually label
-        # a subset of ticks with formatted times.
+        model = build_equity_model(self.data)
+        if model is None:
+            return "No equity data..."
 
-        raw_times = [d[0] for d in self.data]
-        cash_vals = [d[1] for d in self.data]
-        total_vals = [d[2] for d in self.data]
-
-        x_vals = list(range(len(raw_times)))
-
-        with PLOT_LOCK:
-            plt.clear_data()
-            plt.clear_figure()
-            plt.canvas_color("default")
-            plt.axes_color("default")
-            plt.ticks_color("default")
-
-            plt.plot(x_vals, cash_vals, color="blue", marker="hd", label="Cash", yside="right")
-            plt.plot(x_vals, total_vals, color="red", marker="hd", label="Total", yside="right")
-
-            # Label a handful of ticks to avoid clutter
-            step = max(1, len(x_vals) // 10)
-            tick_positions = x_vals[::step]
-            tick_labels = [raw_times[i].strftime("%H:%M:%S") for i in tick_positions]
-            plt.xticks(tick_positions, tick_labels)
-
-            ymin = min(min(cash_vals), min(total_vals)) * 0.95
-            ymax = max(max(cash_vals), max(total_vals)) * 1.05
-            plt.ylim(ymin, ymax, yside="right")
-
-            width = max(self.size.width - 3, 20)
-            height = max(self.size.height, 10)
-            plt.plotsize(width, height)
-
-            return Text.from_ansi(plt.build())
+        width = max(int(self.size.width) - 3, 20)
+        height = max(int(self.size.height), 10)
+        return _RENDERER.render(model, width=width, height=height)

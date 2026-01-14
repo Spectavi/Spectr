@@ -1,22 +1,13 @@
 import logging
 
 import pandas as pd
-import plotext as plt
-from rich.text import Text
 from textual.reactive import reactive
 from textual.widgets import Static
-from ..plot_lock import PLOT_LOCK
 
-try:  # textual < 0.60
-    from textual._ansi_theme import rgb  # type: ignore
-except Exception:  # textual >= 0.60
-    from textual.color import Color
-
-    def rgb(r: int, g: int, b: int) -> str:  # type: ignore
-        return Color.from_rgb(r, g, b).rich_color
-
+from ..rendering import PlotRenderer, build_macd_model
 
 log = logging.getLogger(__name__)
+_RENDERER = PlotRenderer()
 
 
 class MACDView(Static):
@@ -67,57 +58,16 @@ class MACDView(Static):
     def build_graph(self) -> str:
         if self.df is None or self.df.empty or "macd" not in self.df.columns:
             return "Waiting for MACD data..."
-        self.df = self.df.dropna(subset=["macd", "macd_signal"])
 
-        max_points = max(int(self.size.width * self.args.scale), 10)
-        if not self.is_backtest and len(self.df) > max_points:
-            # Live view: only show the tail that fits the terminal width
-            df = self.df.tail(max_points)
-        else:
-            # Back-test or small frame: show everything
-            df = self.df.copy()
-
-        if len(df) < 2:
+        model = build_macd_model(
+            self.df,
+            args=self.args,
+            is_backtest=self.is_backtest,
+            width=max(int(self.size.width), 20),
+        )
+        if model is None:
             return "Not enough data."
 
-        # Force datetime index safely
-        if not isinstance(df.index, pd.DatetimeIndex):
-            try:
-                df.index = pd.to_datetime(df.index, errors="coerce")
-            except Exception as e:
-                return f"Invalid index: {e}"
-
-        times = df.index.strftime("%Y-%m-%d %H:%M:%S")
-
-        with PLOT_LOCK:
-            plt.clf()
-            plt.canvas_color("default")
-            plt.axes_color("default")
-            plt.ticks_color("grey")
-            plt.xticks([], [])  # No xticks for indicators, cleans up UI.
-            plt.grid(False)
-            plt.date_form("Y-m-d H:M:S")
-
-            baseline_x = [times[0], times[-1]]
-            plt.plot(baseline_x, [0, 0], marker="-", color="gray", yside="right", label="")
-            plt.plot(
-                times, df["macd"], color="green", label="MACD", marker="hd", yside="right"
-            )
-            plt.plot(
-                times,
-                df["macd_signal"],
-                color="red",
-                label="Signal",
-                marker="hd",
-                yside="right",
-            )
-
-            # Y range adjustment
-            macd_range = max(df["macd"]) - min(df["macd_signal"])
-            center = df["macd"][-1]
-            margin = macd_range * 1.2 if macd_range else 1
-            plt.ylim(center - margin, center + margin)
-
-            plt.plotsize(self.size.width - 5, self.size.height)
-
-            return Text.from_ansi(plt.build())
+        width = max(int(self.size.width) - 5, 10)
+        height = max(int(self.size.height), 8)
+        return _RENDERER.render(model, width=width, height=height)

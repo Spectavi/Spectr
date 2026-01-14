@@ -171,14 +171,14 @@ def run_backtest(
 
 
 def split_backtest_frames(
-    result: dict, *, graph_tail: int | None = None
+    result: dict | object, *, graph_tail: int | None = None
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Return (calc_df, graph_df) copies from a backtest result.
-
-    ``calc_df`` always contains the full price history for PnL math, while
-    ``graph_df`` can optionally be tailed for faster rendering.
-    """
-    price_df = result.get("price_data")
+    """Return (calc_df, graph_df) copies from a backtest result."""
+    price_df = None
+    if isinstance(result, dict):
+        price_df = result.get("price_data")
+    else:
+        price_df = getattr(result, "price_data", None)
     if price_df is None or not isinstance(price_df, pd.DataFrame):
         raise ValueError("result is missing price_data DataFrame")
 

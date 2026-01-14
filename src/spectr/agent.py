@@ -17,7 +17,10 @@ warnings.filterwarnings(
     category=UserWarning,
     module="pygame.pkgdata",
 )
-import pygame
+try:
+    import pygame
+except Exception:  # pragma: no cover - optional dependency
+    pygame = None
 try:  # optional voice dependencies
     import sounddevice as sd
     import soundfile as sf
@@ -39,6 +42,11 @@ log = logging.getLogger(__name__)
 
 class VoiceAgent:
     """Simple wrapper around OpenAI's voice features."""
+
+    _AUDIO_INSTALL_HINT = (
+        "Install the 'audio' extra (e.g. pip install \"spectr[audio]\") and "
+        "ensure portaudio/libsndfile system libraries are available."
+    )
 
     def __init__(
         self,
@@ -86,16 +94,28 @@ class VoiceAgent:
             self.tts_volume = 1.0
 
         self._audio_enabled = False
-        try:
-            pygame.mixer.init()
-            self._audio_enabled = True
-        except Exception as exc:
-            # Headless environments (containers, CI, some Windows setups) may not
-            # have an audio device. Voice features should degrade gracefully.
-            log.warning("VoiceAgent audio disabled (pygame mixer init failed): %s", exc)
+        self._recording_enabled = sd is not None and sf is not None
+        if not self._recording_enabled:
+            log.warning(
+                "VoiceAgent recording disabled (sounddevice/soundfile missing). %s",
+                self._AUDIO_INSTALL_HINT,
+            )
+        if pygame is None:
+            log.warning(
+                "VoiceAgent audio disabled (pygame not installed). "
+                "Install with the 'audio' extra to enable."
+            )
+        else:
+            try:
+                pygame.mixer.init()
+                self._audio_enabled = True
+            except Exception as exc:
+                # Headless environments (containers, CI, some Windows setups) may not
+                # have an audio device. Voice features should degrade gracefully.
+                log.warning("VoiceAgent audio disabled (pygame mixer init failed): %s", exc)
 
         self._stop_event = threading.Event()
-        self._current_channel: pygame.mixer.Channel | None = None
+        self._current_channel: object | None = None
         self._queue: queue.Queue[tuple[str, threading.Event | None]] = queue.Queue()
         self._worker = threading.Thread(target=self._speech_worker, daemon=True)
         self._worker.start()
@@ -188,7 +208,7 @@ class VoiceAgent:
                 "type": "function",
                 "function": {
                     "name": "get_latest_news",
-                    "description": "Fetch only the most recent news article for a stock symbol",
+                    "description": "Fetch the most recent news article for a stock symbol (includes content)",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -202,7 +222,7 @@ class VoiceAgent:
                 "type": "function",
                 "function": {
                     "name": "get_recent_news",
-                    "description": "Fetch all recent news articles for a stock symbol",
+                    "description": "Fetch all recent news articles for a stock symbol (includes content)",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -559,7 +579,7 @@ class VoiceAgent:
 
     def _build_tool_funcs(self) -> dict:
         funcs = {
-            "get_latest_news": get_latest_news,
+            "get_latest_news": lambda symbol: json.dumps(get_latest_news(symbol)),
             "get_recent_news": lambda symbol, days=30: json.dumps(
                 get_recent_news(symbol, days)
             ),
@@ -715,6 +735,13 @@ class VoiceAgent:
                 pass
         self._stop_event.clear()
 
+    def _ensure_recording_ready(self) -> None:
+        if not self._recording_enabled:
+            raise RuntimeError(
+                "Voice recording requires sounddevice and soundfile. "
+                + self._AUDIO_INSTALL_HINT
+            )
+
     def _speech_worker(self) -> None:
         while True:
             text, done = self._queue.get()
@@ -790,6 +817,9 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
             f.write(audio_bytes)
             fname = f.name
+        if pygame is None:
+            log.warning("Skipping TTS playback (pygame not installed).")
+            return
         sound = pygame.mixer.Sound(fname)
         channel = sound.play()
         try:
@@ -817,12 +847,9 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
         If ``cancel_event`` is set while recording or generating a response the
         method will abort early.
         """
+        self._ensure_recording_ready()
         if cancel_event is None:
             cancel_event = self._stop_event
-        if sd is None or sf is None:
-            raise RuntimeError(
-                "sounddevice and soundfile are required for voice features"
-            )
         sample_rate = 16_000
         # Cap worst-case recording duration to reduce perceived latency
         max_duration = 60
@@ -924,7 +951,7 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
         tools = self.tools
         wants_markdown = bool(self._show_markdown) and self._wants_markdown(user_text)
         used_display_markdown = False
-        news_latest: str | None = None
+        news_latest: dict | None = None
         news_recent: list[dict] = []
         news_symbol: str | None = None
         forced_markdown: str | None = None
@@ -961,7 +988,10 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
                     if call.function.name in {"get_latest_news", "get_recent_news"}:
                         news_symbol = args.get("symbol") or news_symbol
                         if call.function.name == "get_latest_news":
-                            news_latest = result
+                            try:
+                                news_latest = json.loads(result) if result else None
+                            except Exception:
+                                news_latest = {"title": result, "date": "", "link": "", "content": ""}
                         else:
                             try:
                                 news_recent = json.loads(result) if result else []
@@ -1005,29 +1035,86 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
             return False
         return bool(re.search(r"\b(show|shown|see)\b", text.lower()))
 
+    def _summarize_recent_news(
+        self,
+        sources: list[dict],
+        symbol: str | None,
+    ) -> str | None:
+        if not sources:
+            return None
+        payload = []
+        for idx, item in enumerate(sources, start=1):
+            content = item.get("content") or ""
+            payload.append(
+                {
+                    "id": idx,
+                    "title": item.get("title") or "Untitled",
+                    "date": item.get("date") or "",
+                    "link": item.get("link") or "",
+                    "content": content[:2000].strip(),
+                }
+            )
+        try:
+            prompt = (
+                "Summarize the themes from these stock news items using the provided content. "
+                "Use only information present in the sources; do not invent details. "
+                "Write 2-4 sentences and include citations like [1] or [2][3] that "
+                "match the source ids."
+            )
+            response = self.client.chat.completions.create(
+                model=self.chat_model,
+                messages=[
+                    {"role": "system", "content": "You are a careful financial news summarizer."},
+                    {
+                        "role": "user",
+                        "content": f"Symbol: {symbol or 'N/A'}\nSources: {json.dumps(payload)}",
+                    },
+                ],
+                temperature=0.2,
+            )
+            summary = response.choices[0].message.content or ""
+            summary = summary.strip()
+            return summary or None
+        except Exception as exc:  # pragma: no cover - depends on OpenAI availability
+            log.warning("News summary generation failed: %s", exc)
+            return None
+
     def _build_news_markdown(
         self,
-        latest: str | None,
+        latest: dict | None,
         recent: list[dict] | None,
         symbol: str | None,
     ) -> tuple[str, str] | None:
         if not latest and not recent:
             return None
-        lines: list[str] = []
-        if latest:
-            lines.append("Latest headline")
-            lines.append(f"- {latest}")
-        if recent:
-            lines.append("Recent headlines")
-            for item in (recent or [])[:10]:
-                title = item.get("title") or "Untitled"
-                date = item.get("date")
-                link = item.get("link")
-                entry = f"[{title}]({link})" if link else title
-                if date:
-                    entry = f"{entry} ({date})"
-                lines.append(f"- {entry}")
-        title = f"{symbol.upper()} News" if symbol else "Latest News"
+        sources = list((recent or [])[:10])
+        if not sources and latest:
+            sources = [
+                {
+                    "title": latest.get("title") or "",
+                    "date": latest.get("date") or "",
+                    "link": latest.get("link") or "",
+                    "content": latest.get("content") or "",
+                }
+            ]
+        summary = self._summarize_recent_news(sources, symbol) if sources else None
+        if not summary:
+            if sources:
+                cited = "".join(f"[{idx}]" for idx in range(1, min(3, len(sources)) + 1))
+                summary = f"Headlines highlight recent developments around the company. {cited}."
+            else:
+                summary = "No recent news details are available."
+
+        lines: list[str] = ["Summary", summary, "", "Sources"]
+        for idx, item in enumerate(sources, start=1):
+            title = item.get("title") or "Untitled"
+            date = item.get("date")
+            link = item.get("link")
+            entry = f"[{title}]({link})" if link else title
+            if date:
+                entry = f"{entry} ({date})"
+            lines.append(f"- [{idx}] {entry}")
+        title = f"{symbol.upper()} News Summary" if symbol else "News Summary"
         return "\n".join(lines), title
 
     # ------------------------------------------------------------------
@@ -1035,10 +1122,7 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
     # ------------------------------------------------------------------
     def start_wake_word_listener(self, wake_word: str = "spectr") -> None:
         """Begin a background thread listening for *wake_word*."""
-        if sd is None or sf is None:
-            raise RuntimeError(
-                "sounddevice and soundfile are required for voice features"
-            )
+        self._ensure_recording_ready()
         if self._listen_thread and self._listen_thread.is_alive():
             return
 

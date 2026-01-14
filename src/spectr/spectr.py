@@ -21,6 +21,7 @@ from . import cache
 from .strategies import metrics
 from . import utils
 from .agent import VoiceAgent
+from .dependencies import AppDependencies
 from .fetch.broker_interface import OrderSide
 from .scanners import load_scanner, list_scanners
 from .strategies import load_strategy, list_strategies, get_strategy_code
@@ -28,14 +29,19 @@ from .utils import (
     get_historical_data,
 )
 from . import broker_tools
-from .backtest import run_backtest, split_backtest_frames
+from .backtest import split_backtest_frames
+from .backtest_models import BacktestInput
+from .backtest_service import BacktestService
+from .mode import Mode, ModeManager
+from .services import LivePollingService, ScannerService, EquityService
+from .store import AppState, AppStore, PortfolioState, StrategyState
+from .controllers import AppController
 from .views.backtest_input_dialog import BacktestInputDialog
 from .views.backtest_result_screen import BacktestResultScreen
 from .views.backtest_loading_screen import BacktestLoadingScreen
 from .views.backtest_error_screen import BacktestErrorScreen
 from .views.log_overlay import ErrorLogOverlay
 from .views.markdown_modal import MarkdownModal
-from .views.graph_view import GraphView
 from .views.order_dialog import OrderDialog
 from .views.portfolio_screen import PortfolioScreen
 from .views.splash_screen import SplashScreen
@@ -118,15 +124,6 @@ class AppConfig:
     scale: float = 0.2
 
 
-class OrderSignal:
-    """A simple class to hold order signals."""
-
-    def __init__(self, symbol: str, side: OrderSide, pos_pct: float = 100.0):
-        self.symbol = symbol
-        self.side = side
-        self.pos_pct = pos_pct
-
-
 class SpectrApp(App):
     CSS_PATH = "default.tcss"
     BINDINGS = [
@@ -177,12 +174,22 @@ class SpectrApp(App):
     auto_trading_enabled: reactive[bool] = reactive(False)
     afterhours_enabled: reactive[bool] = reactive(True)
     strategy_active: reactive[bool] = reactive(False)
-    is_backtest: reactive[bool] = reactive(False)
+    mode: reactive[Mode] = reactive(Mode.LIVE)
     trade_amount: reactive[float] = reactive(0.0)
     confirm_quit: reactive[bool] = reactive(False)
 
     symbol_view: reactive[SymbolView] = reactive(None)
     log_screen: reactive[ErrorLogOverlay | None] = reactive(None)
+
+    def _get_active_symbol(self) -> str | None:
+        if not self.ticker_symbols:
+            return None
+        if not (0 <= self.active_symbol_index < len(self.ticker_symbols)):
+            return None
+        return self.ticker_symbols[self.active_symbol_index]
+
+    def _can_trade_now(self) -> bool:
+        return utils.is_market_open_now() or self.afterhours_enabled
 
     async def on_key(self, event) -> None:
         key = getattr(event, "key", "")
@@ -227,7 +234,7 @@ class SpectrApp(App):
     def _prepend_open_positions(self) -> None:
         """Ensure open position symbols are at the start of ``ticker_symbols``."""
         try:
-            positions = BROKER_API.get_positions()
+            positions = self.broker_api.get_positions()
         except Exception as exc:
             log.warning(f"Failed to fetch open positions: {exc}")
             return
@@ -248,7 +255,53 @@ class SpectrApp(App):
 
         self.ticker_symbols = owned + remaining
 
-    def __init__(self, args, config: AppConfig):
+    @property
+    def is_backtest(self) -> bool:
+        return self.mode == Mode.BACKTEST
+
+    @is_backtest.setter
+    def is_backtest(self, value: bool) -> None:
+        self.set_mode(Mode.BACKTEST if value else Mode.LIVE)
+
+    def set_mode(self, mode: Mode) -> None:
+        self.mode = mode
+
+    def watch_mode(self, old: Mode, new: Mode) -> None:
+        if hasattr(self, "_mode_manager") and self._mode_manager:
+            self._mode_manager.set_mode(new)
+        if hasattr(self, "_controller") and self._controller:
+            self._controller.set_mode(new)
+
+    def watch_active_symbol_index(self, old: int, new: int) -> None:
+        self._sync_store_symbols()
+
+    def _sync_store_symbols(self) -> None:
+        if not hasattr(self, "_controller") or not self._controller:
+            return
+        active = None
+        if self.ticker_symbols and 0 <= self.active_symbol_index < len(self.ticker_symbols):
+            active = self.ticker_symbols[self.active_symbol_index]
+        self._controller.set_symbols(self.ticker_symbols, active)
+
+    def _sync_store_strategy(self) -> None:
+        if not hasattr(self, "_controller") or not self._controller:
+            return
+        self._controller.set_strategy(self.strategy_name, enabled=self.strategy_active)
+
+    def _sync_store_portfolio(self) -> None:
+        if not hasattr(self, "_controller") or not self._controller:
+            return
+        balance = self._portfolio_balance_cache or {}
+        self._controller.set_portfolio(
+            cash=balance.get("cash") if balance else None,
+            buying_power=balance.get("buying_power") if balance else None,
+            portfolio_value=balance.get("portfolio_value") if balance else None,
+            positions=self._portfolio_positions_cache,
+            orders=self._portfolio_orders_cache,
+            equity_curve=self._equity_curve_data,
+        )
+
+    def __init__(self, args, config: AppConfig, deps: AppDependencies):
         super().__init__()
         log.debug("SpectrApp __init__ start")
         if not hasattr(self, "exit_event"):
@@ -256,17 +309,35 @@ class SpectrApp(App):
         self._consumer_task = None
         self.args = args  # Store CLI arguments
         self.config = config
-        self._sig_lock = threading.Lock()  # protects self.signal_detected
-        self._poll_worker = None
-        self._scanner_worker = None
-        self._equity_worker = None
+        self.broker_api = deps.broker_api
+        self.data_api = deps.data_api
+        self._polling_service = None
+        self._scanner_service = None
+        self._equity_service = None
+        self._mode_manager = None
+        self._store = AppStore(
+            AppState(
+                mode=Mode.LIVE,
+                symbols=(),
+                active_symbol=None,
+                config=self.config,
+                strategy=StrategyState(name=None, enabled=self.strategy_active),
+                portfolio=PortfolioState(
+                    cash=None,
+                    buying_power=None,
+                    portfolio_value=None,
+                    positions=(),
+                    orders=(),
+                    equity_curve=(),
+                ),
+            )
+        )
+        self._controller = AppController(self._store)
         self._order_status_worker = None
         self._voice_worker = None
         self._voice_stop_event: threading.Event | None = None
         self._voice_is_recording = False
         self._backtest_cancelled = False
-        # Debug flags to throttle logs while backtest is active
-        self._bt_paused_poll = False
         self._bt_skipping_updates = False
         self.df_cache = {symbol: pd.DataFrame() for symbol in self.ticker_symbols}
         if not os.path.exists(cache.CACHE_DIR):
@@ -285,6 +356,8 @@ class SpectrApp(App):
             self.strategy_name = "CustomStrategy"
             self.strategy_class = load_strategy(self.strategy_name)
             cache.save_selected_strategy(None)
+        self._controller.set_config(self.config)
+        self._sync_store_strategy()
         self._shutting_down = False
 
         self.trade_amount = 0.0
@@ -309,8 +382,8 @@ class SpectrApp(App):
                     return None
             try:
                 self.voice_agent = VoiceAgent(
-                    broker_api=BROKER_API,
-                    data_api=DATA_API,
+                    broker_api=self.broker_api,
+                    data_api=self.data_api,
                     get_cached_orders=lambda: self._portfolio_orders_cache,
                     add_symbol=self.add_symbol,
                     remove_symbol=self.remove_symbol,
@@ -341,7 +414,37 @@ class SpectrApp(App):
             self.scanner_name = next(iter(self.available_scanners))
         self.scanner_class = load_scanner(self.scanner_name)
         cache.save_selected_scanner(self.scanner_name)
-        self.scanner = self.scanner_class(DATA_API, self.exit_event)
+        self.scanner = self.scanner_class(self.data_api, self.exit_event)
+
+        self._polling_service = LivePollingService(
+            exit_event=self.exit_event,
+            get_symbols=lambda: list(self.ticker_symbols),
+            poll_symbol_cb=self._poll_one_symbol,
+            data_api=self.data_api,
+            broker_api=self.broker_api,
+            interval=REFRESH_INTERVAL,
+            logger=log,
+        )
+        self._scanner_service = ScannerService(
+            exit_event=self.exit_event,
+            scanner=self.scanner,
+            interval=SCANNER_INTERVAL,
+            logger=log,
+        )
+        self._equity_service = EquityService(
+            exit_event=self.exit_event,
+            update_cb=self._update_portfolio_equity,
+            interval=EQUITY_INTERVAL,
+            logger=log,
+        )
+        self._mode_manager = ModeManager(
+            live_services=[
+                self._polling_service,
+                self._scanner_service,
+                self._equity_service,
+            ],
+            logger=log,
+        )
 
         # Track latest quotes and equity curve
         self._latest_quotes: dict[str, float] = {}
@@ -361,13 +464,11 @@ class SpectrApp(App):
         return self.scanner.top_gainers
 
     def compose(self) -> ComposeResult:
-        print("compose start", flush=True)
         log.debug("compose start")
         self.overlay = TopOverlay(id="overlay-text")
         yield self.overlay
         yield SymbolView(id="symbol-view")
         log.debug("compose end")
-        print("compose end", flush=True)
 
     async def action_toggle_log_overlay(self) -> None:
         """Toggle the error log overlay visibility."""
@@ -399,13 +500,13 @@ class SpectrApp(App):
     def _fetch_data(self, symbol: str, quote: dict | None = None):
         """Fetch the latest data and inject the most recent quote."""
         log.debug(f"Fetching live data for {symbol}...")
-        df = DATA_API.fetch_chart_data(
+        df = self.data_api.fetch_chart_data(
             symbol,
             from_date=datetime.now().date().strftime("%Y-%m-%d"),
             to_date=datetime.now().date().strftime("%Y-%m-%d"),
         )
         if quote is None:
-            quote = DATA_API.fetch_quote(symbol)
+            quote = self.data_api.fetch_quote(symbol)
         if df.empty or quote is None:
             return pd.DataFrame(), None
 
@@ -443,20 +544,22 @@ class SpectrApp(App):
             self.signal_detected.append, (symbol, curr_price, signal, reason)
         )
 
-        if (
-            signal
-            and self.auto_trading_enabled
-            and self.afterhours_enabled
-            and not utils.is_market_open_now()
-        ):
+        if signal and self.auto_trading_enabled and self._can_trade_now():
             side = (
                 OrderSide.BUY
                 if signal == "buy"
                 else OrderSide.SELL if signal == "sell" else None
             )
             if side:
+                if self.broker_api.has_pending_order(symbol):
+                    log.warning(f"Pending order for {symbol}; ignoring signal!")
+                    self.call_from_thread(
+                        self.signal_detected.remove,
+                        (symbol, curr_price, signal, reason),
+                    )
+                    return
                 order = broker_tools.submit_order(
-                    BROKER_API,
+                    self.broker_api,
                     symbol,
                     side,
                     curr_price,
@@ -496,7 +599,6 @@ class SpectrApp(App):
             utils.play_sound(SELL_SOUND_PATH)
 
     async def on_mount(self, event: events.Mount) -> None:
-        print("on_mount start", flush=True)
         log.debug("on_mount start")
         await self.push_screen(SplashScreen(id="splash"), wait_for_dismiss=False)
         self.refresh()
@@ -516,14 +618,18 @@ class SpectrApp(App):
         self._prepend_open_positions()
         self.args.symbols = self.ticker_symbols
         self.active_symbol_index = 0
+        self._sync_store_symbols()
 
         log.debug(f"self.ticker_symbols: {self.ticker_symbols}")
         log.debug("App mounted.")
 
         # Kick off background workers
-        self._poll_worker = self.run_worker(self._polling_loop, thread=False)
-        self._scanner_worker = self.run_worker(self.scanner.scanner_loop, thread=False)
-        self._equity_worker = self.run_worker(self._equity_loop, thread=False)
+        if self._polling_service:
+            self._polling_service.start()
+        if self._scanner_service:
+            self._scanner_service.start()
+        if self._equity_service:
+            self._equity_service.start()
         self._order_status_worker = self.run_worker(
             self._order_status_loop, thread=False
         )
@@ -536,7 +642,6 @@ class SpectrApp(App):
         log.debug("starting consumer task")
         self._consumer_task = asyncio.create_task(self._process_updates())
         log.debug("on_mount complete")
-        print("on_mount complete", flush=True)
 
     async def on_unmount(self, event: events.Unmount) -> None:
         # Textual calls App._shutdown internally during teardown; avoid overriding
@@ -585,12 +690,12 @@ class SpectrApp(App):
             df = self._analyze_indicators(df)
 
             if position is None:
-                position = BROKER_API.get_position(symbol)
+                position = self.broker_api.get_position(symbol)
 
             position = self._normalize_position(position)
             orders = None
             try:
-                orders = BROKER_API.get_pending_orders(symbol)
+                orders = self.broker_api.get_pending_orders(symbol)
             except Exception:
                 orders = None
 
@@ -627,7 +732,7 @@ class SpectrApp(App):
 
             self.df_cache[symbol] = df
             self._update_queue.put(symbol)
-            if symbol == self.ticker_symbols[self.active_symbol_index]:
+            if symbol == self._get_active_symbol():
                 if self._is_splash_active():
                     self.call_from_thread(self.pop_screen)
                     if self.voice_agent:
@@ -641,55 +746,6 @@ class SpectrApp(App):
         except Exception:
             log.error(f"[poll] {symbol}: {traceback.format_exc()}")
 
-    async def _polling_loop(self) -> None:
-        """Poll all symbols at regular intervals.
-
-        While a backtest is active, pause polling to avoid mutating UI/state.
-        """
-        while not self.exit_event.is_set():
-            # Pause polling entirely while the backtest results are visible
-            if self.is_backtest:
-                if not self._bt_paused_poll:
-                    log.debug("Polling paused during backtest")
-                    self._bt_paused_poll = True
-                try:
-                    await asyncio.wait_for(self.exit_event.wait(), timeout=1.0)
-                except asyncio.TimeoutError:
-                    continue
-            else:
-                if self._bt_paused_poll:
-                    log.debug("Polling resumed after backtest")
-                    self._bt_paused_poll = False
-            try:
-                quotes = DATA_API.fetch_quotes(list(self.ticker_symbols))
-            except Exception as exc:
-                log.error(f"[poll] batch quote error: {exc}")
-                quotes = {sym: None for sym in self.ticker_symbols}
-
-            try:
-                positions = BROKER_API.get_positions() or []
-            except Exception as exc:
-                log.warning(f"Failed to fetch positions: {exc}")
-                positions = []
-
-            pos_map = {getattr(pos, "symbol", "").upper(): pos for pos in positions}
-
-            tasks = [
-                asyncio.to_thread(
-                    self._poll_one_symbol,
-                    sym,
-                    quotes.get(sym.upper()),
-                    pos_map.get(sym.upper()),
-                )
-                for sym in self.ticker_symbols
-            ]
-            if tasks:
-                await asyncio.gather(*tasks, return_exceptions=True)
-
-            try:
-                await asyncio.wait_for(self.exit_event.wait(), timeout=REFRESH_INTERVAL)
-            except asyncio.TimeoutError:
-                pass
 
     async def _process_updates(self) -> None:
         """Runs in Textual’s event loop; applies any fresh data to the UI."""
@@ -721,6 +777,9 @@ class SpectrApp(App):
             if len(self.signal_detected) > 0:
                 for signal in list(self.signal_detected):
                     _sym, _price, _sig, _reason = signal
+                    if _sym not in self.ticker_symbols:
+                        self.signal_detected.remove(signal)
+                        continue
                     index = self.ticker_symbols.index(_sym)
                     self.active_symbol_index = index
                     msg = f"{_sym} @ {_price} 🚀"
@@ -733,15 +792,14 @@ class SpectrApp(App):
                         msg = f"SELL {msg}"
                         side = OrderSide.SELL
 
-                    if not self.auto_trading_enabled and _sig and side:
+                    can_trade_now = self._can_trade_now()
+                    if (not self.auto_trading_enabled or not can_trade_now) and _sig and side:
                         should_prompt = not self.auto_trading_enabled or (
-                            self.auto_trading_enabled
-                            and not self.afterhours_enabled
-                            and not utils.is_market_open_now()
+                            self.auto_trading_enabled and not can_trade_now
                         )
                         if should_prompt and _sig and side:
                             log.debug(f"Signal detected, opening dialog: {msg}")
-                            if BROKER_API.has_pending_order(_sym):
+                            if self.broker_api.has_pending_order(_sym):
                                 log.warning(
                                     f"Pending order for {_sym}; ignoring signal!"
                                 )
@@ -759,12 +817,12 @@ class SpectrApp(App):
                                     reason=_reason,
                                 )
                             continue
-                    elif self.auto_trading_enabled and _sig and side:
+                    elif self.auto_trading_enabled and can_trade_now and _sig and side:
                         log.info(
                             f"AUTO-TRADE: Submitting order for {_sym} at {_price} with side {_sig}"
                         )
                         # Skip auto-ordering if there's already an open order
-                        if BROKER_API.has_pending_order(_sym):
+                        if self.broker_api.has_pending_order(_sym):
                             log.warning(f"Pending order for {_sym}; ignoring signal!")
                             self.signal_detected.remove(signal)
                             if self.voice_agent:
@@ -775,7 +833,7 @@ class SpectrApp(App):
 
                         self.signal_detected.remove(signal)
                         order = broker_tools.submit_order(
-                            BROKER_API,
+                            self.broker_api,
                             _sym,
                             side,
                             _price,
@@ -792,31 +850,16 @@ class SpectrApp(App):
                             order,
                             reason=_reason,
                         )
-            elif symbol == self.ticker_symbols[self.active_symbol_index]:
+            elif symbol == self._get_active_symbol():
                 if not self.is_backtest:
                     df = self.df_cache.get(symbol)
                     if df is not None:
                         self.update_view(symbol)
 
-    async def _equity_loop(self) -> None:
-        """Periodically update portfolio equity using cached quotes."""
-        while not self.exit_event.is_set():
-            try:
-                await asyncio.to_thread(self._update_portfolio_equity)
-            except Exception as exc:
-                log.error(f"[equity] {exc}")
-
-            try:
-                await asyncio.wait_for(self.exit_event.wait(), timeout=EQUITY_INTERVAL)
-            except asyncio.TimeoutError:
-                pass
-
-        log.debug("_equity_loop exit")
-
     def _update_portfolio_equity(self) -> None:
         """Calculate portfolio value using cached quotes and record a point."""
         try:
-            balance = BROKER_API.get_balance() or {}
+            balance = self.broker_api.get_balance() or {}
             cash = balance.get("cash", 0.0)
         except Exception as exc:
             log.warning(f"Failed to fetch balance: {exc}")
@@ -824,19 +867,24 @@ class SpectrApp(App):
             balance = {}
 
         try:
-            positions = BROKER_API.get_positions() or []
+            positions = self.broker_api.get_positions() or []
         except Exception as exc:
             log.warning(f"Failed to fetch positions: {exc}")
             positions = []
 
         total = cash
         for pos in positions:
+            pos = self._normalize_position(pos)
             sym = getattr(pos, "symbol", "").upper()
-            qty = float(getattr(pos, "qty", 0))
+            qty_raw = getattr(pos, "qty", 0)
+            try:
+                qty = float(qty_raw) if qty_raw is not None else 0.0
+            except (TypeError, ValueError):
+                qty = 0.0
             price = self._latest_quotes.get(sym)
             if price is None:
                 try:
-                    q = DATA_API.fetch_quote(sym)
+                    q = self.data_api.fetch_quote(sym)
                     price = q.get("price") if q else None
                     if price is not None:
                         self._latest_quotes[sym] = float(price)
@@ -857,12 +905,14 @@ class SpectrApp(App):
         }
 
         self._record_equity_point(cash, total)
+        self._sync_store_portfolio()
 
     def _record_equity_point(self, cash: float, total: float) -> None:
         now = datetime.now()
         cutoff = now - timedelta(hours=4)
         self._equity_curve_data.append((now, cash, total))
         self._equity_curve_data = [d for d in self._equity_curve_data if d[0] >= cutoff]
+        self._sync_store_portfolio()
 
         # Update any open portfolio screen
         if self.screen_stack and isinstance(self.screen_stack[-1], PortfolioScreen):
@@ -885,7 +935,7 @@ class SpectrApp(App):
                     not in {"filled", "canceled", "cancelled", "expired", "rejected"}
                 }
                 if open_ids:
-                    orders = BROKER_API.get_all_orders()
+                    orders = self.broker_api.get_all_orders()
                     if isinstance(orders, pd.DataFrame):
                         if not orders.empty:
                             orders = [
@@ -937,20 +987,17 @@ class SpectrApp(App):
 
             cache.save_symbols_cache(self.ticker_symbols)
 
-            if self._scanner_worker:
-                log.debug("cancelling scanner worker")
-                self._scanner_worker.cancel()
-                self._scanner_worker = None
+            if self._scanner_service:
+                log.debug("stopping scanner service")
+                self._scanner_service.stop()
 
-            if self._poll_worker:
-                log.debug("cancelling poll worker")
-                self._poll_worker.cancel()
-                self._poll_worker = None
+            if self._polling_service:
+                log.debug("stopping polling service")
+                self._polling_service.stop()
 
-            if self._equity_worker:
-                log.debug("cancelling equity worker")
-                self._equity_worker.cancel()
-                self._equity_worker = None
+            if self._equity_service:
+                log.debug("stopping equity service")
+                self._equity_service.stop()
 
             if self._order_status_worker:
                 log.debug("cancelling order status worker")
@@ -978,7 +1025,6 @@ class SpectrApp(App):
 
     async def _shutdown_and_exit(self) -> None:
         """User-initiated shutdown that triggers cleanup and exits the app."""
-        print("_shutdown", flush=True)
         try:
             log.debug("_shutdown current stack:\n%s", "".join(traceback.format_stack(limit=35)))
             reason = getattr(self, "_shutdown_requested_reason", None)
@@ -1089,7 +1135,7 @@ class SpectrApp(App):
     ):
         if self._is_splash_active():
             return
-        if BROKER_API.has_pending_order(symbol):
+        if self.broker_api.has_pending_order(symbol):
             log.warning(f"Pending order for {symbol}; dialog not opened")
             if hasattr(self, "overlay") and self.overlay:
                 self.overlay.flash_message(
@@ -1097,15 +1143,15 @@ class SpectrApp(App):
                 )
             return
         order_type, limit_price = broker_tools.prepare_order_details(
-            symbol, side, BROKER_API
+            symbol, side, self.broker_api
         )
         self.push_screen(
             OrderDialog(
                 side=side,
                 symbol=symbol,
                 pos_pct=pos_pct,
-                get_pos_cb=BROKER_API.get_position,
-                get_price_cb=BROKER_API.fetch_quote,
+                get_pos_cb=self.broker_api.get_position,
+                get_price_cb=self.broker_api.fetch_quote,
                 trade_amount=self.trade_amount if side == OrderSide.BUY else 0.0,
                 reason=reason,
                 default_order_type=order_type,
@@ -1136,9 +1182,9 @@ class SpectrApp(App):
         self.push_screen(
             TickerInputDialog(
                 callback=self.on_ticker_submit,
-                top_movers_cb=DATA_API.fetch_top_movers,
-                quote_cb=DATA_API.fetch_quote,
-                profile_cb=getattr(DATA_API, "fetch_company_profile", None),
+                top_movers_cb=self.data_api.fetch_top_movers,
+                quote_cb=self.data_api.fetch_quote,
+                profile_cb=getattr(self.data_api, "fetch_company_profile", None),
                 scanner_results=self.scanner_results,
                 scanner_results_cb=lambda: self.scanner_results,
                 gainers_results=self.top_gainers,
@@ -1157,6 +1203,7 @@ class SpectrApp(App):
             self.args.symbols = self.ticker_symbols
             log.debug(f"on_ticker_submit: {self.ticker_symbols}")
             self.active_symbol_index = 0
+            self._sync_store_symbols()
             symbol = self.ticker_symbols[self.active_symbol_index]
 
             self.run_worker(lambda: self._poll_one_symbol(symbol), thread=True)
@@ -1259,7 +1306,7 @@ class SpectrApp(App):
             f"Placing {msg.side} {msg.qty} {msg.symbol} @ ${msg.price:.2f} "
             f"(total ${msg.total:,.2f})"
         )
-        if BROKER_API.has_pending_order(msg.symbol):
+        if self.broker_api.has_pending_order(msg.symbol):
             log.warning(f"Pending order for {msg.symbol}; not submitting")
             if hasattr(self, "overlay") and self.overlay:
                 self.overlay.flash_message(
@@ -1270,7 +1317,7 @@ class SpectrApp(App):
             return
         try:
             order = broker_tools.submit_order(
-                BROKER_API,
+                self.broker_api,
                 msg.symbol,
                 msg.side,
                 msg.price,
@@ -1341,8 +1388,8 @@ class SpectrApp(App):
                     portfolio_value,
                     positions,
                     orders,
-                    BROKER_API.get_all_orders,
-                    BROKER_API.cancel_order,
+                    self.broker_api.get_all_orders,
+                    self.broker_api.cancel_order,
                     self.args.real_trades,
                     self.set_real_trades,
                     self.args.broker == "robinhood" and self.args.real_trades,
@@ -1352,8 +1399,8 @@ class SpectrApp(App):
                     self.set_auto_trading,
                     self.afterhours_enabled,
                     self.set_afterhours,
-                    BROKER_API.get_balance,
-                    BROKER_API.get_positions,
+                    self.broker_api.get_balance,
+                    self.broker_api.get_positions,
                     equity_data=self._equity_curve_data,
                     trade_amount=self.trade_amount,
                     set_trade_amount_cb=self.set_trade_amount,
@@ -1389,7 +1436,8 @@ class SpectrApp(App):
             auto_trade_state = f"Auto-Trades: [BOLD RED]DISABLED[/BOLD RED] {live_icon}"
 
         overlay = self.overlay
-        overlay.symbol = self.ticker_symbols[self.active_symbol_index]
+        active_symbol = self._get_active_symbol()
+        overlay.symbol = active_symbol or ""
         overlay.live_icon = live_icon
         if self.strategy_name:
             status = "ACTIVE" if self.strategy_active else "INACTIVE"
@@ -1397,7 +1445,7 @@ class SpectrApp(App):
         else:
             strat_status = "NO STRATEGY (INACTIVE)"
         overlay.update_status(
-            f"{self.active_symbol_index + 1} / {len(self.ticker_symbols)} | {strat_status} | {auto_trade_state}"
+            f"{(self.active_symbol_index + 1) if active_symbol else 0} / {len(self.ticker_symbols)} | {strat_status} | {auto_trade_state}"
         )
 
     def flash_message(self, msg: str):
@@ -1407,8 +1455,8 @@ class SpectrApp(App):
     def set_real_trades(self, enabled: bool) -> None:
         """Update trading mode for the app and broker."""
         self.args.real_trades = enabled
-        if hasattr(BROKER_API, "_real_trades"):
-            setattr(BROKER_API, "_real_trades", enabled)
+        if hasattr(self.broker_api, "_real_trades"):
+            setattr(self.broker_api, "_real_trades", enabled)
 
     def set_auto_trading(self, enabled: bool) -> None:
         """Enable or disable auto trading mode."""
@@ -1434,6 +1482,7 @@ class SpectrApp(App):
     def set_strategy_active(self, enabled: bool) -> None:
         """Enable or disable strategy signal generation."""
         self.strategy_active = enabled
+        self._sync_store_strategy()
         self.update_status_bar()
 
     def set_trade_amount(self, amount: float) -> None:
@@ -1451,6 +1500,7 @@ class SpectrApp(App):
             self.strategy_name = None
             self.strategy_class = None
             cache.save_selected_strategy(None)
+            self._sync_store_strategy()
             self.update_status_bar()
             return
         if name not in self.available_strategies:
@@ -1459,6 +1509,7 @@ class SpectrApp(App):
         self.strategy_name = name
         self.strategy_class = load_strategy(name)
         cache.save_selected_strategy(name)
+        self._sync_store_strategy()
 
         # Re-analyze any cached data using the newly selected strategy
         specs = self.strategy_class.get_indicators()
@@ -1469,8 +1520,9 @@ class SpectrApp(App):
                 except Exception:
                     log.error("Failed to update indicators for %s", sym)
 
-        current = self.ticker_symbols[self.active_symbol_index]
-        self.update_view(current)
+        current = self._get_active_symbol()
+        if current:
+            self.update_view(current)
         self.update_status_bar()
 
     def set_scanner(self, name: str) -> None:
@@ -1481,12 +1533,22 @@ class SpectrApp(App):
         self.scanner_name = name
         self.scanner_class = load_scanner(name)
         cache.save_selected_scanner(name)
-        # stop old worker if running
-        if self._scanner_worker:
-            self._scanner_worker.cancel()
-            self._scanner_worker = None
-        self.scanner = self.scanner_class(DATA_API, self.exit_event)
-        self._scanner_worker = self.run_worker(self.scanner.scanner_loop, thread=False)
+        # stop old service if running
+        if self._scanner_service:
+            self._scanner_service.stop()
+            if self._mode_manager:
+                self._mode_manager.remove_live_service(self._scanner_service)
+        self.scanner = self.scanner_class(self.data_api, self.exit_event)
+        self._scanner_service = ScannerService(
+            exit_event=self.exit_event,
+            scanner=self.scanner,
+            interval=SCANNER_INTERVAL,
+            logger=log,
+        )
+        if self._mode_manager:
+            self._mode_manager.add_live_service(self._scanner_service)
+        if self.mode == Mode.LIVE:
+            self._scanner_service.start()
 
     def add_symbol(self, symbol: str) -> list[str]:
         """Append *symbol* to ``ticker_symbols`` and return the updated list."""
@@ -1499,6 +1561,7 @@ class SpectrApp(App):
             self.args.symbols = self.ticker_symbols
             self.df_cache.setdefault(sym, pd.DataFrame())
             cache.save_symbols_cache(self.ticker_symbols)
+            self._sync_store_symbols()
             self.overlay.flash_message(f"Added {sym}", duration=5.0, style="bold green")
         return self.ticker_symbols
 
@@ -1506,7 +1569,7 @@ class SpectrApp(App):
         """Remove *symbol* from ``ticker_symbols`` and return the updated list."""
         sym = symbol.strip().upper()
         if sym in self.ticker_symbols:
-            if BROKER_API.has_position(sym):
+            if self.broker_api.has_position(sym):
                 msg = (
                     f"I'm sorry, you currently have an open position for {sym}. "
                     "If we remove it from the watchlist we could miss a sell signal."
@@ -1526,6 +1589,7 @@ class SpectrApp(App):
                 self.active_symbol_index = max(0, len(self.ticker_symbols) - 1)
             self.args.symbols = self.ticker_symbols
             cache.save_symbols_cache(self.ticker_symbols)
+            self._sync_store_symbols()
             if self.ticker_symbols:
                 self.update_view(self.ticker_symbols[self.active_symbol_index])
             self.overlay.flash_message(
@@ -1550,7 +1614,11 @@ class SpectrApp(App):
                 self.remove(sv)
         except Exception:
             pass
-        current_symbol = self.ticker_symbols[self.active_symbol_index]
+        current_symbol = self._get_active_symbol()
+        if not current_symbol:
+            self.overlay.flash_message("No active symbol to backtest.", style="bold red")
+            self.is_backtest = False
+            return
         self.push_screen(
             BacktestInputDialog(
                 callback=self.on_backtest_submit,
@@ -1616,7 +1684,7 @@ class SpectrApp(App):
             # Fetch historical bars
             df, _ = await asyncio.to_thread(
                 get_historical_data,
-                DATA_API,
+                self.data_api,
                 self.config.bb_period,
                 self.config.bb_dev,
                 self.config.macd_thresh,
@@ -1655,13 +1723,17 @@ class SpectrApp(App):
 
             # Run the back-test
             log.debug(f"Running backtest for {symbol}.")
-            result = await asyncio.to_thread(
-                run_backtest,
-                df,
-                symbol,
-                self.config,
-                strategy_cls,
-                starting_cash,
+            report = await asyncio.to_thread(
+                BacktestService().run,
+                BacktestInput(
+                    df=df,
+                    symbol=symbol,
+                    config=self.config,
+                    strategy_class=strategy_cls,
+                    starting_cash=starting_cash,
+                    start_date=form["from"],
+                    end_date=form["to"],
+                ),
             )
             log.info("Backtest completed successfully for %s", symbol)
 
@@ -1670,50 +1742,54 @@ class SpectrApp(App):
                 self.is_backtest = False
                 return
 
-            num_buys = len(result.get("buy_signals", []))
-            num_sells = len(result.get("sell_signals", []))
-
-            equity_curve = result["equity_curve"]
-            if isinstance(equity_curve, (pd.Series, pd.DataFrame)):
-                equity_lookup = equity_curve.to_dict()
-            else:
-                equity_lookup = dict(zip(result.get("timestamps", []), equity_curve))
-
-            trades = []
-            for rec in result.get("buy_signals", []) + result.get("sell_signals", []):
-                t = rec["time"]
-                trades.append(
-                    {
-                        **rec,
-                        "value": equity_lookup.get(t),
-                    }
-                )
-            trades.sort(key=lambda r: r["time"])
+            num_buys = len(report.buy_signals)
+            num_sells = len(report.sell_signals)
+            trades = report.trades
             self._last_backtest_trades = trades
             log.debug(f"trades: {trades}")
 
             # Persist a summary for the voice agent / future reference.
+            equity_serialized = []
+
+            def _iso(val):
+                return val.isoformat() if hasattr(val, "isoformat") else str(val)
+
             try:
-                def _iso(val):
-                    return val.isoformat() if hasattr(val, "isoformat") else str(val)
+                if isinstance(report.equity_curve, pd.Series):
+                    equity_serialized = [
+                        {"time": _iso(ts), "value": float(val)}
+                        for ts, val in report.equity_curve.items()
+                    ]
+                elif isinstance(report.equity_curve, pd.DataFrame):
+                    equity_serialized = [
+                        {"time": _iso(ts), "value": float(row.iloc[-1])}
+                        for ts, row in report.equity_curve.iterrows()
+                    ]
+                elif isinstance(report.equity_curve, list):
+                    equity_serialized = [
+                        {"time": _iso(i), "value": float(v)}
+                        for i, v in enumerate(report.equity_curve)
+                    ]
+            except Exception:  # pragma: no cover - best-effort
+                log.warning("Failed to serialize equity curve", exc_info=True)
 
-                equity_serialized = []
-                try:
-                    if isinstance(equity_curve, pd.Series):
-                        equity_serialized = [
-                            {"time": _iso(ts), "value": float(val)}
-                            for ts, val in equity_curve.items()
-                        ]
-                    elif isinstance(equity_curve, pd.DataFrame):
-                        equity_serialized = [
-                            {"time": _iso(ts), "value": float(row.iloc[-1])}
-                            for ts, row in equity_curve.iterrows()
-                        ]
-                    elif isinstance(equity_curve, list):
-                        equity_serialized = [{"time": i, "value": float(v)} for i, v in enumerate(equity_curve)]
-                except Exception:
-                    pass
+            overlay.update_status(
+                f"Backtest completed. Final portfolio value: ${report.end_value:,.2f} | Buy count: {num_buys}"
+            )
+            # Use the backtest price data for the chart, not the current live df.
+            # This ensures the graph reflects only the tested time window.
+            _calc_df, graph_df = split_backtest_frames(report)
 
+            buy_times = {sig["time"] for sig in report.buy_signals}
+            sell_times = {sig["time"] for sig in report.sell_signals}
+
+            graph_df["buy_signals"] = graph_df.index.isin(buy_times)
+            graph_df["sell_signals"] = graph_df.index.isin(sell_times)
+
+            # Show results screen with summary information
+            log.debug("Pushing BacktestResultScreen for %s", symbol)
+
+            try:
                 cache.save_last_backtest(
                     {
                         "symbol": symbol,
@@ -1721,7 +1797,7 @@ class SpectrApp(App):
                         "to": form["to"],
                         "strategy": strategy_name,
                         "starting_cash": starting_cash,
-                        "final_value": end_value_calc,
+                        "final_value": report.end_value,
                         "num_buys": num_buys,
                         "num_sells": num_sells,
                         "trades": [
@@ -1738,39 +1814,6 @@ class SpectrApp(App):
             except Exception:  # pragma: no cover - best-effort
                 log.warning("Failed to save last backtest", exc_info=True)
 
-            overlay.update_status(
-                f"Backtest completed. Final portfolio value: ${result['final_value']:,.2f} | Buy count: {num_buys}"
-            )
-            # Use the backtest price data for the chart, not the current live df.
-            # This ensures the graph reflects only the tested time window.
-            calc_df, graph_df = split_backtest_frames(result)
-
-            buy_times = {sig["time"] for sig in result["buy_signals"]}
-            sell_times = {sig["time"] for sig in result["sell_signals"]}
-
-            graph_df["buy_signals"] = graph_df.index.isin(buy_times)
-            graph_df["sell_signals"] = graph_df.index.isin(sell_times)
-
-            # Show results screen with summary information
-            log.debug("Pushing BacktestResultScreen for %s", symbol)
-            # Compute end value from trades + last close for robustness
-            try:
-                end_value_calc = utils.simulate_portfolio_end_value(
-                    trades, calc_df, starting_cash
-                )
-            except Exception:
-                # Fallbacks to equity curve or final broker value
-                try:
-                    if isinstance(equity_curve, pd.Series):
-                        end_value_calc = float(equity_curve.iloc[-1])
-                    elif isinstance(equity_curve, pd.DataFrame):
-                        last_row = equity_curve.iloc[-1]
-                        end_value_calc = float(next((v for v in last_row[::-1] if pd.notna(v)), result["final_value"]))
-                    else:
-                        end_value_calc = float(equity_curve[-1]) if equity_curve else float(result["final_value"])
-                except Exception:
-                    end_value_calc = float(result["final_value"]) 
-
             # Close loading screen before showing results
             try:
                 if self.screen_stack and isinstance(self.screen_stack[-1], BacktestLoadingScreen):
@@ -1780,15 +1823,8 @@ class SpectrApp(App):
 
             await self.push_screen(
                 BacktestResultScreen(
-                    graph_df,
-                    symbol=symbol,
-                    start_date=form["from"],
-                    end_date=form["to"],
-                    start_value=starting_cash,
-                    end_value=end_value_calc,
-                    num_buys=num_buys,
-                    num_sells=num_sells,
-                    trades=trades,
+                    report,
+                    graph_df=graph_df,
                     args_snapshot=self.args,
                 )
             )
@@ -1840,12 +1876,9 @@ class SpectrApp(App):
                 pass
 
             # Restore current symbol view and resume live updates
-            current = self.ticker_symbols[self.active_symbol_index]
-            self.update_view(current)
-
-
-BROKER_API = None
-DATA_API = None
+            current = self._get_active_symbol()
+            if current:
+                self.update_view(current)
 
 
 from .cli import main

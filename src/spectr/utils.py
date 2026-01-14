@@ -18,7 +18,10 @@ warnings.filterwarnings(
     category=UserWarning,
     module="pygame.pkgdata",
 )
-import pygame
+try:
+    import pygame
+except Exception:  # pragma: no cover - optional dependency
+    pygame = None
 
 from .fetch import data_interface
 
@@ -41,11 +44,25 @@ def human_format(num: float) -> str:
 
 _mixer_initialized = False
 _mixer_lock = threading.Lock()
+_pygame_warned = False
+
+
+def _warn_missing_pygame() -> None:
+    global _pygame_warned
+    if not _pygame_warned:
+        log.warning(
+            "pygame is not installed; sound playback is disabled. "
+            "Install with the 'audio' extra to enable."
+        )
+        _pygame_warned = True
 
 
 def _ensure_mixer() -> None:
     """Initialize ``pygame``'s mixer if it hasn't been already."""
     global _mixer_initialized
+    if pygame is None:
+        _warn_missing_pygame()
+        return
     with _mixer_lock:
         if not _mixer_initialized:
             try:
@@ -61,6 +78,10 @@ def play_sound(path: str) -> None:
     ``playsound`` caused Windows MCI errors; ``pygame`` provides a more
     reliable cross-platform backend.
     """
+
+    if pygame is None:
+        _warn_missing_pygame()
+        return
 
     if not os.path.exists(path):
         log.error("Sound file does not exist: %s", path)
