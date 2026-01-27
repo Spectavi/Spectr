@@ -64,7 +64,7 @@ def test_build_news_markdown(monkeypatch):
         {"title": "Story A", "date": "2024-01-02", "link": "https://a.example.com"}
     ]
     markdown, title = va._build_news_markdown(latest, recent, "NVDA")
-    assert title == "NVDA News"
-    assert "Latest headline" in markdown
-    assert "- Nvidia headlines" in markdown
+    assert title == "NVDA News Summary"
+    assert "Summary" in markdown
+    assert "Sources" in markdown
     assert "[Story A](https://a.example.com) (2024-01-02)" in markdown

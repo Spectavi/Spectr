@@ -4,9 +4,12 @@ pyproject.toml
 src/spectr/__init__.py
 src/spectr/agent.py
 src/spectr/backtest.py
+src/spectr/backtest_models.py
+src/spectr/backtest_service.py
 src/spectr/broker_tools.py
 src/spectr/cache.py
 src/spectr/cli.py
+src/spectr/controllers.py
 src/spectr/exceptions.py
 src/spectr/mode.py
 src/spectr/news.py
@@ -14,6 +17,7 @@ src/spectr/plot_lock.py
 src/spectr/plotext_fix.py
 src/spectr/services.py
 src/spectr/spectr.py
+src/spectr/store.py
 src/spectr/utils.py
 src/spectr.egg-info/PKG-INFO
 src/spectr.egg-info/SOURCES.txt
@@ -27,6 +31,10 @@ src/spectr/fetch/broker_interface.py
 src/spectr/fetch/data_interface.py
 src/spectr/fetch/fmp.py
 src/spectr/fetch/robinhood.py
+src/spectr/rendering/__init__.py
+src/spectr/rendering/models.py
+src/spectr/rendering/renderer.py
+src/spectr/rendering/transformers.py
 src/spectr/scanners/__init__.py
 src/spectr/scanners/custom_scanner.py
 src/spectr/scanners/scanner_interface.py

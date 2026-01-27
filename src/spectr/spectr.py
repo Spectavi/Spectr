@@ -33,7 +33,8 @@ from .backtest_models import BacktestInput
 from .backtest_service import BacktestService
 from .mode import Mode, ModeManager
 from .services import LivePollingService, ScannerService, EquityService
-from .store import AppState, AppStore
+from .store import AppState, AppStore, PortfolioState, StrategyState
+from .controllers import AppController
 from .views.backtest_input_dialog import BacktestInputDialog
 from .views.backtest_result_screen import BacktestResultScreen
 from .views.backtest_loading_screen import BacktestLoadingScreen
@@ -267,19 +268,37 @@ class SpectrApp(App):
     def watch_mode(self, old: Mode, new: Mode) -> None:
         if hasattr(self, "_mode_manager") and self._mode_manager:
             self._mode_manager.set_mode(new)
-        if hasattr(self, "_store") and self._store:
-            self._store.update(mode=new)
+        if hasattr(self, "_controller") and self._controller:
+            self._controller.set_mode(new)
 
     def watch_active_symbol_index(self, old: int, new: int) -> None:
         self._sync_store_symbols()
 
     def _sync_store_symbols(self) -> None:
-        if not hasattr(self, "_store") or not self._store:
+        if not hasattr(self, "_controller") or not self._controller:
             return
         active = None
         if self.ticker_symbols and 0 <= self.active_symbol_index < len(self.ticker_symbols):
             active = self.ticker_symbols[self.active_symbol_index]
-        self._store.update(symbols=tuple(self.ticker_symbols), active_symbol=active)
+        self._controller.set_symbols(self.ticker_symbols, active)
+
+    def _sync_store_strategy(self) -> None:
+        if not hasattr(self, "_controller") or not self._controller:
+            return
+        self._controller.set_strategy(self.strategy_name, enabled=self.strategy_active)
+
+    def _sync_store_portfolio(self) -> None:
+        if not hasattr(self, "_controller") or not self._controller:
+            return
+        balance = self._portfolio_balance_cache or {}
+        self._controller.set_portfolio(
+            cash=balance.get("cash") if balance else None,
+            buying_power=balance.get("buying_power") if balance else None,
+            portfolio_value=balance.get("portfolio_value") if balance else None,
+            positions=self._portfolio_positions_cache,
+            orders=self._portfolio_orders_cache,
+            equity_curve=self._equity_curve_data,
+        )
 
     def __init__(self, args, config: AppConfig):
         super().__init__()
@@ -294,7 +313,24 @@ class SpectrApp(App):
         self._scanner_service = None
         self._equity_service = None
         self._mode_manager = None
-        self._store = AppStore(AppState(mode=Mode.LIVE, symbols=(), active_symbol=None))
+        self._store = AppStore(
+            AppState(
+                mode=Mode.LIVE,
+                symbols=(),
+                active_symbol=None,
+                config=self.config,
+                strategy=StrategyState(name=None, enabled=self.strategy_active),
+                portfolio=PortfolioState(
+                    cash=None,
+                    buying_power=None,
+                    portfolio_value=None,
+                    positions=(),
+                    orders=(),
+                    equity_curve=(),
+                ),
+            )
+        )
+        self._controller = AppController(self._store)
         self._order_status_worker = None
         self._voice_worker = None
         self._voice_stop_event: threading.Event | None = None
@@ -318,6 +354,8 @@ class SpectrApp(App):
             self.strategy_name = "CustomStrategy"
             self.strategy_class = load_strategy(self.strategy_name)
             cache.save_selected_strategy(None)
+        self._controller.set_config(self.config)
+        self._sync_store_strategy()
         self._shutting_down = False
 
         self.trade_amount = 0.0
@@ -860,12 +898,14 @@ class SpectrApp(App):
         }
 
         self._record_equity_point(cash, total)
+        self._sync_store_portfolio()
 
     def _record_equity_point(self, cash: float, total: float) -> None:
         now = datetime.now()
         cutoff = now - timedelta(hours=4)
         self._equity_curve_data.append((now, cash, total))
         self._equity_curve_data = [d for d in self._equity_curve_data if d[0] >= cutoff]
+        self._sync_store_portfolio()
 
         # Update any open portfolio screen
         if self.screen_stack and isinstance(self.screen_stack[-1], PortfolioScreen):
@@ -1435,6 +1475,7 @@ class SpectrApp(App):
     def set_strategy_active(self, enabled: bool) -> None:
         """Enable or disable strategy signal generation."""
         self.strategy_active = enabled
+        self._sync_store_strategy()
         self.update_status_bar()
 
     def set_trade_amount(self, amount: float) -> None:
@@ -1452,6 +1493,7 @@ class SpectrApp(App):
             self.strategy_name = None
             self.strategy_class = None
             cache.save_selected_strategy(None)
+            self._sync_store_strategy()
             self.update_status_bar()
             return
         if name not in self.available_strategies:
@@ -1460,6 +1502,7 @@ class SpectrApp(App):
         self.strategy_name = name
         self.strategy_class = load_strategy(name)
         cache.save_selected_strategy(name)
+        self._sync_store_strategy()
 
         # Re-analyze any cached data using the newly selected strategy
         specs = self.strategy_class.get_indicators()

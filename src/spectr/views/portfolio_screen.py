@@ -332,12 +332,16 @@ class PortfolioScreen(ModalScreen):
                 self.buying_power = info.get("buying_power", 0.0)
                 self.portfolio_value = info.get("portfolio_value", 0.0)
                 self.app._portfolio_balance_cache = info
+                if hasattr(self.app, "_sync_store_portfolio"):
+                    self.app._sync_store_portfolio()
                 self._has_cached_balance = True
 
         if callable(self.positions_callback):
             try:
                 self.positions = await asyncio.to_thread(self.positions_callback) or []
                 self.app._portfolio_positions_cache = self.positions
+                if hasattr(self.app, "_sync_store_portfolio"):
+                    self.app._sync_store_portfolio()
                 self._has_cached_positions = True
             except Exception:
                 log.warning("Failed to fetch positions")
@@ -491,6 +495,8 @@ class PortfolioScreen(ModalScreen):
                 )
             table.scroll_home()
             self.app._portfolio_orders_cache = orders
+            if hasattr(self.app, "_sync_store_portfolio"):
+                self.app._sync_store_portfolio()
             self._has_cached_orders = True
 
     async def on_switch_changed(self, event: Switch.Changed) -> None:
