@@ -10,6 +10,7 @@ src/spectr/broker_tools.py
 src/spectr/cache.py
 src/spectr/cli.py
 src/spectr/controllers.py
+src/spectr/dependencies.py
 src/spectr/exceptions.py
 src/spectr/mode.py
 src/spectr/news.py
