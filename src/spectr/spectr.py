@@ -195,7 +195,9 @@ class SpectrApp(App):
         key = getattr(event, "key", "")
         char = getattr(event, "character", None)
         is_log_key = key in {"`", "~", "grave"} or char in {"`", "~"}
-        log_screen_active = bool(self.screen_stack and isinstance(self.screen_stack[-1], ErrorLogOverlay))
+        log_screen_active = bool(
+            self.screen_stack and isinstance(self.screen_stack[-1], ErrorLogOverlay)
+        )
         if is_log_key:
             # When the log screen is already active, let it handle the toggle so
             # we don't immediately re-toggle and close it.
@@ -212,10 +214,19 @@ class SpectrApp(App):
             if event.key.lower() == "y":
                 event.stop()
                 try:
-                    self._shutdown_requested_reason = f"confirm_quit=y key={event.key!r} char={char!r}"
-                    self._shutdown_requested_stack = "".join(traceback.format_stack(limit=35))
-                    log.info("Shutdown requested via keypress: %s", self._shutdown_requested_reason)
-                    log.debug("Shutdown requested stack:\n%s", self._shutdown_requested_stack)
+                    self._shutdown_requested_reason = (
+                        f"confirm_quit=y key={event.key!r} char={char!r}"
+                    )
+                    self._shutdown_requested_stack = "".join(
+                        traceback.format_stack(limit=35)
+                    )
+                    log.info(
+                        "Shutdown requested via keypress: %s",
+                        self._shutdown_requested_reason,
+                    )
+                    log.debug(
+                        "Shutdown requested stack:\n%s", self._shutdown_requested_stack
+                    )
                 except Exception:
                     pass
                 asyncio.create_task(self._shutdown_and_exit())
@@ -279,7 +290,9 @@ class SpectrApp(App):
         if not hasattr(self, "_controller") or not self._controller:
             return
         active = None
-        if self.ticker_symbols and 0 <= self.active_symbol_index < len(self.ticker_symbols):
+        if self.ticker_symbols and 0 <= self.active_symbol_index < len(
+            self.ticker_symbols
+        ):
             active = self.ticker_symbols[self.active_symbol_index]
         self._controller.set_symbols(self.ticker_symbols, active)
 
@@ -369,17 +382,20 @@ class SpectrApp(App):
         if os.getenv("OPENAI_API_KEY"):
             # Bind 'v' for push-to-talk voice assistant
             self.bind("v", "ask_agent", description="Voice Assistant")
+
             # Optional mic and volume overrides via env for convenience
             def _parse_float(env, default):
                 try:
                     return float(os.getenv(env, "")) if os.getenv(env) else default
                 except Exception:
                     return default
+
             def _parse_int(env):
                 try:
                     return int(os.getenv(env, "")) if os.getenv(env) else None
                 except Exception:
                     return None
+
             try:
                 self.voice_agent = VoiceAgent(
                     broker_api=self.broker_api,
@@ -388,7 +404,9 @@ class SpectrApp(App):
                     add_symbol=self.add_symbol,
                     remove_symbol=self.remove_symbol,
                     get_strategy_code=lambda: (
-                        get_strategy_code(self.strategy_name) if self.strategy_name else ""
+                        get_strategy_code(self.strategy_name)
+                        if self.strategy_name
+                        else ""
                     ),
                     show_markdown=self._show_markdown_modal,
                     stream_voice=getattr(args, "voice_streaming", False),
@@ -401,7 +419,9 @@ class SpectrApp(App):
                         getattr(args, "wake_word", "spectr")
                     )
             except Exception:
-                log.exception("VoiceAgent initialization failed; continuing without voice features")
+                log.exception(
+                    "VoiceAgent initialization failed; continuing without voice features"
+                )
                 self.voice_agent = None
 
         # Available background scanners
@@ -746,7 +766,6 @@ class SpectrApp(App):
         except Exception:
             log.error(f"[poll] {symbol}: {traceback.format_exc()}")
 
-
     async def _process_updates(self) -> None:
         """Runs in Textual’s event loop; applies any fresh data to the UI."""
         while True:
@@ -793,7 +812,11 @@ class SpectrApp(App):
                         side = OrderSide.SELL
 
                     can_trade_now = self._can_trade_now()
-                    if (not self.auto_trading_enabled or not can_trade_now) and _sig and side:
+                    if (
+                        (not self.auto_trading_enabled or not can_trade_now)
+                        and _sig
+                        and side
+                    ):
                         should_prompt = not self.auto_trading_enabled or (
                             self.auto_trading_enabled and not can_trade_now
                         )
@@ -1026,7 +1049,10 @@ class SpectrApp(App):
     async def _shutdown_and_exit(self) -> None:
         """User-initiated shutdown that triggers cleanup and exits the app."""
         try:
-            log.debug("_shutdown current stack:\n%s", "".join(traceback.format_stack(limit=35)))
+            log.debug(
+                "_shutdown current stack:\n%s",
+                "".join(traceback.format_stack(limit=35)),
+            )
             reason = getattr(self, "_shutdown_requested_reason", None)
             req_stack = getattr(self, "_shutdown_requested_stack", None)
             if reason:
@@ -1261,9 +1287,8 @@ class SpectrApp(App):
         if not self.voice_agent:
             return
         overlay = self.overlay
-        self.call_from_thread(
-            overlay.show_prompt, "Recording... press V to stop"
-        )
+        self.call_from_thread(overlay.show_prompt, "Recording... press V to stop")
+
         def _status(ev: str) -> None:
             # Update the overlay prompt text from the worker thread
             try:
@@ -1277,6 +1302,7 @@ class SpectrApp(App):
                     )
             except Exception:
                 pass
+
         try:
             self.voice_agent.listen_and_answer(
                 status_cb=_status,
@@ -1616,7 +1642,9 @@ class SpectrApp(App):
             pass
         current_symbol = self._get_active_symbol()
         if not current_symbol:
-            self.overlay.flash_message("No active symbol to backtest.", style="bold red")
+            self.overlay.flash_message(
+                "No active symbol to backtest.", style="bold red"
+            )
             self.is_backtest = False
             return
         self.push_screen(
@@ -1637,14 +1665,18 @@ class SpectrApp(App):
         self._backtest_cancelled = True
         # Pop the loading screen if it's visible
         try:
-            if self.screen_stack and isinstance(self.screen_stack[-1], BacktestLoadingScreen):
+            if self.screen_stack and isinstance(
+                self.screen_stack[-1], BacktestLoadingScreen
+            ):
                 self.pop_screen()
         except Exception:
             pass
         # Exit backtest mode and restore live symbol view
         self._exit_backtest()
         try:
-            self.overlay.flash_message("Backtest canceled", duration=4.0, style="bold yellow")
+            self.overlay.flash_message(
+                "Backtest canceled", duration=4.0, style="bold yellow"
+            )
         except Exception:
             pass
 
@@ -1699,10 +1731,15 @@ class SpectrApp(App):
 
             try:
                 data_index = df.index
-                covers, (data_from, data_to, requested_from, requested_to) = _index_covers_date_range(
-                    data_index, form["from"], form["to"]
+                covers, (data_from, data_to, requested_from, requested_to) = (
+                    _index_covers_date_range(data_index, form["from"], form["to"])
                 )
-                if data_from is None or data_to is None or requested_from is None or requested_to is None:
+                if (
+                    data_from is None
+                    or data_to is None
+                    or requested_from is None
+                    or requested_to is None
+                ):
                     raise ValueError("Backtest data has no index.")
                 # Allow a 1-day tolerance on the start to accommodate market holidays.
                 if not covers:
@@ -1816,7 +1853,9 @@ class SpectrApp(App):
 
             # Close loading screen before showing results
             try:
-                if self.screen_stack and isinstance(self.screen_stack[-1], BacktestLoadingScreen):
+                if self.screen_stack and isinstance(
+                    self.screen_stack[-1], BacktestLoadingScreen
+                ):
                     self.pop_screen()
             except Exception:
                 pass
@@ -1834,15 +1873,15 @@ class SpectrApp(App):
         except Exception as exc:
             # Close loading screen on error
             try:
-                if self.screen_stack and isinstance(self.screen_stack[-1], BacktestLoadingScreen):
+                if self.screen_stack and isinstance(
+                    self.screen_stack[-1], BacktestLoadingScreen
+                ):
                     self.pop_screen()
             except Exception:
                 pass
             log.exception("Back-test error")
             try:
-                await self.push_screen(
-                    BacktestErrorScreen(f"Backtest failed:\n{exc}")
-                )
+                await self.push_screen(BacktestErrorScreen(f"Backtest failed:\n{exc}"))
             except Exception:
                 self.overlay.flash_message(f"Back-test error: {exc}", style="bold red")
             # Ensure we resume normal operation; user can close the dialog to return.
