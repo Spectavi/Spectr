@@ -1079,52 +1079,40 @@ class SpectrApp(App):
 
     # ------------ Action Functions -------------
 
-    def action_select_symbol(self, key: str):
+    def _navigate_to_symbol(self, index: int) -> None:
+        """Navigate to a specific symbol index and refresh data."""
         # Keyguard: ignore symbol navigation while backtest dialogs/results are active
         if self.is_backtest:
             return
         self._exit_backtest()
-        index = (int(key) - 1) if key != "0" else 9
+        
+        # Ensure the index is valid
+        if not (0 <= index < len(self.ticker_symbols)):
+            return
+            
+        self.active_symbol_index = index
+        symbol = self.ticker_symbols[index]
+        log.debug(f"action selected symbol: {symbol}")
+        self.run_worker(lambda: self._poll_one_symbol(symbol), thread=True)
+        if hasattr(self, "_poll_now"):
+            self._poll_now.set()
+        self.update_view(symbol)
 
-        if index <= len(self.ticker_symbols) - 1:
-            self.active_symbol_index = index
-            symbol = self.ticker_symbols[index]
-            log.debug(f"action selected symbol: {symbol}")
-            symbol = self.ticker_symbols[index]
-            self.run_worker(lambda: self._poll_one_symbol(symbol), thread=True)
-            if hasattr(self, "_poll_now"):
-                self._poll_now.set()
-            self.update_view(symbol)
+    def action_select_symbol(self, key: str):
+        index = (int(key) - 1) if key != "0" else 9
+        self._navigate_to_symbol(index)
 
     def action_prev_symbol(self):
-        # Keyguard: ignore symbol navigation while backtest dialogs/results are active
-        if self.is_backtest:
-            return
-        self._exit_backtest()
         new_index = self.active_symbol_index - 1
         if new_index < 0:
             new_index = len(self.ticker_symbols) - 1
-        self.active_symbol_index = new_index
-        symbol = self.ticker_symbols[new_index]
-        self.run_worker(lambda: self._poll_one_symbol(symbol), thread=True)
-        if hasattr(self, "_poll_now"):
-            self._poll_now.set()
-        self.update_view(symbol)
+        self._navigate_to_symbol(new_index)
 
     def action_next_symbol(self):
-        # Keyguard: ignore symbol navigation while backtest dialogs/results are active
-        if self.is_backtest:
-            return
-        self._exit_backtest()
         new_index = self.active_symbol_index + 1
         if new_index > len(self.ticker_symbols) - 1:
             new_index = 0
-        self.active_symbol_index = new_index
-        symbol = self.ticker_symbols[new_index]
-        self.run_worker(lambda: self._poll_one_symbol(symbol), thread=True)
-        if hasattr(self, "_poll_now"):
-            self._poll_now.set()
-        self.update_view(symbol)
+        self._navigate_to_symbol(new_index)
 
     # ------------- Order Dialog -------------
 
