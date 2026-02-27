@@ -18,7 +18,6 @@ from textual.app import App, ComposeResult
 from textual.reactive import reactive
 
 from . import cache
-from .strategies import metrics
 from . import utils
 from .agent import VoiceAgent
 from .dependencies import AppDependencies
@@ -28,14 +27,23 @@ from .strategies import load_strategy, list_strategies, get_strategy_code
 from .utils import (
     get_historical_data,
 )
-from . import broker_tools
 from .backtest import split_backtest_frames
 from .backtest_models import BacktestInput
 from .backtest_service import BacktestService
 from .mode import Mode, ModeManager
 from .services import LivePollingService, ScannerService, EquityService
+from .service_modules import (
+    StrategyService,
+    TradingService,
+    PortfolioService,
+    DataService,
+)
 from .store import AppState, AppStore, PortfolioState, StrategyState
 from .controllers import AppController
+from .symbol_manager import SymbolManager
+from .data_update_handler import DataUpdateHandler
+from .voice_handler import VoiceHandler
+from .trading_operations import TradingOperationsHandler
 from .views.backtest_input_dialog import BacktestInputDialog
 from .views.backtest_result_screen import BacktestResultScreen
 from .views.backtest_loading_screen import BacktestLoadingScreen
@@ -171,6 +179,11 @@ class SpectrApp(App):
 
     ticker_symbols = reactive([])
     active_symbol_index = reactive(0)
+
+    def watch_ticker_symbols(self, old: list[str], new: list[str]) -> None:
+        """Update polling service when ticker symbols change."""
+        if hasattr(self, "_polling_service") and self._polling_service:
+            self._polling_service.set_symbols(new)
     auto_trading_enabled: reactive[bool] = reactive(False)
     afterhours_enabled: reactive[bool] = reactive(True)
     strategy_active: reactive[bool] = reactive(False)
@@ -182,14 +195,10 @@ class SpectrApp(App):
     log_screen: reactive[ErrorLogOverlay | None] = reactive(None)
 
     def _get_active_symbol(self) -> str | None:
-        if not self.ticker_symbols:
-            return None
-        if not (0 <= self.active_symbol_index < len(self.ticker_symbols)):
-            return None
-        return self.ticker_symbols[self.active_symbol_index]
+        return self.symbol_manager.get_active_symbol()
 
     def _can_trade_now(self) -> bool:
-        return utils.is_market_open_now() or self.afterhours_enabled
+        return self.symbol_manager.can_trade_now()
 
     async def on_key(self, event) -> None:
         key = getattr(event, "key", "")
@@ -237,15 +246,12 @@ class SpectrApp(App):
                 self.update_status_bar()
 
     def _is_splash_active(self) -> bool:
-        """Return ``True`` if the splash screen is currently visible."""
-        return bool(
-            self.screen_stack and isinstance(self.screen_stack[-1], SplashScreen)
-        )
+        return self.symbol_manager.is_splash_active()
 
     def _prepend_open_positions(self) -> None:
         """Ensure open position symbols are at the start of ``ticker_symbols``."""
         try:
-            positions = self.broker_api.get_positions()
+            positions = self.trading_service.get_positions()
         except Exception as exc:
             log.warning(f"Failed to fetch open positions: {exc}")
             return
@@ -304,7 +310,12 @@ class SpectrApp(App):
     def _sync_store_portfolio(self) -> None:
         if not hasattr(self, "_controller") or not self._controller:
             return
-        balance = self._portfolio_balance_cache or {}
+        cache_snapshot = self.portfolio_service.get_portfolio_cache()
+        balance = cache_snapshot.get("balance_cache") or {}
+        self._portfolio_balance_cache = balance
+        self._portfolio_positions_cache = cache_snapshot.get("positions_cache")
+        self._portfolio_orders_cache = cache_snapshot.get("orders_cache")
+        self._equity_curve_data = cache_snapshot.get("equity_curve_data") or []
         self._controller.set_portfolio(
             cash=balance.get("cash") if balance else None,
             buying_power=balance.get("buying_power") if balance else None,
@@ -346,6 +357,10 @@ class SpectrApp(App):
             )
         )
         self._controller = AppController(self._store)
+        self.symbol_manager = SymbolManager(self)
+        self.data_handler = DataUpdateHandler(self)
+        self.voice_handler = VoiceHandler(self)
+        self.trading_ops = TradingOperationsHandler(self)
         self._order_status_worker = None
         self._voice_worker = None
         self._voice_stop_event: threading.Event | None = None
@@ -400,7 +415,7 @@ class SpectrApp(App):
                 self.voice_agent = VoiceAgent(
                     broker_api=self.broker_api,
                     data_api=self.data_api,
-                    get_cached_orders=lambda: self._portfolio_orders_cache,
+                    get_cached_orders=lambda: self.portfolio_service.get_orders() or [],
                     add_symbol=self.add_symbol,
                     remove_symbol=self.remove_symbol,
                     get_strategy_code=lambda: (
@@ -436,15 +451,59 @@ class SpectrApp(App):
         cache.save_selected_scanner(self.scanner_name)
         self.scanner = self.scanner_class(self.data_api, self.exit_event)
 
-        self._polling_service = LivePollingService(
-            exit_event=self.exit_event,
-            get_symbols=lambda: list(self.ticker_symbols),
-            poll_symbol_cb=self._poll_one_symbol,
+        # Track latest quotes and equity curve (initialize before using)
+        self._latest_quotes: dict[str, float] = {}
+        self._equity_curve_data: list[tuple[datetime, float, float]] = []
+
+        # Create service module instances
+        self.data_service = DataService(
             data_api=self.data_api,
             broker_api=self.broker_api,
+            latest_quotes=self._latest_quotes,
+        )
+
+        self.portfolio_service = PortfolioService(
+            broker_api=self.broker_api,
+            data_api=self.data_api,
+            voice_agent=self.voice_agent,
+            cache=cache,
+            controller=self._controller,
+            latest_quotes=self._latest_quotes,
+            portfolio_screen=None,  # Will be set when screen is active
+            equity_curve_data=self._equity_curve_data,
+            trade_amount=self.trade_amount,
+            auto_trading_enabled=self.auto_trading_enabled,
+        )
+
+        self.trading_service = TradingService(
+            broker_api=self.broker_api,
+            data_api=self.data_api,
+            voice_agent=self.voice_agent,
+            trade_amount=self.trade_amount,
+            auto_trading_enabled=self.auto_trading_enabled,
+            afterhours_enabled=self.afterhours_enabled,
+        )
+
+        self.strategy_service = StrategyService(
+            exit_event=self.exit_event,
+            logger=log,
+            strategy_name=self.strategy_name or "CustomStrategy",
+            strategy_class=self.strategy_class,
+            auto_trading_enabled=self.auto_trading_enabled,
+        )
+        # Set the strategy after service is initialized
+        self.strategy_service.set_strategy(self.strategy_name, self.strategy_class)
+
+        # Update services to use service modules
+        self._polling_service = LivePollingService(
+            exit_event=self.exit_event,
+            data_service=self.data_service,
+            broker_api=self.broker_api,
+            poll_symbol_cb=self._poll_one_symbol,
             interval=REFRESH_INTERVAL,
             logger=log,
         )
+        self._polling_service.set_symbols(self.ticker_symbols)
         self._scanner_service = ScannerService(
             exit_event=self.exit_event,
             scanner=self.scanner,
@@ -453,7 +512,7 @@ class SpectrApp(App):
         )
         self._equity_service = EquityService(
             exit_event=self.exit_event,
-            update_cb=self._update_portfolio_equity,
+            portfolio_service=self.portfolio_service,
             interval=EQUITY_INTERVAL,
             logger=log,
         )
@@ -465,10 +524,6 @@ class SpectrApp(App):
             ],
             logger=log,
         )
-
-        # Track latest quotes and equity curve
-        self._latest_quotes: dict[str, float] = {}
-        self._equity_curve_data: list[tuple[datetime, float, float]] = []
 
         # Cache for portfolio data so reopening the portfolio screen is instant
         self._portfolio_balance_cache: dict | None = None
@@ -520,19 +575,19 @@ class SpectrApp(App):
     def _fetch_data(self, symbol: str, quote: dict | None = None):
         """Fetch the latest data and inject the most recent quote."""
         log.debug(f"Fetching live data for {symbol}...")
-        df = self.data_api.fetch_chart_data(
+        df = self.data_service.fetch_chart_data(
             symbol,
             from_date=datetime.now().date().strftime("%Y-%m-%d"),
             to_date=datetime.now().date().strftime("%Y-%m-%d"),
         )
         if quote is None:
-            quote = self.data_api.fetch_quote(symbol)
-        if df.empty or quote is None:
+            quote = self.data_service.fetch_quote(symbol)
+        if df is None or df.empty or quote is None:
             return pd.DataFrame(), None
 
         price = quote.get("price")
         if price is not None:
-            self._latest_quotes[symbol.upper()] = float(price)
+            self.data_service.update_latest_quote(symbol, float(price))
 
         log.debug(f"Injecting quote for {symbol}")
         df = utils.inject_quote_into_df(df, quote)
@@ -542,12 +597,7 @@ class SpectrApp(App):
         log.debug("Analyzing indicators")
         if self.strategy_class is None:
             return df
-        df = metrics.analyze_indicators(
-            df,
-            self.strategy_class.get_indicators(),
-        )
-        df["trade"] = None
-        df["signal"] = None
+        df = self.strategy_service.analyze_indicators(df)
         return df
 
     def _handle_signal(
@@ -571,23 +621,24 @@ class SpectrApp(App):
                 else OrderSide.SELL if signal == "sell" else None
             )
             if side:
-                if self.broker_api.has_pending_order(symbol):
+                if self.trading_service.has_pending_order(symbol):
                     log.warning(f"Pending order for {symbol}; ignoring signal!")
                     self.call_from_thread(
                         self.signal_detected.remove,
                         (symbol, curr_price, signal, reason),
                     )
                     return
-                order = broker_tools.submit_order(
-                    self.broker_api,
-                    symbol,
-                    side,
-                    curr_price,
-                    self.trade_amount,
-                    self.auto_trading_enabled,
-                    voice_agent=self.voice_agent,
-                    success_sound_path=ORDER_SUCCESS_SOUND_PATH,
-                )
+                if side == OrderSide.BUY:
+                    order = self.trading_service.submit_buy_order(
+                        symbol,
+                        curr_price,
+                    )
+                else:
+                    order = self.trading_service.submit_sell_order(
+                        symbol,
+                        curr_price,
+                        amount_type="all",
+                    )
                 self.call_from_thread(
                     cache.attach_order_to_last_signal,
                     self.strategy_signals,
@@ -698,73 +749,13 @@ class SpectrApp(App):
         return position
 
     def _poll_one_symbol(self, symbol: str, quote: dict | None = None, position=None):
-        if self.strategy_class is None:
-            return
+        coro = self.data_handler.poll_one_symbol(symbol, quote, position)
         try:
-            df, quote = self._fetch_data(symbol, quote)
-            if df.empty or quote is None:
-                self.df_cache[symbol] = df
-                self._update_queue.put(symbol)
-                return
-
-            df = self._analyze_indicators(df)
-
-            if position is None:
-                position = self.broker_api.get_position(symbol)
-
-            position = self._normalize_position(position)
-            orders = None
-            try:
-                orders = self.broker_api.get_pending_orders(symbol)
-            except Exception:
-                orders = None
-
-            signal_dict = None
-            if self.strategy_active:
-                try:
-                    signal_dict = self.strategy_class.detect_signals(
-                        df,
-                        symbol,
-                        position=position,
-                        orders=orders,
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    log.error("[poll] signal error: %s", traceback.format_exc())
-
-                    def _flash_error() -> None:
-                        self.overlay.flash_message(
-                            f"Strategy error: {exc}",
-                            style="bold red",
-                        )
-
-                    self.call_from_thread(_flash_error)
-                    if self.voice_agent:
-                        self.call_from_thread(
-                            self.voice_agent.say, f"Strategy error: {exc}"
-                        )
-                    if self._is_splash_active():
-                        self.call_from_thread(self.pop_screen)
-                    return
-
-            # Check for signal
-            if signal_dict and not self._is_splash_active():
-                self._handle_signal(symbol, df, quote, signal_dict)
-
-            self.df_cache[symbol] = df
-            self._update_queue.put(symbol)
-            if symbol == self._get_active_symbol():
-                if self._is_splash_active():
-                    self.call_from_thread(self.pop_screen)
-                    if self.voice_agent:
-                        self.voice_agent.say("Welcome to Spectr", wait=True)
-                    else:
-                        utils.play_sound(INTRO_SOUND_PATH)
-                # refresh the active view from the UI thread
-                self.call_from_thread(
-                    self.update_view, self.ticker_symbols[self.active_symbol_index]
-                )
-        except Exception:
-            log.error(f"[poll] {symbol}: {traceback.format_exc()}")
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
+        else:
+            return loop.create_task(coro)
 
     async def _process_updates(self) -> None:
         """Runs in Textual’s event loop; applies any fresh data to the UI."""
@@ -822,7 +813,7 @@ class SpectrApp(App):
                         )
                         if should_prompt and _sig and side:
                             log.debug(f"Signal detected, opening dialog: {msg}")
-                            if self.broker_api.has_pending_order(_sym):
+                            if self.trading_service.has_pending_order(_sym):
                                 log.warning(
                                     f"Pending order for {_sym}; ignoring signal!"
                                 )
@@ -845,7 +836,7 @@ class SpectrApp(App):
                             f"AUTO-TRADE: Submitting order for {_sym} at {_price} with side {_sig}"
                         )
                         # Skip auto-ordering if there's already an open order
-                        if self.broker_api.has_pending_order(_sym):
+                        if self.trading_service.has_pending_order(_sym):
                             log.warning(f"Pending order for {_sym}; ignoring signal!")
                             self.signal_detected.remove(signal)
                             if self.voice_agent:
@@ -855,16 +846,17 @@ class SpectrApp(App):
                             continue
 
                         self.signal_detected.remove(signal)
-                        order = broker_tools.submit_order(
-                            self.broker_api,
-                            _sym,
-                            side,
-                            _price,
-                            self.trade_amount,
-                            self.auto_trading_enabled,
-                            voice_agent=self.voice_agent,
-                            success_sound_path=ORDER_SUCCESS_SOUND_PATH,
-                        )
+                        if side == OrderSide.BUY:
+                            order = self.trading_service.submit_buy_order(
+                                _sym,
+                                _price,
+                            )
+                        else:
+                            order = self.trading_service.submit_sell_order(
+                                _sym,
+                                _price,
+                                amount_type="all",
+                            )
                         # Save to cache.
                         cache.attach_order_to_last_signal(
                             self.strategy_signals,
@@ -881,69 +873,11 @@ class SpectrApp(App):
 
     def _update_portfolio_equity(self) -> None:
         """Calculate portfolio value using cached quotes and record a point."""
-        try:
-            balance = self.broker_api.get_balance() or {}
-            cash = balance.get("cash", 0.0)
-        except Exception as exc:
-            log.warning(f"Failed to fetch balance: {exc}")
-            cash = 0.0
-            balance = {}
-
-        try:
-            positions = self.broker_api.get_positions() or []
-        except Exception as exc:
-            log.warning(f"Failed to fetch positions: {exc}")
-            positions = []
-
-        total = cash
-        for pos in positions:
-            pos = self._normalize_position(pos)
-            sym = getattr(pos, "symbol", "").upper()
-            qty_raw = getattr(pos, "qty", 0)
-            try:
-                qty = float(qty_raw) if qty_raw is not None else 0.0
-            except (TypeError, ValueError):
-                qty = 0.0
-            price = self._latest_quotes.get(sym)
-            if price is None:
-                try:
-                    q = self.data_api.fetch_quote(sym)
-                    price = q.get("price") if q else None
-                    if price is not None:
-                        self._latest_quotes[sym] = float(price)
-                except Exception:
-                    price = None
-
-            if price is not None:
-                total += qty * float(price)
-            else:
-                mv = getattr(pos, "market_value", None)
-                if mv is not None:
-                    total += float(mv)
-
-        self._portfolio_balance_cache = {
-            "cash": cash,
-            "buying_power": balance.get("buying_power", 0.0),
-            "portfolio_value": total,
-        }
-
-        self._record_equity_point(cash, total)
-        self._sync_store_portfolio()
+        self.portfolio_service.update_portfolio_equity()
 
     def _record_equity_point(self, cash: float, total: float) -> None:
-        now = datetime.now()
-        cutoff = now - timedelta(hours=4)
-        self._equity_curve_data.append((now, cash, total))
-        self._equity_curve_data = [d for d in self._equity_curve_data if d[0] >= cutoff]
-        self._sync_store_portfolio()
-
-        # Update any open portfolio screen
-        if self.screen_stack and isinstance(self.screen_stack[-1], PortfolioScreen):
-            screen = self.screen_stack[-1]
-            screen.cash = cash
-            screen.portfolio_value = total
-            screen.equity_view.data = list(self._equity_curve_data)
-            screen.equity_view.refresh()
+        # This method is now handled by PortfolioService
+        pass
 
     async def _order_status_loop(self) -> None:
         """Periodic update of open order statuses."""
@@ -958,15 +892,8 @@ class SpectrApp(App):
                     not in {"filled", "canceled", "cancelled", "expired", "rejected"}
                 }
                 if open_ids:
-                    orders = self.broker_api.get_all_orders()
-                    if isinstance(orders, pd.DataFrame):
-                        if not orders.empty:
-                            orders = [
-                                SimpleNamespace(**rec)
-                                for rec in orders.to_dict(orient="records")
-                            ]
-                        else:
-                            orders = []
+                    self.portfolio_service.refresh_order_status()
+                    orders = self.portfolio_service.get_orders()
                     cache.update_order_statuses(self.strategy_signals, orders)
             except Exception as exc:  # pragma: no cover - best effort
                 log.error(f"[order_status] {exc}")
@@ -1093,7 +1020,7 @@ class SpectrApp(App):
         self.active_symbol_index = index
         symbol = self.ticker_symbols[index]
         log.debug(f"action selected symbol: {symbol}")
-        self.run_worker(lambda: self._poll_one_symbol(symbol), thread=True)
+        self.run_worker(self._poll_one_symbol, name=f"poll_{symbol}", description=f"Poll {symbol}")
         if hasattr(self, "_poll_now"):
             self._poll_now.set()
         self.update_view(symbol)
@@ -1147,31 +1074,7 @@ class SpectrApp(App):
     def open_order_dialog(
         self, side: OrderSide, pos_pct: float, symbol: str, reason: str | None = None
     ):
-        if self._is_splash_active():
-            return
-        if self.broker_api.has_pending_order(symbol):
-            log.warning(f"Pending order for {symbol}; dialog not opened")
-            if hasattr(self, "overlay") and self.overlay:
-                self.overlay.flash_message(
-                    f"Pending order for {symbol}", style="bold yellow", duration=5.0
-                )
-            return
-        order_type, limit_price = broker_tools.prepare_order_details(
-            symbol, side, self.broker_api
-        )
-        self.push_screen(
-            OrderDialog(
-                side=side,
-                symbol=symbol,
-                pos_pct=pos_pct,
-                get_pos_cb=self.broker_api.get_position,
-                get_price_cb=self.broker_api.fetch_quote,
-                trade_amount=self.trade_amount if side == OrderSide.BUY else 0.0,
-                reason=reason,
-                default_order_type=order_type,
-                default_limit_price=limit_price,
-            )
-        )
+        self.trading_ops.open_order_dialog(side, pos_pct, symbol, reason)
 
     def action_remove_current_symbol(self) -> None:
         """Remove the active symbol from the watchlist."""
@@ -1196,9 +1099,9 @@ class SpectrApp(App):
         self.push_screen(
             TickerInputDialog(
                 callback=self.on_ticker_submit,
-                top_movers_cb=self.data_api.fetch_top_movers,
-                quote_cb=self.data_api.fetch_quote,
-                profile_cb=getattr(self.data_api, "fetch_company_profile", None),
+                top_movers_cb=self.data_service.data_api.fetch_top_movers,
+                quote_cb=self.data_service.fetch_quote,
+                profile_cb=getattr(self.data_service.data_api, "fetch_company_profile", None),
                 scanner_results=self.scanner_results,
                 scanner_results_cb=lambda: self.scanner_results,
                 gainers_results=self.top_gainers,
@@ -1220,7 +1123,7 @@ class SpectrApp(App):
             self._sync_store_symbols()
             symbol = self.ticker_symbols[self.active_symbol_index]
 
-            self.run_worker(lambda: self._poll_one_symbol(symbol), thread=True)
+            self.run_worker(self._poll_one_symbol, name=f"poll_{symbol}", description=f"Poll {symbol}")
             if hasattr(self, "_poll_now"):
                 self._poll_now.set()
             self.update_view(symbol)
@@ -1251,24 +1154,7 @@ class SpectrApp(App):
             )
 
     def action_ask_agent(self) -> None:
-        if not self.voice_agent or self._is_splash_active():
-            return
-        if self._voice_worker and self._voice_worker.is_running:
-            if self._voice_is_recording and self._voice_stop_event:
-                self._voice_stop_event.set()
-            else:
-                if self.voice_agent:
-                    self.voice_agent.stop()
-                self._voice_worker.cancel()
-                self.overlay.clear_prompt()
-                self.update_status_bar()
-            return
-        self._voice_stop_event = threading.Event()
-        self._voice_is_recording = True
-        self._voice_worker = self.run_worker(
-            lambda: self._ask_agent(self._voice_stop_event),
-            thread=True,
-        )
+        self.voice_handler.action_ask_agent()
 
     def _ask_agent(self, stop_event: threading.Event | None = None) -> None:
         """Run the voice assistant and display errors in the overlay."""
@@ -1316,64 +1202,7 @@ class SpectrApp(App):
 
     async def on_order_dialog_submit(self, msg: OrderDialog.Submit) -> None:
         """Receive the order details and route them to your broker layer."""
-        log.info(
-            f"Placing {msg.side} {msg.qty} {msg.symbol} @ ${msg.price:.2f} "
-            f"(total ${msg.total:,.2f})"
-        )
-        if self.broker_api.has_pending_order(msg.symbol):
-            log.warning(f"Pending order for {msg.symbol}; not submitting")
-            if hasattr(self, "overlay") and self.overlay:
-                self.overlay.flash_message(
-                    f"Pending order for {msg.symbol}",
-                    style="bold yellow",
-                    duration=5.0,
-                )
-            return
-        try:
-            order = broker_tools.submit_order(
-                self.broker_api,
-                msg.symbol,
-                msg.side,
-                msg.price,
-                self.trade_amount,
-                self.auto_trading_enabled,
-                qty=msg.qty,
-                voice_agent=self.voice_agent,
-                success_sound_path=ORDER_SUCCESS_SOUND_PATH,
-            )
-            cache.attach_order_to_last_signal(
-                self.strategy_signals,
-                msg.symbol.upper(),
-                msg.side.name.lower(),
-                order,
-                reason=None,
-            )
-        except Exception as e:
-            log.error(e)
-            self.flash_message(f"{e.__str__()[:60]}")
-
-        # mark the last bar so GraphView can plot the trade immediately
-        symbol = msg.symbol.upper()
-        df = self.df_cache.get(symbol)
-        if df is not None and not df.empty:
-            last_ts = df.index[-1]
-
-            # add / update the helper columns used by GraphView
-            if msg.side == OrderSide.BUY:
-                if "buy_signals" not in df.columns:
-                    df["buy_signals"] = None
-                df.at[last_ts, "buy_signals"] = True
-            elif msg.side == OrderSide.SELL:
-                if "sell_signals" not in df.columns:
-                    df["sell_signals"] = None
-                df.at[last_ts, "sell_signals"] = True
-
-            # cache the modified frame
-            self.df_cache[symbol] = df
-
-            # if the user is currently viewing that symbol, refresh the plot now
-            if symbol == self.ticker_symbols[self.active_symbol_index]:
-                self.update_view(symbol)
+        self.trading_ops.on_order_dialog_submit(msg)
 
     # --------------
 
@@ -1381,64 +1210,53 @@ class SpectrApp(App):
         if self._is_splash_active():
             return
         if self.screen_stack and isinstance(self.screen_stack[-1], PortfolioScreen):
+            self.portfolio_service.portfolio_screen = None
             self.pop_screen()
         else:
             # Pull any cached portfolio data so the screen shows it immediately.
-            balance = self._portfolio_balance_cache or {}
+            cache_snapshot = self.portfolio_service.get_portfolio_cache()
+            balance = cache_snapshot.get("balance_cache") or {}
             cash = balance.get("cash") if balance else None
             buying_power = balance.get("buying_power") if balance else None
             portfolio_value = balance.get("portfolio_value") if balance else None
 
-            positions = self._portfolio_positions_cache
-            orders = self._portfolio_orders_cache
+            positions = cache_snapshot.get("positions_cache")
+            orders = cache_snapshot.get("orders_cache")
+            equity_data = cache_snapshot.get("equity_curve_data") or self._equity_curve_data
 
             # Open the portfolio screen immediately. If cached data exists it
             # will be displayed right away; otherwise placeholders are shown
             # while background tasks load the data.
-            self.push_screen(
-                PortfolioScreen(
-                    cash,
-                    buying_power,
-                    portfolio_value,
-                    positions,
-                    orders,
-                    self.broker_api.get_all_orders,
-                    self.broker_api.cancel_order,
-                    self.args.real_trades,
-                    self.set_real_trades,
-                    self.args.broker == "robinhood" and self.args.real_trades,
-                    os.getenv("PAPER_API_KEY", "") == ""
-                    or os.getenv("PAPER_SECRET", "") == "",
-                    self.auto_trading_enabled,
-                    self.set_auto_trading,
-                    self.afterhours_enabled,
-                    self.set_afterhours,
-                    self.broker_api.get_balance,
-                    self.broker_api.get_positions,
-                    equity_data=self._equity_curve_data,
-                    trade_amount=self.trade_amount,
-                    set_trade_amount_cb=self.set_trade_amount,
-                )
+            screen = PortfolioScreen(
+                cash,
+                buying_power,
+                portfolio_value,
+                positions,
+                orders,
+                self.broker_api.get_all_orders,
+                self.broker_api.cancel_order,
+                self.args.real_trades,
+                self.set_real_trades,
+                self.args.broker == "robinhood" and self.args.real_trades,
+                os.getenv("PAPER_API_KEY", "") == ""
+                or os.getenv("PAPER_SECRET", "") == "",
+                self.auto_trading_enabled,
+                self.set_auto_trading,
+                self.afterhours_enabled,
+                self.set_afterhours,
+                self.broker_api.get_balance,
+                self.broker_api.get_positions,
+                equity_data=equity_data,
+                trade_amount=self.trade_amount,
+                set_trade_amount_cb=self.set_trade_amount,
             )
+            self.portfolio_service.portfolio_screen = screen
+            self.push_screen(screen)
 
     # --------------
 
     def update_view(self, symbol: str):
-        self.overlay.symbol = symbol
-
-        df = self.df_cache.get(symbol)
-        if df is not None and not self.is_backtest:
-            self.symbol_view = self.query_one("#symbol-view", SymbolView)
-            indicators = (
-                self.strategy_class.get_indicators()
-                if self.strategy_class is not None
-                else []
-            )
-            self.symbol_view.load_df(symbol, df, self.args, indicators)
-
-        self.update_status_bar()
-        if self.query("#splash") and df is not None:
-            self.remove(self.query_one("#splash"))
+        self.data_handler.update_view(symbol)
 
     def update_status_bar(self):
         live_icon = "🤖" if self.auto_trading_enabled else "🚫"
@@ -1475,6 +1293,9 @@ class SpectrApp(App):
     def set_auto_trading(self, enabled: bool) -> None:
         """Enable or disable auto trading mode."""
         self.auto_trading_enabled = enabled
+        self.trading_service.update_auto_trading(enabled)
+        self.portfolio_service.auto_trading_enabled = enabled
+        self.strategy_service.set_auto_trading(enabled)
         if enabled:
             self.set_strategy_active(True)
         # Update the portfolio screen toggle if it's currently visible
@@ -1487,6 +1308,7 @@ class SpectrApp(App):
     def set_afterhours(self, enabled: bool) -> None:
         """Enable or disable afterhours trading."""
         self.afterhours_enabled = enabled
+        self.trading_service.update_afterhours(enabled)
         if self.screen_stack and isinstance(self.screen_stack[-1], PortfolioScreen):
             screen = self.screen_stack[-1]
             screen.afterhours_enabled = enabled
@@ -1496,6 +1318,7 @@ class SpectrApp(App):
     def set_strategy_active(self, enabled: bool) -> None:
         """Enable or disable strategy signal generation."""
         self.strategy_active = enabled
+        self.strategy_service.set_strategy_active(enabled)
         self._sync_store_strategy()
         self.update_status_bar()
 
@@ -1506,6 +1329,8 @@ class SpectrApp(App):
         except ValueError:
             self.trade_amount = 0.0
         cache.save_trade_amount(self.trade_amount)
+        self.trading_service.update_trade_amount(self.trade_amount)
+        self.portfolio_service.trade_amount = self.trade_amount
         self.update_status_bar()
 
     def set_strategy(self, name: str | None) -> None:
@@ -1513,6 +1338,7 @@ class SpectrApp(App):
         if not name:
             self.strategy_name = None
             self.strategy_class = None
+            self.strategy_service.set_strategy(self.strategy_name, self.strategy_class)
             cache.save_selected_strategy(None)
             self._sync_store_strategy()
             self.update_status_bar()
@@ -1522,15 +1348,16 @@ class SpectrApp(App):
             return
         self.strategy_name = name
         self.strategy_class = load_strategy(name)
+        self.strategy_service.set_strategy(self.strategy_name, self.strategy_class)
         cache.save_selected_strategy(name)
         self._sync_store_strategy()
 
         # Re-analyze any cached data using the newly selected strategy
-        specs = self.strategy_class.get_indicators()
+        specs = self.strategy_service.get_strategy_indicators()
         for sym, df in list(self.df_cache.items()):
             if df is not None and not df.empty:
                 try:
-                    self.df_cache[sym] = metrics.analyze_indicators(df, specs)
+                    self.df_cache[sym] = self.strategy_service.analyze_indicators(df)
                 except Exception:
                     log.error("Failed to update indicators for %s", sym)
 
@@ -1583,7 +1410,7 @@ class SpectrApp(App):
         """Remove *symbol* from ``ticker_symbols`` and return the updated list."""
         sym = symbol.strip().upper()
         if sym in self.ticker_symbols:
-            if self.broker_api.has_position(sym):
+            if self.portfolio_service.has_position(sym):
                 msg = (
                     f"I'm sorry, you currently have an open position for {sym}. "
                     "If we remove it from the watchlist we could miss a sell signal."

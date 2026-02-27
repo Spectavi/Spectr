@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from enum import Enum
-from typing import Callable, Iterable
+from typing import Any, Callable, Iterable
 
 
 class ServiceState(Enum):
@@ -94,19 +94,26 @@ class LivePollingService(PausableService):
         self,
         *,
         exit_event: asyncio.Event,
-        get_symbols: Callable[[], Iterable[str]],
+        data_service: Any,
+        broker_api: Any,
         poll_symbol_cb: Callable[[str, dict | None, object | None], None],
-        data_api,
-        broker_api,
         interval: float,
         logger: logging.Logger | None = None,
     ) -> None:
         super().__init__("polling", exit_event, logger=logger)
-        self._get_symbols = get_symbols
-        self._poll_symbol_cb = poll_symbol_cb
-        self._data_api = data_api
+        self._data_service = data_service
         self._broker_api = broker_api
+        self._poll_symbol_cb = poll_symbol_cb
         self._interval = interval
+        self._symbols: list[str] = []
+
+    def set_symbols(self, symbols: list[str]) -> None:
+        """Set the symbols to poll."""
+        self._symbols = symbols
+
+    def _get_symbols(self) -> list[str]:
+        """Get the list of symbols to poll."""
+        return self._symbols
 
     async def _run(self) -> None:
         while not self._exit_event.is_set():
@@ -120,9 +127,18 @@ class LivePollingService(PausableService):
                 continue
 
             try:
-                quotes = self._data_api.fetch_quotes(list(symbols))
+                # Fetch quotes individually instead of batch
+                quotes = {}
+                for sym in symbols:
+                    try:
+                        quote = self._data_service.fetch_quote(sym)
+                        if quote:
+                            quotes[sym.upper()] = quote
+                    except Exception as exc:
+                        self._log.error("[poll] quote error for %s: %s", sym, exc)
+                        quotes[sym.upper()] = None
             except Exception as exc:
-                self._log.error("[poll] batch quote error: %s", exc)
+                self._log.error("[poll] quote error: %s", exc)
                 quotes = {sym: None for sym in symbols}
 
             try:
@@ -156,12 +172,12 @@ class EquityService(PausableService):
         self,
         *,
         exit_event: asyncio.Event,
-        update_cb: Callable[[], None],
+        portfolio_service: Any,
         interval: float,
         logger: logging.Logger | None = None,
     ) -> None:
         super().__init__("equity", exit_event, logger=logger)
-        self._update_cb = update_cb
+        self._portfolio_service = portfolio_service
         self._interval = interval
 
     async def _run(self) -> None:
@@ -169,7 +185,7 @@ class EquityService(PausableService):
             if not await self._wait_until_resumed():
                 break
             try:
-                await asyncio.to_thread(self._update_cb)
+                await asyncio.to_thread(self._portfolio_service.update_portfolio_equity)
             except Exception as exc:
                 self._log.error("[equity] %s", exc)
 
