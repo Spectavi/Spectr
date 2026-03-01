@@ -693,23 +693,28 @@ class SpectrApp(App):
 
         # Set symbols and active symbol
         self.ticker_symbols = self.args.symbols
-        # Ensure any open positions are at the start of the watchlist.
-        self._prepend_open_positions()
-        self.args.symbols = self.ticker_symbols
+
+        async def start_services_after_splash():
+            await asyncio.sleep(1.5)
+            # Ensure any open positions are at the start of the watchlist (after splash).
+            self._prepend_open_positions()
+            self.args.symbols = self.ticker_symbols
+            if self._polling_service:
+                self._polling_service.set_symbols(self.ticker_symbols)
+                self._polling_service.start()
+            if self._scanner_service:
+                self._scanner_service.start()
+            if self._equity_service:
+                self._equity_service.start()
+
+        self.run_worker(start_services_after_splash, thread=False)
+
         self.active_symbol_index = 0
         self._sync_store_symbols()
         self._initial_symbols_pending = {s.upper() for s in self.ticker_symbols}
 
         log.debug(f"self.ticker_symbols: {self.ticker_symbols}")
         log.debug("App mounted.")
-
-        # Kick off background workers
-        if self._polling_service:
-            self._polling_service.start()
-        if self._scanner_service:
-            self._scanner_service.start()
-        if self._equity_service:
-            self._equity_service.start()
         self._order_status_worker = self.run_worker(
             self._order_status_loop, thread=False
         )
