@@ -12,7 +12,6 @@ log = logging.getLogger(__name__)
 
 BUY_SOUND_PATH = "res/buy.mp3"
 SELL_SOUND_PATH = "res/sell.mp3"
-INTRO_SOUND_PATH = "res/intro.mp3"
 ORDER_SUCCESS_SOUND_PATH = "res/order_success.mp3"
 
 
@@ -34,8 +33,13 @@ class DataUpdateHandler:
         )
         if quote is None:
             quote = self.app.data_service.fetch_quote(symbol)
-        if df is None or df.empty or quote is None:
+        if quote is None:
             return pd.DataFrame(), None
+        if df is None or df.empty:
+            price = quote.get("price")
+            if price is not None:
+                self.app.data_service.update_latest_quote(symbol, float(price))
+            return pd.DataFrame(), quote
 
         price = quote.get("price")
         if price is not None:
@@ -73,19 +77,13 @@ class DataUpdateHandler:
                 log.warning(f"Failed to update symbol view: {e}")
 
         self.update_status_bar()
-        if self.app.query("#splash") and df is not None:
-            try:
-                self.app.remove(self.app.query_one("#splash"))
-            except Exception:
-                pass
 
     def update_status_bar(self) -> None:
         self.app.update_status_bar()
 
     async def poll_one_symbol(self, symbol: str, quote=None, position=None) -> None:
-        from . import utils
         import traceback
-
+        
         if self.app.strategy_class is None:
             return
         try:
@@ -93,12 +91,8 @@ class DataUpdateHandler:
             if df.empty or quote is None:
                 self.app.df_cache[symbol] = df
                 self.app._update_queue.put(symbol)
-                if symbol == self._get_active_symbol() and self._is_splash_active():
-                    self.app.call_from_thread(self.app.pop_screen)
-                    if self.app.voice_agent:
-                        self.app.voice_agent.say("Welcome to Spectr", wait=True)
-                    else:
-                        utils.play_sound(INTRO_SOUND_PATH)
+                if quote is not None:
+                    self.app.call_from_thread(self.app._mark_symbol_loaded, symbol)
                 return
 
             df = self.analyze_indicators(df)
@@ -145,13 +139,8 @@ class DataUpdateHandler:
 
             self.app.df_cache[symbol] = df
             self.app._update_queue.put(symbol)
+            self.app.call_from_thread(self.app._mark_symbol_loaded, symbol)
             if symbol == self._get_active_symbol():
-                if self._is_splash_active():
-                    self.app.call_from_thread(self.app.pop_screen)
-                    if self.app.voice_agent:
-                        self.app.voice_agent.say("Welcome to Spectr", wait=True)
-                    else:
-                        utils.play_sound(INTRO_SOUND_PATH)
                 self.app.call_from_thread(
                     self.app.update_view,
                     self.app.ticker_symbols[self.app.active_symbol_index],

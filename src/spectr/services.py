@@ -30,8 +30,10 @@ class PausableService:
         self.state = ServiceState.STOPPED
 
     def start(self) -> None:
+        log = logging.getLogger(__name__)
         if self._task and not self._task.done():
             return
+        log.info(f"[{self.name}] starting service")
         self._task = asyncio.create_task(self._run_wrapper())
         self.state = ServiceState.RUNNING
 
@@ -69,10 +71,13 @@ class PausableService:
             if self._exit_event.is_set():
                 return False
             done, pending = await asyncio.wait(
-                [self._pause_event.wait(), self._exit_event.wait()],
+                [
+                    asyncio.create_task(self._pause_event.wait()),
+                    asyncio.create_task(self._exit_event.wait()),
+                ],
                 return_when=asyncio.FIRST_COMPLETED,
             )
-            for task in pending:
+            for task in list(pending):
                 task.cancel()
             if self._exit_event.is_set():
                 return False
@@ -96,7 +101,7 @@ class LivePollingService(PausableService):
         exit_event: asyncio.Event,
         data_service: Any,
         broker_api: Any,
-        poll_symbol_cb: Callable[[str, dict | None, object | None], None],
+        poll_symbol_cb: Callable[[str, dict | None, object | None], Any],
         interval: float,
         logger: logging.Logger | None = None,
     ) -> None:
@@ -109,6 +114,8 @@ class LivePollingService(PausableService):
 
     def set_symbols(self, symbols: list[str]) -> None:
         """Set the symbols to poll."""
+        log = logging.getLogger(__name__)
+        log.debug(f"[{self.name}] set_symbols called with {symbols}")
         self._symbols = symbols
 
     def _get_symbols(self) -> list[str]:
@@ -116,6 +123,8 @@ class LivePollingService(PausableService):
         return self._symbols
 
     async def _run(self) -> None:
+        log = logging.getLogger(__name__)
+        log.info(f"[{self.name}] service _run starting, symbols={self._get_symbols()}")
         while not self._exit_event.is_set():
             if not await self._wait_until_resumed():
                 break
@@ -181,6 +190,8 @@ class EquityService(PausableService):
         self._interval = interval
 
     async def _run(self) -> None:
+        log = logging.getLogger(__name__)
+        log.info(f"[{self.name}] service _run starting, symbols={self._get_symbols()}")
         while not self._exit_event.is_set():
             if not await self._wait_until_resumed():
                 break

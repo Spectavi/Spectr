@@ -182,8 +182,14 @@ class SpectrApp(App):
 
     def watch_ticker_symbols(self, old: list[str], new: list[str]) -> None:
         """Update polling service when ticker symbols change."""
-        if hasattr(self, "_polling_service") and self._polling_service:
-            self._polling_service.set_symbols(new)
+        try:
+            log.debug(f"[watch_ticker_symbols] old={old}, new={new}, has_polling={hasattr(self, '_polling_service')}")
+            if hasattr(self, "_polling_service") and self._polling_service:
+                log.debug(f"[watch_ticker_symbols] Calling set_symbols with {new}")
+                self._polling_service.set_symbols(new)
+                log.debug(f"[watch_ticker_symbols] set_symbols complete")
+        except Exception as exc:
+            log.error(f"[watch_ticker_symbols] error updating symbols: {exc}", exc_info=True)
     auto_trading_enabled: reactive[bool] = reactive(False)
     afterhours_enabled: reactive[bool] = reactive(True)
     strategy_active: reactive[bool] = reactive(False)
@@ -367,6 +373,7 @@ class SpectrApp(App):
         self._voice_is_recording = False
         self._backtest_cancelled = False
         self._bt_skipping_updates = False
+        self._initial_symbols_pending: set[str] | None = None
         self.df_cache = {symbol: pd.DataFrame() for symbol in self.ticker_symbols}
         if not os.path.exists(cache.CACHE_DIR):
             os.mkdir(cache.CACHE_DIR)
@@ -673,6 +680,7 @@ class SpectrApp(App):
         log.debug("on_mount start")
         await self.push_screen(SplashScreen(id="splash"), wait_for_dismiss=False)
         self.refresh()
+        await asyncio.sleep(0)
 
         overlay = self.overlay
         if self.voice_agent:
@@ -690,6 +698,7 @@ class SpectrApp(App):
         self.args.symbols = self.ticker_symbols
         self.active_symbol_index = 0
         self._sync_store_symbols()
+        self._initial_symbols_pending = {s.upper() for s in self.ticker_symbols}
 
         log.debug(f"self.ticker_symbols: {self.ticker_symbols}")
         log.debug("App mounted.")
@@ -1020,7 +1029,7 @@ class SpectrApp(App):
         self.active_symbol_index = index
         symbol = self.ticker_symbols[index]
         log.debug(f"action selected symbol: {symbol}")
-        self.run_worker(self._poll_one_symbol, name=f"poll_{symbol}", description=f"Poll {symbol}")
+        self.run_worker(self._poll_one_symbol, thread=False, name=f"poll_{symbol}", description=f"Poll {symbol}")
         if hasattr(self, "_poll_now"):
             self._poll_now.set()
         self.update_view(symbol)
@@ -1123,7 +1132,7 @@ class SpectrApp(App):
             self._sync_store_symbols()
             symbol = self.ticker_symbols[self.active_symbol_index]
 
-            self.run_worker(self._poll_one_symbol, name=f"poll_{symbol}", description=f"Poll {symbol}")
+            self.run_worker(self._poll_one_symbol, thread=False, name=f"poll_{symbol}", description=f"Poll {symbol}")
             if hasattr(self, "_poll_now"):
                 self._poll_now.set()
             self.update_view(symbol)
@@ -1279,6 +1288,14 @@ class SpectrApp(App):
         overlay.update_status(
             f"{(self.active_symbol_index + 1) if active_symbol else 0} / {len(self.ticker_symbols)} | {strat_status} | {auto_trade_state}"
         )
+
+    def _mark_symbol_loaded(self, symbol: str) -> None:
+        pending = self._initial_symbols_pending
+        if pending is None:
+            return
+        pending.discard(symbol.upper())
+        if not pending and self._is_splash_active():
+            self.pop_screen()
 
     def flash_message(self, msg: str):
         overlay = self.overlay
