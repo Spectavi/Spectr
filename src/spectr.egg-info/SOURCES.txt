@@ -5,7 +5,6 @@ src/spectr/__init__.py
 src/spectr/agent.py
 src/spectr/backtest.py
 src/spectr/backtest_models.py
-src/spectr/backtest_service.py
 src/spectr/backtest_workflow.py
 src/spectr/broker_tools.py
 src/spectr/cache.py
@@ -51,6 +50,7 @@ src/spectr/scanners/__init__.py
 src/spectr/scanners/custom_scanner.py
 src/spectr/scanners/scanner_interface.py
 src/spectr/service_modules/__init__.py
+src/spectr/service_modules/backtest_service.py
 src/spectr/service_modules/base_service.py
 src/spectr/service_modules/data_service.py
 src/spectr/service_modules/order_service.py
