@@ -1034,7 +1034,11 @@ class SpectrApp(App):
         self.active_symbol_index = index
         symbol = self.ticker_symbols[index]
         log.debug(f"action selected symbol: {symbol}")
-        self.run_worker(self._poll_one_symbol, thread=False, name=f"poll_{symbol}", description=f"Poll {symbol}")
+
+        async def poll_and_update():
+            await asyncio.to_thread(self._poll_one_symbol, symbol)
+
+        self.run_worker(poll_and_update)
         if hasattr(self, "_poll_now"):
             self._poll_now.set()
         self.update_view(symbol)
@@ -1137,7 +1141,10 @@ class SpectrApp(App):
             self._sync_store_symbols()
             symbol = self.ticker_symbols[self.active_symbol_index]
 
-            self.run_worker(self._poll_one_symbol, thread=False, name=f"poll_{symbol}", description=f"Poll {symbol}")
+            async def poll_and_update():
+                await asyncio.to_thread(self._poll_one_symbol, symbol)
+
+            self.run_worker(poll_and_update)
             if hasattr(self, "_poll_now"):
                 self._poll_now.set()
             self.update_view(symbol)
