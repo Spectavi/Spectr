@@ -65,11 +65,15 @@ def run_backtest(
             to_date=to_date,
         )
 
-    # Ensure indicators are present
-    df = metrics.analyze_indicators(
-        df,
-        strategy_class.get_indicators(),
-    )
+    indicator_cols = {'macd', 'macd_signal', 'macd_close', 'macd_angle',
+                      'macd_crossover', 'bb_upper', 'bb_lower', 'bb_mid', 
+                      'bb_angle', 'vwap'}
+    has_indicators = any(c in df.columns for c in indicator_cols)
+    if not has_indicators:
+        df = metrics.analyze_indicators(
+            df,
+            strategy_class.get_indicators(),
+        )
 
     cerebro = bt.Cerebro()
     # Dynamically map ``config`` attributes onto the strategy parameters.  This
