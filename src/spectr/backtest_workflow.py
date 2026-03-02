@@ -5,7 +5,7 @@ import pandas as pd
 
 from .backtest import split_backtest_frames
 from .backtest_models import BacktestInput
-from .backtest_service import BacktestService
+from .service_modules.backtest_service import BacktestService
 from .cache import save_last_backtest, attach_order_to_last_signal
 from .config import ORDER_SUCCESS_SOUND_PATH
 from .fetch.broker_interface import OrderSide

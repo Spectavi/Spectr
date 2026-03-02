@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pandas as pd
 
-from . import utils
-from .backtest import run_backtest
-from .backtest_models import BacktestInput, BacktestReport
+from .. import utils
+from ..backtest import run_backtest
+from ..backtest_models import BacktestInput, BacktestReport
 
 
 class BacktestService:

@@ -29,7 +29,7 @@ from .utils import (
 )
 from .backtest import split_backtest_frames
 from .backtest_models import BacktestInput
-from .backtest_service import BacktestService
+from .service_modules.backtest_service import BacktestService
 from .mode import Mode, ModeManager
 from .services import LivePollingService, ScannerService, EquityService
 from .service_modules import (
