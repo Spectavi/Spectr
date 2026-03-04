@@ -11,6 +11,7 @@ python-dotenv>=1.0
 robin_stocks>=2.1
 pyperclip>=1.8
 black>=25.1.0
+flask>=3.0
 
 [audio]
 pygame>=2.5

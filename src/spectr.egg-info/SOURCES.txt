@@ -30,6 +30,7 @@ src/spectr/trading_operations.py
 src/spectr/utils.py
 src/spectr/voice_assistant_manager.py
 src/spectr/voice_handler.py
+src/spectr/webserver.py
 src/spectr.egg-info/PKG-INFO
 src/spectr.egg-info/SOURCES.txt
 src/spectr.egg-info/dependency_links.txt
@@ -88,6 +89,8 @@ src/spectr/views/ticker_input_dialog.py
 src/spectr/views/top_overlay.py
 src/spectr/views/trades_screen.py
 src/spectr/views/volume_view.py
+src/spectr/webui/node_modules/flatted/python/flatted.py
+src/spectr/webui/node_modules/shell-quote/print.py
 tests/test_afterhours_reason.py
 tests/test_afterhours_toggle.py
 tests/test_alpaca_order_tif.py
@@ -138,3 +141,5 @@ tests/test_trailing_stop_levels.py
 tests/test_utils.py
 tests/test_uuid_serialization.py
 tests/test_voice_agent.py
+tests/test_webserver.py
+tests/test_webui_integration.py

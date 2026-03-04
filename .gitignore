@@ -12,3 +12,4 @@ cache
 .vizr
 .bak
 .webui_secret_key
+node_modules/

@@ -16,6 +16,11 @@ def main() -> None:
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        "--webui",
+        action="store_true",
+        help="Start web UI server instead of TUI",
+    )
+    parser.add_argument(
         "--symbols",
         type=str,
         default="AAPL,AMZN,META,MSFT,NVDA,TSLA,GOOG,VTI,GLD,BTCUSD",
@@ -81,6 +86,12 @@ def main() -> None:
     )
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
+
+    if args.webui:
+        from . import webserver
+
+        webserver.start_server()
+        return
 
     # Enable verbose logging when --debug is passed
     if args.debug:
