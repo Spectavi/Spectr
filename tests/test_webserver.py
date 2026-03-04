@@ -341,3 +341,50 @@ def test_api_tickers_returns_cached_data():
             assert response.json == ['TEST1', 'TEST2']
         finally:
             webserver.cached_tickers = original
+
+
+def test_get_portfolio_no_api():
+    from spectr import webserver
+    
+    original_api = webserver.data_api
+    try:
+        webserver.data_api = None
+        
+        response = webserver.app.test_client().get('/api/portfolio')
+        
+        assert response.status_code == 200
+        data = response.json
+        assert 'balance' in data
+        assert 'positions' in data
+        assert 'orders' in data
+    finally:
+        webserver.data_api = original_api
+
+
+def test_get_portfolio_with_api():
+    from spectr import webserver
+    
+    original_api = webserver.data_api
+    try:
+        mock_api = Mock()
+        mock_api.get_balance.return_value = {
+            "cash": 10000.0,
+            "buying_power": 20000.0,
+            "portfolio_value": 30000.0
+        }
+        mock_api.get_positions.return_value = [
+            Mock(symbol="AAPL", qty=10, market_value=1500.0, avg_entry_price=100.0)
+        ]
+        mock_api.get_all_orders.return_value = []
+        
+        webserver.data_api = mock_api
+        
+        response = webserver.app.test_client().get('/api/portfolio')
+        
+        assert response.status_code == 200
+        data = response.json
+        assert data['balance']['cash'] == 10000.0
+        assert len(data['positions']) == 1
+        assert data['positions'][0]['symbol'] == 'AAPL'
+    finally:
+        webserver.data_api = original_api

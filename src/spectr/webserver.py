@@ -39,6 +39,79 @@ def get_tickers():
     return jsonify(cached_tickers)
 
 
+@app.route("/api/portfolio", methods=["GET"])
+def get_portfolio():
+    global data_api
+    if not data_api:
+        return jsonify({
+            "balance": {},
+            "positions": [],
+            "orders": []
+        })
+    
+    try:
+        balance = data_api.get_balance() or {}
+        positions = data_api.get_positions() or []
+        orders = data_api.get_all_orders() or []
+        
+        positions_data = []
+        for pos in positions:
+            pos_dict = {
+                "symbol": getattr(pos, "symbol", ""),
+                "qty": float(getattr(pos, "qty", 0) or 0),
+                "market_value": float(getattr(pos, "market_value", 0) or 0),
+                "avg_entry_price": float(getattr(pos, "avg_entry_price", 0) or 0)
+            }
+            positions_data.append(pos_dict)
+        
+        orders_data = []
+        for order in orders:
+            dt = (
+                getattr(order, "submitted_at", None)
+                or getattr(order, "created_at", None)
+                or getattr(order, "filled_at", None)
+            )
+            if hasattr(dt, "strftime"):
+                dt_str = dt.strftime("%Y-%m-%d %H:%M")
+            else:
+                dt_str = str(dt) if dt else ""
+            
+            price = (
+                getattr(order, "filled_avg_price", None)
+                or getattr(order, "limit_price", None)
+                or getattr(order, "price", None)
+                or 0.0
+            )
+            try:
+                value = float(order.qty) * float(price)
+            except Exception:
+                value = 0.0
+            
+            order_dict = {
+                "datetime": dt_str,
+                "symbol": getattr(order, "symbol", ""),
+                "side": getattr(order, "side", ""),
+                "qty": float(getattr(order, "qty", 0) or 0),
+                "value": value,
+                "order_type": getattr(order, "order_type", ""),
+                "status": getattr(order, "status", "")
+            }
+            orders_data.append(order_dict)
+        
+        return jsonify({
+            "balance": balance,
+            "positions": positions_data,
+            "orders": orders_data
+        })
+    except Exception as e:
+        return jsonify({
+            "balance": {},
+            "positions": [],
+            "orders": [],
+            "error": str(e)
+        }), 500
+
+
 @app.route("/api/chart/<symbol>", methods=["GET"])
 def get_chart_data(symbol):
     global data_api

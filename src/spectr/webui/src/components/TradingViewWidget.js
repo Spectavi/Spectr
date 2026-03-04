@@ -1,78 +1,91 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 
-function TradingViewWidget({ data }) {
+let tradingViewLoaded = false;
+let widgetInstance = null;
+
+function TradingViewWidget({ data, ticker }) {
   const containerRef = useRef(null);
-  const scriptRef = useRef(null);
+
+  const chartConfig = useMemo(() => ({
+    symbol: data.symbol,
+    chartData: data.data || [],
+    containerId: `tradingview_chart_${ticker}`
+  }), [data, ticker]);
 
   useEffect(() => {
-    if (!containerRef.current || !data) return;
+    if (!containerRef.current) return;
 
-    const symbol = data.symbol;
-    const chartData = data.data || [];
+    const initializeWidget = () => {
+      if (widgetInstance) {
+        widgetInstance.cleanup();
+      }
 
-    if (scriptRef.current) {
-      scriptRef.current.remove();
+      widgetInstance = new window.TradingView.widget({
+        autosize: true,
+        symbol: chartConfig.symbol,
+        interval: '1',
+        timezone: 'Etc/UTC',
+        theme: 'dark',
+        style: '1',
+        locale: 'en',
+        toolbar_bg: '#f1f3f6',
+        enable_publishing: false,
+        allow_symbol_change: true,
+        container_id: chartConfig.containerId,
+        datafeed: {
+          getBars: function(symbolInfo, resolution, from, to, callback) {
+            if (chartConfig.chartData.length === 0) {
+              callback([]);
+              return;
+            }
+            
+            const bars = chartConfig.chartData.map(bar => ({
+              time: new Date(bar.timestamp).getTime(),
+              open: bar.open,
+              high: bar.high,
+              low: bar.low,
+              close: bar.close,
+              volume: bar.volume
+            }));
+            
+            callback(bars);
+          },
+          subscribe: function(symbolInfo, onTick, onResetCache) {
+            onTick({});
+          },
+          unsubscribe: function() {}
+        }
+      });
+    };
+
+    if (tradingViewLoaded && window.TradingView) {
+      initializeWidget();
+    } else {
+      const script = document.createElement('script');
+      script.type = 'text/javascript';
+      script.src = 'https://s3.tradingview.com/tv.js';
+      script.async = true;
+      script.defer = true;
+      script.onload = () => {
+        tradingViewLoaded = true;
+        if (window.TradingView) {
+          initializeWidget();
+        }
+      };
+      document.head.appendChild(script);
     }
 
-    const script = document.createElement('script');
-    script.type = 'text/javascript';
-    script.src = 'https://s3.tradingview.com/tv.js';
-    script.async = true;
-    script.defer = true;
-    script.onload = () => {
-      if (window.TradingView) {
-        new window.TradingView.widget({
-          autosize: true,
-          symbol: symbol,
-          interval: '1',
-          timezone: 'Etc/UTC',
-          theme: 'dark',
-          style: '1',
-          locale: 'en',
-          toolbar_bg: '#f1f3f6',
-          enable_publishing: false,
-          allow_symbol_change: true,
-          container_id: containerRef.current.id,
-          datafeed: {
-            getBars: function(symbolInfo, resolution, from, to, callback) {
-              if (chartData.length === 0) {
-                callback([]);
-                return;
-              }
-              
-              const bars = chartData.map(bar => ({
-                time: new Date(bar.timestamp).getTime(),
-                open: bar.open,
-                high: bar.high,
-                low: bar.low,
-                close: bar.close,
-                volume: bar.volume
-              }));
-              
-              callback(bars);
-            },
-            subscribe: function(symbolInfo, onTick, onResetCache) {
-              onTick({});
-            },
-            unsubscribe: function() {}
-          }
-        });
-      }
-    };
-
-    scriptRef.current = script;
-    containerRef.current.appendChild(script);
-
     return () => {
-      if (scriptRef.current) {
-        scriptRef.current.remove();
+      if (widgetInstance) {
+        widgetInstance.cleanup();
+        widgetInstance = null;
       }
     };
-  }, [data]);
+  }, [chartConfig]);
 
   return (
     <div
-      id="tradingview_chart"
+      id={chartConfig.containerId}
       ref={containerRef}
       style={{ flex: 1, width: '100%', height: '100%' }}
     />

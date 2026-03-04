@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import PortfolioDialog from './PortfolioDialog';
 
 function Sidebar({ tickers, selectedTicker, onSelect }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [showPortfolio, setShowPortfolio] = useState(false);
 
   if (tickers.length === 0) {
     return (
@@ -23,6 +25,13 @@ function Sidebar({ tickers, selectedTicker, onSelect }) {
       
       {!collapsed && (
         <div style={{ flex: 1, overflowY: 'auto' }}>
+          <button
+            onClick={() => setShowPortfolio(true)}
+            style={portfolioButtonStyle}
+          >
+            Portfolio
+          </button>
+          
           <h3 style={{ textAlign: 'center', margin: '10px 0' }}>Tickers</h3>
           <ul style={tickerListStyle}>
             {tickers.map((ticker) => (
@@ -40,6 +49,10 @@ function Sidebar({ tickers, selectedTicker, onSelect }) {
             ))}
           </ul>
         </div>
+      )}
+      
+      {showPortfolio && (
+        <PortfolioDialog onClose={() => setShowPortfolio(false)} />
       )}
     </div>
   );
@@ -69,6 +82,18 @@ const toggleButtonStyle = {
   color: '#8b949e',
   cursor: 'pointer',
   fontSize: '16px',
+};
+
+const portfolioButtonStyle = {
+  margin: '10px',
+  padding: '8px 12px',
+  backgroundColor: '#58a6ff',
+  color: '#ffffff',
+  border: 'none',
+  borderRadius: '6px',
+  cursor: 'pointer',
+  fontSize: '14px',
+  fontWeight: '600',
 };
 
 const tickerListStyle = {
