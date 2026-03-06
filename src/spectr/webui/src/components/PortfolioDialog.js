@@ -6,9 +6,33 @@ function PortfolioDialog({ onClose }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isLiveAccount, setIsLiveAccount] = useState(false);
+  const [accountInfoLoading, setAccountInfoLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/portfolio')
+    fetchPortfolioData(isLiveAccount);
+  }, [isLiveAccount]);
+
+  // Fetch account info to determine which account type is configured
+  useEffect(() => {
+    fetch('/api/account-info')
+      .then(res => res.json())
+      .then(data => {
+        setIsLiveAccount(!data.defaultToPaper);
+        setAccountInfoLoading(false);
+      })
+      .catch(err => {
+        console.error('Failed to load account info:', err);
+        setAccountInfoLoading(false);
+      });
+  }, []);
+
+  const fetchPortfolioData = (live) => {
+    setLoading(true);
+    setError(null);
+    
+    const url = `/api/portfolio?${live ? 'live=true' : ''}`;
+    fetch(url)
       .then(res => res.json())
       .then(data => {
         setBalance(data.balance || {});
@@ -22,7 +46,7 @@ function PortfolioDialog({ onClose }) {
         setError('Failed to load portfolio data');
         setLoading(false);
       });
-  }, []);
+  };
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('en-US', {
@@ -31,7 +55,7 @@ function PortfolioDialog({ onClose }) {
     }).format(value || 0);
   };
 
-  if (loading) {
+  if (loading || accountInfoLoading) {
     return (
       <div style={overlayStyle}>
         <div style={dialogStyle}>
@@ -64,6 +88,18 @@ function PortfolioDialog({ onClose }) {
       <div style={dialogStyle}>
         <h2>Portfolio</h2>
         
+        <div style={accountToggleContainerStyle}>
+          <label style={accountLabelStyle}>
+            <input
+              type="checkbox"
+              checked={isLiveAccount}
+              onChange={(e) => setIsLiveAccount(e.target.checked)}
+              style={{ marginRight: '8px' }}
+            />
+            Live Trading Account
+          </label>
+        </div>
+
         <div style={balancesContainerStyle}>
           <div style={balanceBoxStyle}>
             <span>Cash:</span>
@@ -107,32 +143,34 @@ function PortfolioDialog({ onClose }) {
 
         <h3>Transaction History</h3>
         {orders.length > 0 ? (
-          <table style={tableStyle}>
-            <thead>
-              <tr>
-                <th>Date/Time</th>
-                <th>Symbol</th>
-                <th>Side</th>
-                <th>Qty</th>
-                <th>Value</th>
-                <th>Type</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orders.map((order, idx) => (
-                <tr key={idx}>
-                  <td>{order.datetime}</td>
-                  <td>{order.symbol}</td>
-                  <td>{order.side}</td>
-                  <td>{order.qty}</td>
-                  <td>{formatCurrency(order.value)}</td>
-                  <td>{order.order_type}</td>
-                  <td>{order.status}</td>
+          <div style={tableContainerStyle}>
+            <table style={tableStyle}>
+              <thead>
+                <tr>
+                  <th>Date/Time</th>
+                  <th>Symbol</th>
+                  <th>Side</th>
+                  <th>Qty</th>
+                  <th>Value</th>
+                  <th>Type</th>
+                  <th>Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {orders.map((order, idx) => (
+                  <tr key={idx}>
+                    <td>{order.datetime}</td>
+                    <td>{order.symbol}</td>
+                    <td>{order.side}</td>
+                    <td>{order.qty}</td>
+                    <td>{formatCurrency(order.value)}</td>
+                    <td>{order.order_type}</td>
+                    <td>{order.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <p>No transactions</p>
         )}
@@ -164,7 +202,20 @@ const dialogStyle = {
   maxWidth: '700px',
   width: '90%',
   maxHeight: '90vh',
-  overflowY: 'auto',
+};
+
+const accountToggleContainerStyle = {
+  marginBottom: '15px',
+  padding: '10px',
+  backgroundColor: '#0d1117',
+  borderRadius: '6px',
+};
+
+const accountLabelStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  cursor: 'pointer',
+  color: '#c9d1d9',
 };
 
 const balancesContainerStyle = {
@@ -180,11 +231,18 @@ const balanceBoxStyle = {
   textAlign: 'center',
 };
 
+const tableContainerStyle = {
+  maxHeight: '350px',
+  overflowY: 'auto',
+  overflowX: 'hidden',
+};
+
 const tableStyle = {
   width: '100%',
   borderCollapse: 'collapse',
   marginTop: '10px',
   marginBottom: '20px',
+  minWidth: '600px',  // Ensure table doesn't shrink
 };
 
 const closeButtonStyle = {

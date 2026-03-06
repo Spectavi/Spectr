@@ -5,20 +5,20 @@ const chartCache = new Map();
 const CACHE_DURATION = 5 * 60 * 1000;
 
 function ChartContainer({ ticker }) {
-  const [chartData, setChartData] = useState(() => {
-    if (chartCache.has(ticker) && Date.now() - chartCache.get(ticker).time < CACHE_DURATION) {
-      return chartCache.get(ticker).data;
-    }
-    return null;
-  });
+  const [chartData, setChartData] = useState(null);
   const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(!chartData);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!ticker) return;
 
+    setLoading(true);
+    setError(null);
+    setChartData(null);
+
     if (chartCache.has(ticker) && Date.now() - chartCache.get(ticker).time < CACHE_DURATION) {
-      setChartData(chartCache.get(ticker).data);
+      const cachedData = chartCache.get(ticker).data;
+      setChartData(cachedData);
       setLoading(false);
       setError(null);
       return;

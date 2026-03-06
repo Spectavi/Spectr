@@ -15,9 +15,6 @@ app = Flask(__name__, static_folder=None, static_url_path=None)
 
 data_api = None
 cached_tickers = []
-cached_strategies = []
-current_strategy = None
-strategy_active = False
 
 
 def init_data_api(data_provider: str):
@@ -86,6 +83,7 @@ def get_portfolio():
             orders = []
         
         # Handle both DataFrame (from AlpacaInterface) and list of objects
+        print(f"DEBUG: orders is DataFrame? {isinstance(orders, pd.DataFrame)}, type={type(orders)}")
         if isinstance(orders, pd.DataFrame):
             if not orders.empty:
                 # Convert DataFrame to list of dicts for JSON serialization
@@ -115,10 +113,10 @@ def get_portfolio():
                     order_dict = {
                         "datetime": dt_str,
                         "symbol": str(row.get("symbol", "")),
-                        "side": getattr(row.get("side"), 'value', str(row.get("side", ""))) if hasattr(row.get("side", None), 'value') and row.get("side") is not None else str(row.get("side", "")),
+                        "side": str(row.get("side", "")) if isinstance(row.get("side"), str) else getattr(row.get("side"), 'value', str(row.get("side", ""))),
                         "qty": float(row.get("qty", 0) or 0),
                         "value": value,
-                        "order_type": getattr(row.get("order_type"), 'value', str(row.get("order_type", ""))) if hasattr(row.get("order_type", None), 'value') and row.get("order_type") is not None else str(row.get("order_type", "")),
+                        "order_type": str(row.get("order_type", "")) if isinstance(row.get("order_type"), str) else getattr(row.get("order_type"), 'value', str(row.get("order_type", ""))),
                         "status": str(row.get("status", ""))
                     }
                     orders_data.append(order_dict)
@@ -152,10 +150,10 @@ def get_portfolio():
                 order_dict = {
                     "datetime": dt_str,
                     "symbol": getattr(order, "symbol", ""),
-                    "side": getattr(getattr(order, "side", None), 'value', str(getattr(order, "side", ""))) if hasattr(getattr(order, "side", None), 'value') and getattr(order, "side", None) is not None else str(getattr(order, "side", "")),
+                    "side": str(getattr(order, "side", "")) if isinstance(getattr(order, "side", ""), str) else getattr(getattr(order, "side", None), 'value', str(getattr(order, "side", ""))),
                     "qty": float(getattr(order, "qty", 0) or 0),
                     "value": value,
-                    "order_type": getattr(getattr(order, "order_type", None), 'value', str(getattr(order, "order_type", ""))) if hasattr(getattr(order, "order_type", None), 'value') and getattr(order, "order_type", None) is not None else str(getattr(order, "order_type", "")),
+                    "order_type": str(getattr(order, "order_type", "")) if isinstance(getattr(order, "order_type", ""), str) else getattr(getattr(order, "order_type", None), 'value', str(getattr(order, "order_type", ""))),
                     "status": getattr(order, "status", "")
                 }
                 orders_data.append(order_dict)
@@ -265,116 +263,6 @@ def get_account_info():
         "hasLiveCredentials": has_live_credentials,
         "defaultToPaper": default_to_paper,
     })
-
-
-
-
-@app.route("/api/strategies", methods=["GET"])
-def get_strategies():
-    """Return list of available strategies and current strategy status."""
-    global cached_strategies, current_strategy, strategy_active
-    
-    if not cached_strategies:
-        try:
-            from .strategies import list_strategies
-            cached_strategies = list(list_strategies().keys())
-        except Exception:
-            cached_strategies = []
-    
-    return jsonify({
-        "strategies": cached_strategies,
-        "current": current_strategy or "",
-        "active": strategy_active
-    })
-
-
-@app.route("/api/strategies/<strategy_name>", methods=["POST"])
-def select_strategy(strategy_name):
-    """Select a specific strategy."""
-    global current_strategy, strategy_active
-    
-    try:
-        from .strategies import load_strategy
-        load_strategy(strategy_name)
-        
-        # In a real implementation, you would update the actual strategy here
-        # For now, we just track it in memory
-        current_strategy = strategy_name
-        
-        return jsonify({
-            "success": True,
-            "message": f"Strategy '{strategy_name}' selected",
-            "current": strategy_name,
-            "active": strategy_active
-        })
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 400
-
-
-@app.route("/api/strategies/toggle", methods=["POST"])
-def toggle_strategy():
-    """Toggle strategy active/inactive state."""
-    global strategy_active
-    
-    try:
-        data = request.get_json()
-        if data is None:
-            return jsonify({
-                "success": False,
-                "error": "Invalid JSON data"
-            }), 400
-        
-        new_state = bool(data.get('active', not strategy_active))
-        strategy_active = new_state
-        
-        # In a real implementation, you would update the actual strategy service here
-        # For now, we just track it in memory
-        
-        return jsonify({
-            "success": True,
-            "message": f"Strategy {'activated' if strategy_active else 'deactivated'}",
-            "active": strategy_active
-        })
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-
-@app.route("/api/strategies/auto-trade", methods=["POST"])
-def toggle_auto_trade():
-    """Toggle auto-trade enabled state."""
-    global strategy_active
-    
-    try:
-        data = request.get_json()
-        if data is None:
-            return jsonify({
-                "success": False,
-                "error": "Invalid JSON data"
-            }), 400
-        
-        new_state = bool(data.get('enabled', False))
-        
-        # If enabling auto-trade, also activate the strategy
-        if new_state and not strategy_active:
-            strategy_active = True
-        
-        return jsonify({
-            "success": True,
-            "message": f"Auto-trade {'enabled' if new_state else 'disabled'}",
-            "autoTradeEnabled": new_state,
-            "active": strategy_active
-        })
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
 
 
 def start_server(port: int = 8020):

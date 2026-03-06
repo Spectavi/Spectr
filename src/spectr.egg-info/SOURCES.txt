@@ -31,6 +31,7 @@ src/spectr/utils.py
 src/spectr/voice_assistant_manager.py
 src/spectr/voice_handler.py
 src/spectr/webserver.py
+src/spectr/webserver_debug.py
 src/spectr.egg-info/PKG-INFO
 src/spectr.egg-info/SOURCES.txt
 src/spectr.egg-info/dependency_links.txt

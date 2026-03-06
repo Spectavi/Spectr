@@ -5,6 +5,8 @@ import ChartContainer from './components/ChartContainer';
 function App() {
   const [tickers, setTickers] = useState([]);
   const [selectedTicker, setSelectedTicker] = useState('AAPL');
+  const [strategyName, setStrategyName] = useState('');
+  const [strategyActive, setStrategyActive] = useState(false);
 
   useEffect(() => {
     fetch('/api/tickers')
@@ -24,12 +26,18 @@ function App() {
     setSelectedTicker(ticker);
   }, []);
 
+  const handleStrategyChange = useCallback((name, active) => {
+    setStrategyName(name);
+    setStrategyActive(active);
+  }, []);
+
   return (
     <div style={{ display: 'flex', height: '100vh' }}>
       <Sidebar
         tickers={tickers}
         selectedTicker={selectedTicker}
         onSelect={handleSelect}
+        onStrategyChange={handleStrategyChange}
       />
       <ChartContainer ticker={selectedTicker} />
     </div>

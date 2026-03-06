@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useRef, useMemo, useState } from 'react';
 
 let tradingViewLoaded = false;
 let widgetInstance = null;
 
 function TradingViewWidget({ data, ticker }) {
   const containerRef = useRef(null);
+  const [isReady, setIsReady] = useState(false);
 
   const chartConfig = useMemo(() => ({
     symbol: data.symbol,
@@ -16,9 +17,10 @@ function TradingViewWidget({ data, ticker }) {
     if (!containerRef.current) return;
 
     const initializeWidget = () => {
-      if (widgetInstance) {
+      if (widgetInstance && typeof widgetInstance.cleanup === 'function') {
         widgetInstance.cleanup();
       }
+      widgetInstance = null;
 
       widgetInstance = new window.TradingView.widget({
         autosize: true,
@@ -60,6 +62,7 @@ function TradingViewWidget({ data, ticker }) {
 
     if (tradingViewLoaded && window.TradingView) {
       initializeWidget();
+      setIsReady(true);
     } else {
       const script = document.createElement('script');
       script.type = 'text/javascript';
@@ -70,18 +73,19 @@ function TradingViewWidget({ data, ticker }) {
         tradingViewLoaded = true;
         if (window.TradingView) {
           initializeWidget();
+          setIsReady(true);
         }
       };
       document.head.appendChild(script);
     }
 
     return () => {
-      if (widgetInstance) {
+      if (widgetInstance && typeof widgetInstance.cleanup === 'function') {
         widgetInstance.cleanup();
-        widgetInstance = null;
       }
+      widgetInstance = null;
     };
-  }, [chartConfig]);
+  }, [chartConfig.containerId]);
 
   return (
     <div

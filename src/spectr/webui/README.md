@@ -41,3 +41,18 @@ The web interface will be available at http://localhost:8020
 - Real-time price updates
 - Support for multiple data providers (Alpaca, Robinhood, FMP)
 
+## Sidebar Navigation
+
+The sidebar includes clickable section links:
+
+- **Portfolio** - Opens the portfolio dialog showing account balance, positions, and orders
+- **Strategy** - Scrolls to the strategy configuration section in the sidebar
+
+### Adding New Links
+
+To add a new link to the sidebar:
+
+1. Add an `<h3>` element with `style={sectionLinkStyle}` in Sidebar.js
+2. Set `onClick` to trigger the desired action (e.g., open dialog or scroll to section)
+3. Give the target section an `id` attribute if using scroll behavior
+
