@@ -13,3 +13,5 @@ cache
 .bak
 .webui_secret_key
 node_modules/
+.cached_tickers
+__pycache__
