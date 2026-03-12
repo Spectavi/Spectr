@@ -52,6 +52,7 @@ from .views.log_overlay import ErrorLogOverlay
 from .views.markdown_modal import MarkdownModal
 from .views.order_dialog import OrderDialog
 from .views.portfolio_screen import PortfolioScreen
+from .views.settings_dialog import SettingsDialog
 from .views.splash_screen import SplashScreen
 from .views.strategy_screen import StrategyScreen
 from .views.symbol_view import SymbolView
@@ -1230,7 +1231,8 @@ class SpectrApp(App):
     def action_toggle_portfolio(self) -> None:
         if self._is_splash_active():
             return
-        if self.screen_stack and isinstance(self.screen_stack[-1], PortfolioScreen):
+        current_screen = self.screen_stack[-1] if self.screen_stack else None
+        if isinstance(current_screen, (PortfolioScreen, SettingsDialog)):
             self.portfolio_service.portfolio_screen = None
             self.pop_screen()
         else:
@@ -1244,11 +1246,9 @@ class SpectrApp(App):
             positions = cache_snapshot.get("positions_cache")
             orders = cache_snapshot.get("orders_cache")
             equity_data = cache_snapshot.get("equity_curve_data") or self._equity_curve_data
-
-            # Open the portfolio screen immediately. If cached data exists it
-            # will be displayed right away; otherwise placeholders are shown
-            # while background tasks load the data.
-            screen = PortfolioScreen(
+            
+            # Open SettingsDialog with Portfolio panel by default
+            screen = SettingsDialog(
                 cash,
                 buying_power,
                 portfolio_value,
@@ -1328,20 +1328,30 @@ class SpectrApp(App):
         if enabled:
             self.set_strategy_active(True)
         # Update the portfolio screen toggle if it's currently visible
-        if self.screen_stack and isinstance(self.screen_stack[-1], PortfolioScreen):
-            screen = self.screen_stack[-1]
+        current_screen = self.screen_stack[-1] if self.screen_stack else None
+        if isinstance(current_screen, PortfolioScreen):
+            screen = current_screen
             screen.auto_trading_enabled = enabled
             screen.auto_switch.value = enabled
+        elif isinstance(current_screen, SettingsDialog) and hasattr(current_screen, '_portfolio_panel'):
+            panel = current_screen._portfolio_panel
+            panel.auto_trading_enabled = enabled
+            panel.auto_switch.value = enabled
         self.update_status_bar()
 
     def set_afterhours(self, enabled: bool) -> None:
         """Enable or disable afterhours trading."""
         self.afterhours_enabled = enabled
         self.trading_service.update_afterhours(enabled)
-        if self.screen_stack and isinstance(self.screen_stack[-1], PortfolioScreen):
-            screen = self.screen_stack[-1]
+        current_screen = self.screen_stack[-1] if self.screen_stack else None
+        if isinstance(current_screen, PortfolioScreen):
+            screen = current_screen
             screen.afterhours_enabled = enabled
             screen.afterhours_switch.value = enabled
+        elif isinstance(current_screen, SettingsDialog) and hasattr(current_screen, '_portfolio_panel'):
+            panel = current_screen._portfolio_panel
+            panel.afterhours_enabled = enabled
+            panel.afterhours_switch.value = enabled
         self.update_status_bar()
 
     def set_strategy_active(self, enabled: bool) -> None:

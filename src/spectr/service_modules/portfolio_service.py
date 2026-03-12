@@ -168,10 +168,23 @@ class PortfolioService:
         if self.portfolio_screen:
             screen_app = getattr(self.portfolio_screen, "app", None)
             if screen_app and self.portfolio_screen in screen_app.screen_stack:
-                self.portfolio_screen.cash = cash
-                self.portfolio_screen.portfolio_value = total
-                self.portfolio_screen.equity_view.data = list(self.equity_curve_data)
-                self.portfolio_screen.equity_view.refresh()
+                cash_val = cash
+                total_val = total
+                equity_data = list(self.equity_curve_data)
+
+                # Try to get equity view from different possible locations
+                if hasattr(self.portfolio_screen, "_portfolio_panel"):
+                    # SettingsDialog with embedded portfolio panel
+                    self.portfolio_screen._portfolio_panel.cash = cash_val
+                    self.portfolio_screen._portfolio_panel.portfolio_value = total_val
+                    self.portfolio_screen._portfolio_panel.equity_view.data = equity_data
+                    self.portfolio_screen._portfolio_panel.equity_view.refresh()
+                elif hasattr(self.portfolio_screen, "equity_view"):
+                    # PortfolioScreen directly
+                    self.portfolio_screen.cash = cash_val
+                    self.portfolio_screen.portfolio_value = total_val
+                    self.portfolio_screen.equity_view.data = equity_data
+                    self.portfolio_screen.equity_view.refresh()
 
     def _sync_store_portfolio(self) -> None:
         """Sync portfolio state to the store."""

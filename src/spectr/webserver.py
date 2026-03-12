@@ -2,7 +2,10 @@ from flask import Flask, jsonify, send_from_directory, request
 import os
 import sys
 import pandas as pd
+import logging
 from datetime import datetime
+
+log = logging.getLogger(__name__)
 
 # Determine the correct path to the build directory
 _script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -14,6 +17,7 @@ if not os.path.exists(_build_dir):
 app = Flask(__name__, static_folder=None, static_url_path=None)
 
 data_api = None
+broker_api = None
 cached_tickers = []
 cached_strategies = []
 current_strategy = None
@@ -21,19 +25,29 @@ strategy_active = False
 
 
 def init_data_api(data_provider: str):
-    global data_api
+    global data_api, broker_api
     if data_provider == "alpaca":
         from .fetch.alpaca import AlpacaInterface
 
         data_api = AlpacaInterface(real_trades=False)
+        broker_api = data_api  # Alpaca can do both data and trading
     elif data_provider == "robinhood":
         from .fetch.robinhood import RobinhoodInterface
 
         data_api = RobinhoodInterface()
+        broker_api = data_api  # Robinhood can do both data and trading
     elif data_provider == "fmp":
         from .fetch.fmp import FMPInterface
 
         data_api = FMPInterface()
+        # For FMP, we need a separate broker interface for orders
+        # Try to use paper trading credentials if available
+        try:
+            from .fetch.alpaca import AlpacaInterface, PAPER_KEY, PAPER_SECRET
+            if PAPER_KEY and PAPER_SECRET:
+                broker_api = AlpacaInterface(real_trades=False)
+        except Exception:
+            pass
 
 
 @app.route("/api/tickers", methods=["GET"])
@@ -294,11 +308,15 @@ def select_strategy(strategy_name):
     global current_strategy, strategy_active
     
     try:
+        data = request.get_json() or {}
+        deactivate_previous = bool(data.get('deactivatePrevious', False))
+        
+        if deactivate_previous and strategy_active:
+            strategy_active = False
+        
         from .strategies import load_strategy
         load_strategy(strategy_name)
         
-        # In a real implementation, you would update the actual strategy here
-        # For now, we just track it in memory
         current_strategy = strategy_name
         
         return jsonify({
@@ -435,6 +453,101 @@ def start_server(port: int = 8020):
 
     print(f"Starting web server on http://localhost:{port}")
     app.run(host="0.0.0.0", port=port, debug=False)
+
+
+@app.route("/api/orders", methods=["POST"])
+def submit_order():
+    """Submit a new order."""
+    global data_api, broker_api
+    
+    # Reset broker_api for test isolation (tests may patch data_api with mocks)
+    if broker_api and hasattr(broker_api, 'mock_calls'):
+        broker_api = None
+    
+    try:
+        data = request.get_json()
+        if data is None:
+            return jsonify({
+                "success": False,
+                "error": "Invalid JSON data"
+            }), 400
+        
+        symbol = data.get('symbol')
+        side_name = data.get('side')
+        order_type_name = data.get('type')
+        quantity = data.get('quantity')
+        limit_price = data.get('limit_price')
+        
+        if not all([symbol, side_name, order_type_name, quantity]):
+            return jsonify({
+                "success": False,
+                "error": "Missing required fields: symbol, side, type, quantity"
+            }), 400
+        
+        from .fetch.broker_interface import OrderSide, OrderType
+        
+        try:
+            side = OrderSide[side_name]
+            order_type = OrderType[order_type_name]
+        except KeyError:
+            return jsonify({
+                "success": False,
+                "error": f"Invalid side or type. Valid sides: {[s.name for s in OrderSide]}. Valid types: {[t.name for t in OrderType]}"
+            }), 400
+        
+        # Initialize broker_api if not already set (check data_api first for backward compatibility)
+        if not broker_api and data_api:
+            broker_api = data_api
+        if not broker_api:
+            from .fetch.alpaca import AlpacaInterface
+            broker_api = AlpacaInterface(real_trades=False)
+        
+        # Use broker_api for orders (not data_api which may be FMP)
+        if not broker_api:
+            return jsonify({
+                "success": False,
+                "error": "Trading is not configured. Please set up a broker in the onboarding dialog."
+            }), 400
+        
+        broker_side = side.name.lower()
+        broker_type = order_type
+        
+        if order_type == OrderType.MARKET:
+            order = broker_api.submit_order(
+                symbol=symbol,
+                side=side,
+                type=order_type,
+                quantity=float(quantity),
+                market_price=None
+            )
+        else:
+            if limit_price is None:
+                return jsonify({
+                    "success": False,
+                    "error": "limit_price is required for LIMIT orders"
+                }), 400
+            order = broker_api.submit_order(
+                symbol=symbol,
+                side=side,
+                type=order_type,
+                quantity=float(quantity),
+                limit_price=float(limit_price)
+            )
+        
+        return jsonify({
+            "success": True,
+            "message": f"Order submitted: {side.name.upper()} {quantity} of {symbol.upper()} @ {limit_price if order_type == OrderType.LIMIT else 'MKT'}",
+            "order_id": getattr(order, "id", None),
+            "status": str(getattr(order, "status", "")) if hasattr(order, 'status') else "submitted"
+        })
+        
+    except Exception as e:
+        log = logging.getLogger(__name__)
+        log.error(f"Order submission failed: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
 
 
 if __name__ == "__main__":

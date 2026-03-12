@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-function PortfolioDialog({ onClose }) {
+function PortfolioDialog({ onClose = () => {}, embedded = false, showCloseButton = true }) {
   const [balance, setBalance] = useState({});
   const [positions, setPositions] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -55,13 +55,18 @@ function PortfolioDialog({ onClose }) {
     }).format(value || 0);
   };
 
+  const rootStyle = embedded ? embeddedRootStyle : overlayStyle;
+  const panelStyle = embedded ? embeddedDialogStyle : dialogStyle;
+
   if (loading || accountInfoLoading) {
     return (
-      <div style={overlayStyle}>
-        <div style={dialogStyle}>
+      <div style={rootStyle}>
+        <div style={panelStyle}>
           <h2>Portfolio</h2>
           <p>Loading...</p>
-          <button onClick={onClose} style={closeButtonStyle}>Close</button>
+          {showCloseButton && (
+            <button onClick={onClose} style={closeButtonStyle}>Close</button>
+          )}
         </div>
       </div>
     );
@@ -69,11 +74,13 @@ function PortfolioDialog({ onClose }) {
 
   if (error) {
     return (
-      <div style={overlayStyle}>
-        <div style={dialogStyle}>
+      <div style={rootStyle}>
+        <div style={panelStyle}>
           <h2>Portfolio</h2>
           <p style={{ color: '#f85149' }}>{error}</p>
-          <button onClick={onClose} style={closeButtonStyle}>Close</button>
+          {showCloseButton && (
+            <button onClick={onClose} style={closeButtonStyle}>Close</button>
+          )}
         </div>
       </div>
     );
@@ -84,8 +91,8 @@ function PortfolioDialog({ onClose }) {
   const portfolio_value = balance.portfolio_value || 0;
 
   return (
-    <div style={overlayStyle}>
-      <div style={dialogStyle}>
+    <div style={rootStyle}>
+      <div style={panelStyle}>
         <h2>Portfolio</h2>
         
         <div style={accountToggleContainerStyle}>
@@ -175,7 +182,9 @@ function PortfolioDialog({ onClose }) {
           <p>No transactions</p>
         )}
 
-        <button onClick={onClose} style={closeButtonStyle}>Close</button>
+        {showCloseButton && (
+          <button onClick={onClose} style={closeButtonStyle}>Close</button>
+        )}
       </div>
     </div>
   );
@@ -202,6 +211,21 @@ const dialogStyle = {
   maxWidth: '700px',
   width: '90%',
   maxHeight: '90vh',
+};
+
+const embeddedRootStyle = {
+  width: '100%',
+  height: '100%',
+};
+
+const embeddedDialogStyle = {
+  backgroundColor: 'transparent',
+  border: 'none',
+  borderRadius: 0,
+  padding: 0,
+  width: '100%',
+  maxWidth: 'none',
+  maxHeight: 'none',
 };
 
 const accountToggleContainerStyle = {
@@ -232,7 +256,7 @@ const balanceBoxStyle = {
 };
 
 const tableContainerStyle = {
-  maxHeight: '350px',
+  maxHeight: '250px',
   overflowY: 'auto',
   overflowX: 'hidden',
 };

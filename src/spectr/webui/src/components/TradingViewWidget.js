@@ -85,7 +85,7 @@ function TradingViewWidget({ data, ticker }) {
       }
       widgetInstance = null;
     };
-  }, [chartConfig.containerId]);
+  }, [chartConfig.containerId, chartConfig.symbol, chartConfig.chartData.length]);
 
   return (
     <div

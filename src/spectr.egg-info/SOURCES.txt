@@ -80,6 +80,7 @@ src/spectr/views/macd_view.py
 src/spectr/views/markdown_modal.py
 src/spectr/views/order_dialog.py
 src/spectr/views/portfolio_screen.py
+src/spectr/views/settings_dialog.py
 src/spectr/views/setup_app.py
 src/spectr/views/setup_confirm_dialog.py
 src/spectr/views/setup_dialog.py

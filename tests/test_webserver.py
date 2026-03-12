@@ -461,3 +461,80 @@ def test_get_account_info_with_live_credentials():
             assert data['defaultToPaper'] is True, f"Expected True (always default to paper), got {data.get('defaultToPaper')}"
     finally:
         pass  # env vars are cleaned up by clear=True context manager
+
+
+def test_submit_order_market():
+    from spectr import webserver
+    from spectr.fetch.broker_interface import OrderType, OrderSide
+    
+    client = webserver.app.test_client()
+    
+    # Mock the data_api and submit_order to avoid actual broker calls
+    mock_order = Mock()
+    mock_order.id = "test-order-id"
+    mock_order.status = "submitted"
+    
+    with patch.object(webserver, 'data_api') as mock_api:
+        if not mock_api:
+            from spectr.fetch.alpaca import AlpacaInterface
+            webserver.data_api = AlpacaInterface(real_trades=False)
+        
+        with patch.object(webserver.data_api, 'submit_order', return_value=mock_order):
+            response = client.post('/api/orders', 
+                json={
+                    'symbol': 'AAPL',
+                    'side': OrderSide.BUY.name,
+                    'type': OrderType.MARKET.name,
+                    'quantity': 10
+                })
+        
+        assert response.status_code == 200
+        data = response.json
+        assert data['success'] is True
+        assert 'order_id' in data
+
+
+def test_submit_order_limit():
+    from spectr import webserver
+    from spectr.fetch.broker_interface import OrderType, OrderSide
+    
+    client = webserver.app.test_client()
+    
+    mock_order = Mock()
+    mock_order.id = "test-order-id-2"
+    mock_order.status = "submitted"
+    
+    with patch.object(webserver, 'data_api') as mock_api:
+        if not mock_api:
+            from spectr.fetch.alpaca import AlpacaInterface
+            webserver.data_api = AlpacaInterface(real_trades=False)
+        
+        with patch.object(webserver.data_api, 'submit_order', return_value=mock_order):
+            response = client.post('/api/orders',
+                json={
+                    'symbol': 'AAPL',
+                    'side': OrderSide.SELL.name,
+                    'type': OrderType.LIMIT.name,
+                    'quantity': 5,
+                    'limit_price': 150.00
+                })
+        
+        assert response.status_code == 200
+        data = response.json
+        assert data['success'] is True
+
+
+def test_submit_order_missing_fields():
+    from spectr import webserver
+    
+    client = webserver.app.test_client()
+    
+    response = client.post('/api/orders',
+        json={
+            'symbol': 'AAPL'
+        })
+    
+    assert response.status_code == 400
+    data = response.json
+    assert data['success'] is False
+    assert 'error' in data
