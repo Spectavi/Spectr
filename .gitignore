@@ -16,4 +16,5 @@ node_modules/
 .cached_tickers
 __pycache__
 src/spectr/webui/build/
-git.backup.*
+.git.backup*
+cached_tickers
