@@ -1,24 +1,28 @@
 import React, { useState, useEffect } from 'react';
 
 function PortfolioDialog({ onClose = () => {}, embedded = false, showCloseButton = true }) {
+  const MAX_VISIBLE_TRANSACTION_ROWS = 10;
   const [balance, setBalance] = useState({});
   const [positions, setPositions] = useState([]);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [isLiveAccount, setIsLiveAccount] = useState(false);
+const [isLiveAccount, setIsLiveAccount] = useState(false);
   const [accountInfoLoading, setAccountInfoLoading] = useState(true);
+  const [hasPaperCredentials, setHasPaperCredentials] = useState(true);
+  const [brokerName, setBrokerName] = useState('Alpaca');
 
   useEffect(() => {
     fetchPortfolioData(isLiveAccount);
   }, [isLiveAccount]);
 
-  // Fetch account info to determine which account type is configured
   useEffect(() => {
     fetch('/api/account-info')
       .then(res => res.json())
       .then(data => {
+        setHasPaperCredentials(data.hasPaperCredentials);
         setIsLiveAccount(!data.defaultToPaper);
+        setBrokerName(data.broker || 'Alpaca');
         setAccountInfoLoading(false);
       })
       .catch(err => {
@@ -57,6 +61,11 @@ function PortfolioDialog({ onClose = () => {}, embedded = false, showCloseButton
 
   const rootStyle = embedded ? embeddedRootStyle : overlayStyle;
   const panelStyle = embedded ? embeddedDialogStyle : dialogStyle;
+  const shouldScrollTransactionHistory = orders.length > MAX_VISIBLE_TRANSACTION_ROWS;
+  const transactionHistoryContainerStyle = {
+    ...(embedded ? embeddedTableContainerStyle : tableContainerStyle),
+    ...(shouldScrollTransactionHistory ? scrollableTransactionHistoryStyle : {}),
+  };
 
   if (loading || accountInfoLoading) {
     return (
@@ -95,16 +104,29 @@ function PortfolioDialog({ onClose = () => {}, embedded = false, showCloseButton
       <div style={panelStyle}>
         <h2>Portfolio</h2>
         
-        <div style={accountToggleContainerStyle}>
-          <label style={accountLabelStyle}>
-            <input
-              type="checkbox"
-              checked={isLiveAccount}
-              onChange={(e) => setIsLiveAccount(e.target.checked)}
-              style={{ marginRight: '8px' }}
-            />
-            Live Trading Account
-          </label>
+        <div style={{ marginBottom: '15px', padding: '10px', backgroundColor: '#0d1117', borderRadius: '6px' }}>
+          <p style={{ margin: '0 0 8px 0', color: '#c9d1d9', fontSize: '13px' }}>Broker: {brokerName}</p>
+          <div style={toggleContainerStyle}>
+            <button
+              onClick={() => setIsLiveAccount(false)}
+              style={{
+                ...toggleButtonStyle,
+                active: !isLiveAccount,
+                disabled: !hasPaperCredentials,
+              }}
+            >
+              Paper Account
+            </button>
+            <button
+              onClick={() => setIsLiveAccount(true)}
+              style={{
+                ...toggleButtonStyle,
+                active: isLiveAccount,
+              }}
+            >
+              Real Cash Account
+            </button>
+          </div>
         </div>
 
         <div style={balancesContainerStyle}>
@@ -150,7 +172,7 @@ function PortfolioDialog({ onClose = () => {}, embedded = false, showCloseButton
 
         <h3>Transaction History</h3>
         {orders.length > 0 ? (
-          <div style={tableContainerStyle}>
+          <div style={transactionHistoryContainerStyle}>
             <table style={tableStyle}>
               <thead>
                 <tr>
@@ -228,19 +250,25 @@ const embeddedDialogStyle = {
   maxHeight: 'none',
 };
 
-const accountToggleContainerStyle = {
-  marginBottom: '15px',
-  padding: '10px',
-  backgroundColor: '#0d1117',
+const toggleContainerStyle = {
+  display: 'flex',
   borderRadius: '6px',
+  overflow: 'hidden',
+  backgroundColor: '#0d1117',
 };
 
-const accountLabelStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  cursor: 'pointer',
-  color: '#c9d1d9',
-};
+const toggleButtonStyle = (props) => ({
+  flex: 1,
+  padding: '8px 12px',
+  border: 'none',
+  cursor: props.disabled ? 'not-allowed' : 'pointer',
+  fontSize: '13px',
+  fontWeight: '500',
+  backgroundColor: props.active ? '#238636' : '#0d1117',
+  color: props.active ? '#ffffff' : (props.disabled ? '#8b949e' : '#c9d1d9'),
+  borderRight: props.active || props.disabled ? 'none' : '1px solid #30363d',
+  transition: 'all 0.2s ease',
+});
 
 const balancesContainerStyle = {
   display: 'flex',
@@ -256,7 +284,16 @@ const balanceBoxStyle = {
 };
 
 const tableContainerStyle = {
-  maxHeight: '250px',
+  overflow: 'visible',
+};
+
+const embeddedTableContainerStyle = {
+  overflow: 'visible',
+};
+
+const scrollableTransactionHistoryStyle = {
+  // Sized to roughly 10 rows + table header.
+  maxHeight: '430px',
   overflowY: 'auto',
   overflowX: 'hidden',
 };

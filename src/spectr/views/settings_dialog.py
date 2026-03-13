@@ -592,10 +592,17 @@ class SettingsDialog(ModalScreen):
                 id="settings-sidebar",
             ),
             Container(id="settings-content"),
+            Button("×", id="close-button"),
             id="settings-dialog",
         )
 
-    async def on_mount(self) -> None:
+    def on_mount(self) -> None:
+        close_btn = self.query_one("#close-button")
+        close_btn.styles.margin = ("12px", "0px", "0px", "auto")
+        close_btn.styles.padding = (0, 8)
+        close_btn.styles.width = 3
+        close_btn.background = "#da3633"
+        close_btn.color = "#ffffff"
         self.show_portfolio()
 
     def show_portfolio(self):
@@ -603,3 +610,7 @@ class SettingsDialog(ModalScreen):
         content.remove_children()
         # Mount the existing portfolio panel instead of creating new one
         content.mount(self._portfolio_panel)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "close-button":
+            self.app.pop_screen()

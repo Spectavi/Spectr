@@ -241,6 +241,21 @@ def get_account_info():
     except Exception:
         pass
     
+    # Determine broker name from config or environment
+    data_provider = os.getenv("DATA_PROVIDER")
+    if not data_provider and cfg:
+        data_provider = cfg.get("data_api")
+    if not data_provider:
+        data_provider = "alpaca"
+    
+    # Map provider to display name
+    broker_names = {
+        "alpaca": "Alpaca",
+        "robinhood": "Robinhood",
+        "fmp": "FMP",
+    }
+    broker_name = broker_names.get(data_provider, "Unknown")
+    
     # Determine if paper credentials are configured
     has_paper_credentials = bool(
         (os.getenv("PAPER_API_KEY") and os.getenv("PAPER_SECRET"))
@@ -259,6 +274,7 @@ def get_account_info():
     default_to_paper = True
     
     return jsonify({
+        "broker": broker_name,
         "hasPaperCredentials": has_paper_credentials,
         "hasLiveCredentials": has_live_credentials,
         "defaultToPaper": default_to_paper,

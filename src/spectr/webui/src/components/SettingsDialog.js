@@ -24,7 +24,7 @@ function SettingsDialog({ onClose }) {
             <PortfolioDialog embedded showCloseButton={false} />
           )}
         </div>
-        <button onClick={onClose} style={closeButtonStyle}>Close</button>
+        <button onClick={onClose} style={xButtonStyle}>×</button>
       </div>
     </div>
   );
@@ -41,6 +41,9 @@ const overlayStyle = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
+  overflowY: 'auto',
+  padding: '20px',
+  boxSizing: 'border-box',
 };
 
 const dialogStyle = {
@@ -50,9 +53,9 @@ const dialogStyle = {
   padding: '24px',
   maxWidth: '1100px',
   width: '90%',
-  maxHeight: '90vh',
   display: 'flex',
-  overflow: 'hidden',
+  overflow: 'visible',
+  position: 'relative',
 };
 
 const sidebarStyle = {
@@ -76,7 +79,7 @@ const sidebarButtonStyle = {
 
 const contentStyle = {
   flex: 1,
-  overflowY: 'auto',
+  overflow: 'visible',
 };
 
 const closeButtonStyle = {
@@ -91,6 +94,25 @@ const closeButtonStyle = {
   fontWeight: '600',
   marginLeft: '16px',
   height: 'fit-content',
+};
+
+const xButtonStyle = {
+  position: 'absolute',
+  top: '24px',
+  right: '24px',
+  width: '32px',
+  height: '32px',
+  backgroundColor: '#30363d',
+  color: '#c9d1d9',
+  border: 'none',
+  borderRadius: '6px',
+  cursor: 'pointer',
+  fontSize: '20px',
+  fontWeight: 'bold',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  lineHeight: 1,
 };
 
 export default SettingsDialog;

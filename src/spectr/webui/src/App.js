@@ -18,7 +18,25 @@ function App() {
         }
       })
       .catch(err => console.error('Failed to load tickers:', err));
-  }, []);
+
+    const handleTickersUpdated = () => {
+      fetch('/api/tickers')
+        .then(res => res.json())
+        .then(data => {
+          setTickers(data);
+          if (data.length > 0 && !data.includes(selectedTicker)) {
+            setSelectedTicker(data[0]);
+          }
+        })
+        .catch(err => console.error('Failed to reload tickers:', err));
+    };
+
+    window.addEventListener('tickersUpdated', handleTickersUpdated);
+
+    return () => {
+      window.removeEventListener('tickersUpdated', handleTickersUpdated);
+    };
+  }, [selectedTicker]);
 
   const handleSelect = useCallback((ticker) => {
     setSelectedTicker(ticker);

@@ -1,3 +1,4 @@
+import requests
 from flask import Flask, jsonify, send_from_directory, request
 import os
 import sys
@@ -7,11 +8,9 @@ from datetime import datetime
 
 log = logging.getLogger(__name__)
 
-# Determine the correct path to the build directory
 _script_dir = os.path.dirname(os.path.abspath(__file__))
 _build_dir = os.path.join(_script_dir, "webui", "build")
 if not os.path.exists(_build_dir):
-    # Fallback for development mode when running from different directory
     _build_dir = os.path.join(os.path.dirname(_script_dir), "src", "spectr", "webui", "build")
 
 app = Flask(__name__, static_folder=None, static_url_path=None)
@@ -28,20 +27,15 @@ def init_data_api(data_provider: str):
     global data_api, broker_api
     if data_provider == "alpaca":
         from .fetch.alpaca import AlpacaInterface
-
         data_api = AlpacaInterface(real_trades=False)
-        broker_api = data_api  # Alpaca can do both data and trading
+        broker_api = data_api
     elif data_provider == "robinhood":
         from .fetch.robinhood import RobinhoodInterface
-
         data_api = RobinhoodInterface()
-        broker_api = data_api  # Robinhood can do both data and trading
+        broker_api = data_api
     elif data_provider == "fmp":
         from .fetch.fmp import FMPInterface
-
         data_api = FMPInterface()
-        # For FMP, we need a separate broker interface for orders
-        # Try to use paper trading credentials if available
         try:
             from .fetch.alpaca import AlpacaInterface, PAPER_KEY, PAPER_SECRET
             if PAPER_KEY and PAPER_SECRET:
@@ -57,6 +51,91 @@ def get_tickers():
     return jsonify(cached_tickers)
 
 
+@app.route("/api/watchlist", methods=["GET"])
+def get_watchlist():
+    if not cached_tickers:
+        return jsonify([])
+    return jsonify(cached_tickers)
+
+
+@app.route("/api/watchlist", methods=["POST"])
+def add_to_watchlist():
+    global cached_tickers
+    try:
+        data = request.get_json()
+        if data is None:
+            return jsonify({"success": False, "error": "Invalid JSON data"}), 400
+        
+        ticker = data.get('ticker')
+        if not ticker:
+            return jsonify({"success": False, "error": "Missing ticker"}), 400
+        
+        ticker = ticker.upper().strip()
+        
+        if ticker in cached_tickers:
+            return jsonify({"success": True, "message": f"{ticker} already in watchlist"})
+        
+        cached_tickers.append(ticker)
+        _save_cached_tickers()
+        
+        return jsonify({"success": True, "message": f"Added {ticker} to watchlist", "tickers": cached_tickers})
+    except Exception as e:
+        log.error(f"Failed to add ticker: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/watchlist/<ticker>", methods=["DELETE"])
+def remove_from_watchlist(ticker):
+    global cached_tickers
+    try:
+        ticker = ticker.upper().strip()
+        
+        if ticker in cached_tickers:
+            cached_tickers.remove(ticker)
+            _save_cached_tickers()
+        
+        return jsonify({"success": True, "message": f"Removed {ticker} from watchlist", "tickers": cached_tickers})
+    except Exception as e:
+        log.error(f"Failed to remove ticker: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/search-tickers", methods=["GET"])
+def search_tickers():
+    global data_api
+    if not data_api:
+        return jsonify([])
+    
+    query = request.args.get('query', '').strip()
+    if not query or len(query) < 2:
+        return jsonify([])
+    
+    try:
+        url = f"https://financialmodelingprep.com/api/v3/search?query={query}&limit=5&apikey={data_api.api_key}"
+        resp = requests.get(url, timeout=10)
+        data_api._check_rate_limit(resp)
+        results = resp.json()
+        
+        if isinstance(results, list):
+            filtered_results = []
+            seen = set()
+            for item in results:
+                symbol = item.get('symbol', '').upper()
+                name = item.get('name', '')
+                exchange = item.get('exchange', '')
+                
+                if symbol and symbol not in seen and not any(ex in exchange.upper() for ex in ['OTC', 'PINK', 'BLOOMBERG']):
+                    filtered_results.append({'symbol': symbol, 'name': name})
+                    seen.add(symbol)
+            
+            return jsonify(filtered_results[:5])
+        
+        return jsonify([])
+    except Exception as e:
+        log.error(f"Failed to search tickers: {e}")
+        return jsonify([])
+
+
 @app.route("/api/portfolio", methods=["GET"])
 def get_portfolio():
     global data_api
@@ -70,16 +149,12 @@ def get_portfolio():
     try:
         is_live = request.args.get('live', 'false').lower() == 'true'
         
-        # Create broker API instance for the requested account type
         from .fetch.alpaca import AlpacaInterface
-        
-        # Always use AlpacaInterface for broker operations (paper or live trading)
         broker_api = AlpacaInterface(real_trades=is_live)
         
         balance = broker_api.get_balance() or {}
         positions = broker_api.get_positions() or []
         
-        # Process positions
         positions_data = []
         for pos in positions:
             pos_dict = {
@@ -90,7 +165,6 @@ def get_portfolio():
             }
             positions_data.append(pos_dict)
         
-        # Get orders with appropriate method
         if hasattr(broker_api, 'get_all_orders'):
             try:
                 orders = broker_api.get_all_orders(real_trades=is_live)
@@ -99,10 +173,8 @@ def get_portfolio():
         else:
             orders = []
         
-        # Handle both DataFrame (from AlpacaInterface) and list of objects
         if isinstance(orders, pd.DataFrame):
             if not orders.empty:
-                # Convert DataFrame to list of dicts for JSON serialization
                 orders_data = []
                 for _, row in orders.iterrows():
                     dt = (
@@ -139,7 +211,6 @@ def get_portfolio():
             else:
                 orders_data = []
         elif isinstance(orders, list):
-            # Legacy code for list of order objects
             orders_data = []
             for order in orders:
                 dt = (
@@ -233,13 +304,11 @@ def get_chart_data(symbol):
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
 def serve(path):
-    # Always try to serve the requested path first if it exists
     if path:
         full_path = os.path.join(_build_dir, path)
         if os.path.isfile(full_path):
             return send_from_directory(_build_dir, path)
     
-    # Otherwise serve index.html for SPA routing
     index_path = os.path.join(_build_dir, "index.html")
     if os.path.exists(index_path):
         return send_from_directory(_build_dir, "index.html")
@@ -249,7 +318,6 @@ def serve(path):
 
 @app.route("/api/account-info", methods=["GET"])
 def get_account_info():
-    """Return information about the configured account (paper vs live)."""
     cfg = None
     try:
         from . import cache
@@ -257,35 +325,43 @@ def get_account_info():
     except Exception:
         pass
     
-    # Determine if paper credentials are configured
+    data_provider = os.getenv("DATA_PROVIDER")
+    if not data_provider and cfg:
+        data_provider = cfg.get("data_api")
+    if not data_provider:
+        data_provider = "alpaca"
+    
+    broker_names = {
+        "alpaca": "Alpaca",
+        "robinhood": "Robinhood",
+        "fmp": "FMP",
+    }
+    broker_name = broker_names.get(data_provider, "Unknown")
+    
     has_paper_credentials = bool(
         (os.getenv("PAPER_API_KEY") and os.getenv("PAPER_SECRET"))
         or (cfg and cfg.get("paper_key") and cfg.get("paper_secret"))
         or (os.getenv("ALPACA_API_KEY_PAPER") and os.getenv("ALPACA_SECRET_KEY_PAPER"))
     )
     
-    # Determine if live credentials are configured  
     has_live_credentials = bool(
         (os.getenv("BROKER_API_KEY") and os.getenv("BROKER_SECRET"))
         or (cfg and cfg.get("broker_key") and cfg.get("broker_secret"))
         or (os.getenv("ALPACA_API_KEY") and os.getenv("ALPACA_SECRET_KEY"))
     )
     
-    # Default to paper to match TUI behavior (TUI defaults to PAPER unless --real_trades is passed)
     default_to_paper = True
     
     return jsonify({
+        "broker": broker_name,
         "hasPaperCredentials": has_paper_credentials,
         "hasLiveCredentials": has_live_credentials,
         "defaultToPaper": default_to_paper,
     })
 
 
-
-
 @app.route("/api/strategies", methods=["GET"])
 def get_strategies():
-    """Return list of available strategies and current strategy status."""
     global cached_strategies, current_strategy, strategy_active
     
     if not cached_strategies:
@@ -304,7 +380,6 @@ def get_strategies():
 
 @app.route("/api/strategies/<strategy_name>", methods=["POST"])
 def select_strategy(strategy_name):
-    """Select a specific strategy."""
     global current_strategy, strategy_active
     
     try:
@@ -334,7 +409,6 @@ def select_strategy(strategy_name):
 
 @app.route("/api/strategies/toggle", methods=["POST"])
 def toggle_strategy():
-    """Toggle strategy active/inactive state."""
     global strategy_active
     
     try:
@@ -347,9 +421,6 @@ def toggle_strategy():
         
         new_state = bool(data.get('active', not strategy_active))
         strategy_active = new_state
-        
-        # In a real implementation, you would update the actual strategy service here
-        # For now, we just track it in memory
         
         return jsonify({
             "success": True,
@@ -365,7 +436,6 @@ def toggle_strategy():
 
 @app.route("/api/strategies/auto-trade", methods=["POST"])
 def toggle_auto_trade():
-    """Toggle auto-trade enabled state."""
     global strategy_active
     
     try:
@@ -378,7 +448,6 @@ def toggle_auto_trade():
         
         new_state = bool(data.get('enabled', False))
         
-        # If enabling auto-trade, also activate the strategy
         if new_state and not strategy_active:
             strategy_active = True
         
@@ -393,6 +462,15 @@ def toggle_auto_trade():
             "success": False,
             "error": str(e)
         }), 500
+
+
+def _save_cached_tickers():
+    project_root = os.path.join(_script_dir, "..", "..")
+    cached_tickers_path = os.path.join(project_root, ".cached_tickers")
+    
+    with open(cached_tickers_path, "w") as f:
+        for ticker in cached_tickers:
+            f.write(f"{ticker}\n")
 
 
 def start_server(port: int = 8020):
@@ -414,8 +492,6 @@ def start_server(port: int = 8020):
     if not data_provider:
         data_provider = "alpaca"
 
-    # Set environment variables from onboarding config to ensure credentials are available
-    # This ensures both TUI and web UI use the same account (paper vs live)
     if cfg:
         paper_key = cfg.get("paper_key")
         if paper_key:
@@ -441,9 +517,7 @@ def start_server(port: int = 8020):
 
     init_data_api(data_provider)
 
-    # Load cached tickers from the project root directory
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.join(script_dir, "..", "..")
+    project_root = os.path.join(_script_dir, "..", "..")
     cached_tickers_path = os.path.join(project_root, ".cached_tickers")
     
     if os.path.exists(cached_tickers_path):
@@ -457,10 +531,8 @@ def start_server(port: int = 8020):
 
 @app.route("/api/orders", methods=["POST"])
 def submit_order():
-    """Submit a new order."""
     global data_api, broker_api
     
-    # Reset broker_api for test isolation (tests may patch data_api with mocks)
     if broker_api and hasattr(broker_api, 'mock_calls'):
         broker_api = None
     
@@ -495,14 +567,12 @@ def submit_order():
                 "error": f"Invalid side or type. Valid sides: {[s.name for s in OrderSide]}. Valid types: {[t.name for t in OrderType]}"
             }), 400
         
-        # Initialize broker_api if not already set (check data_api first for backward compatibility)
         if not broker_api and data_api:
             broker_api = data_api
         if not broker_api:
             from .fetch.alpaca import AlpacaInterface
             broker_api = AlpacaInterface(real_trades=False)
         
-        # Use broker_api for orders (not data_api which may be FMP)
         if not broker_api:
             return jsonify({
                 "success": False,
