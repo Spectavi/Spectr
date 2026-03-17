@@ -28,6 +28,13 @@ class VoiceHandler:
                 self.app.overlay.clear_prompt()
                 self.update_status_bar()
             return
+        if self.app._voice_is_recording and not self.app._voice_stop_event:
+            if self.app.voice_agent:
+                self.app.voice_agent.stop()
+            self.app._voice_worker = None
+            self.app.overlay.clear_prompt()
+            self.update_status_bar()
+            return
         self.app._voice_stop_event = threading.Event()
         self.app._voice_is_recording = True
         self.app._voice_worker = self.app.run_worker(
@@ -46,6 +53,9 @@ class VoiceHandler:
                 if ev == "processing":
                     self.app._voice_is_recording = False
                     self.call_from_thread(overlay.show_prompt, "Processing...")
+                elif ev == "speaking":
+                    self.app._voice_is_recording = False
+                    self.call_from_thread(overlay.show_prompt, "Speaking...")
                 elif ev == "listening":
                     self.app._voice_is_recording = True
                     self.call_from_thread(

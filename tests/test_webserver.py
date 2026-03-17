@@ -538,3 +538,93 @@ def test_submit_order_missing_fields():
     data = response.json
     assert data['success'] is False
     assert 'error' in data
+
+
+def test_get_profile_no_api():
+    """Test that profile endpoint returns empty logo when no data_api."""
+    from spectr import webserver
+    
+    original_api = webserver.data_api
+    try:
+        webserver.data_api = None
+        
+        response = webserver.app.test_client().get('/api/profile/AAPL')
+        
+        assert response.status_code == 200
+        data = response.json
+        assert 'logo' in data
+        assert data['logo'] == ''
+        assert data['symbol'] == 'AAPL'
+    finally:
+        webserver.data_api = original_api
+
+
+def test_get_profile_with_data_api():
+    """Test that profile endpoint returns logo from fetch_company_profile."""
+    from spectr import webserver
+    
+    original_api = webserver.data_api
+    try:
+        class MockDataApi:
+            def fetch_company_profile(self, symbol):
+                return {
+                    'symbol': symbol,
+                    'image': 'https://example.com/logo.png',
+                    'companyName': 'Test Company'
+                }
+        
+        webserver.data_api = MockDataApi()
+        
+        response = webserver.app.test_client().get('/api/profile/AAPL')
+        
+        assert response.status_code == 200
+        data = response.json
+        assert data['symbol'] == 'AAPL'
+        assert data['logo'] == 'https://example.com/logo.png'
+        assert data['companyName'] == 'Test Company'
+    finally:
+        webserver.data_api = original_api
+
+
+def test_get_profile_with_empty_profile():
+    """Test that profile endpoint handles empty profile gracefully."""
+    from spectr import webserver
+    
+    original_api = webserver.data_api
+    try:
+        class MockDataApi:
+            def fetch_company_profile(self, symbol):
+                return {}
+        
+        webserver.data_api = MockDataApi()
+        
+        response = webserver.app.test_client().get('/api/profile/AAPL')
+        
+        assert response.status_code == 200
+        data = response.json
+        assert data['symbol'] == 'AAPL'
+        assert data['logo'] == ''
+    finally:
+        webserver.data_api = original_api
+
+
+def test_get_profile_with_exception():
+    """Test that profile endpoint handles exceptions gracefully."""
+    from spectr import webserver
+    
+    original_api = webserver.data_api
+    try:
+        class MockDataApi:
+            def fetch_company_profile(self, symbol):
+                raise Exception("API Error")
+        
+        webserver.data_api = MockDataApi()
+        
+        response = webserver.app.test_client().get('/api/profile/AAPL')
+        
+        assert response.status_code == 200
+        data = response.json
+        assert data['symbol'] == 'AAPL'
+        assert data['logo'] == ''
+    finally:
+        webserver.data_api = original_api

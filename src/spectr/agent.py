@@ -129,6 +129,7 @@ class VoiceAgent:
             Spectr should be pronounced "Spect-ER" and never like "Spect-RA".
             When you prepare a formatted summary (e.g., news digest or report), render it for the user by calling the display_markdown tool.
             When a user asks to "see" or be "shown" something, respond by calling the display_markdown tool with a concise, well-formatted markdown view of the requested information.
+            For requests to show recent or latest news, call get_recent_news first and render markdown with direct source links; if the user asks for a specific count, show that many most recent links.
         """
         )
         # Keep track of the full chat history so conversations persist between
@@ -704,11 +705,12 @@ class VoiceAgent:
         """
         done = threading.Event() if wait else None
         self._queue.put((text, done))
-        if self._queue.qsize() == 1 and self._on_speech_start:
-            try:
-                self._on_speech_start()
-            except Exception:
-                pass
+        if self._queue.qsize() == 1:
+            if self._on_speech_start:
+                try:
+                    self._on_speech_start()
+                except Exception:
+                    pass
         if wait:
             done.wait()
 
@@ -761,13 +763,28 @@ class VoiceAgent:
                 except Exception:
                     pass
 
-    def _speak(self, text: str) -> None:
-        """Speak *text* using OpenAI text-to-speech."""
-        if not self._audio_enabled:
-            # Keep API / UI flows alive even when local audio playback isn't available.
-            log.debug("Skipping TTS playback (audio disabled): %s", text[:80])
-            return
+    def is_speaking(self) -> bool:
+        """Return whether there is queued or currently playing speech."""
+        try:
+            if self._current_channel is not None and self._current_channel.get_busy():
+                return True
+        except Exception:
+            pass
+        return not self._queue.empty()
 
+    def wait_until_speech_done(self, timeout: float = 120.0) -> bool:
+        """Block until speech queue/playback finishes or timeout expires."""
+        end_time = time.time() + max(timeout, 0.0)
+        while self.is_speaking():
+            if time.time() >= end_time:
+                return False
+            time.sleep(0.1)
+        return True
+
+    def synthesize_speech(self, text: str) -> bytes:
+        """Return OpenAI text-to-speech audio bytes for *text*."""
+        if not text:
+            return b""
         params = dict(
             model=self.tts_model,
             voice=self.voice,
@@ -814,6 +831,17 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
                 audio_bytes = b"".join(chunk.content for chunk in resp)
             else:
                 audio_bytes = resp.content
+        return audio_bytes
+
+    def _speak(self, text: str) -> None:
+        """Speak *text* using OpenAI text-to-speech."""
+        if not self._audio_enabled:
+            # Keep API / UI flows alive even when local audio playback isn't available.
+            log.debug("Skipping TTS playback (audio disabled): %s", text[:80])
+            return
+        audio_bytes = self.synthesize_speech(text)
+        if not audio_bytes:
+            return
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
             f.write(audio_bytes)
             fname = f.name
@@ -1027,6 +1055,11 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
             if forced_markdown is None:
                 forced_markdown = reply or "No details available."
             self.tool_funcs["display_markdown"](forced_markdown, forced_title)
+        if status_cb:
+            try:
+                status_cb("speaking")
+            except Exception:
+                pass
         self.say(reply)
         return reply
 
@@ -1167,3 +1200,91 @@ Features: Uses empathetic phrasing, gentle reassurance, and proactive language t
                     self.listen_and_answer()
             except Exception:
                 pass
+
+    def ask_with_text(self, text: str, speak: bool = True) -> str:
+        """Answer a question from pre-recorded text transcript.
+        
+        This method accepts a text transcript (e.g., from Web Speech API)
+        and returns the spoken response without recording audio again.
+        """
+        if not text.strip():
+            return ""
+        
+        self.chat_history.append({"role": "user", "content": text})
+        log.info(f"User asked: {text}")
+        
+        tools = self.tools
+        wants_markdown = bool(self._show_markdown) and self._wants_markdown(text)
+        used_display_markdown = False
+        news_latest: dict | None = None
+        news_recent: list[dict] = []
+        news_symbol: str | None = None
+        forced_markdown: str | None = None
+        forced_title: str | None = None
+        completion = self.client.chat.completions.create(
+            model=self.chat_model,
+            messages=self.chat_history,
+            tools=tools,
+        )
+        
+        message = completion.choices[0].message
+        if message.tool_calls:
+            self.chat_history.append(message.model_dump())
+            for call in message.tool_calls:
+                func = self.tool_funcs.get(call.function.name)
+                if func:
+                    args = json.loads(call.function.arguments)
+                    try:
+                        result = func(**args)
+                    except requests.HTTPError as exc:
+                        if exc.response is not None and exc.response.status_code == 429:
+                            self.say(
+                                "The data provider is rate limiting us. Please try again shortly."
+                            )
+                            return ""
+                        raise
+                    if call.function.name in {"get_latest_news", "get_recent_news"}:
+                        news_symbol = args.get("symbol") or news_symbol
+                        if call.function.name == "get_latest_news":
+                            try:
+                                news_latest = json.loads(result) if result else None
+                            except Exception:
+                                news_latest = {"title": result, "date": "", "link": "", "content": ""}
+                        else:
+                            try:
+                                news_recent = json.loads(result) if result else []
+                            except Exception:
+                                news_recent = []
+                    if call.function.name == "display_markdown":
+                        used_display_markdown = True
+                    self.chat_history.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": call.id,
+                            "content": result,
+                        }
+                    )
+            
+            completion = self.client.chat.completions.create(
+                model=self.chat_model,
+                messages=self.chat_history,
+            )
+            reply_message = completion.choices[0].message
+            reply = reply_message.content
+            self.chat_history.append(reply_message.model_dump())
+        else:
+            reply = message.content
+            self.chat_history.append({"role": "assistant", "content": reply})
+        
+        if wants_markdown and not used_display_markdown and "display_markdown" in self.tool_funcs:
+            if forced_markdown is None:
+                built = self._build_news_markdown(news_latest, news_recent, news_symbol)
+                if built:
+                    forced_markdown, forced_title = built
+            if forced_markdown is None:
+                forced_markdown = reply or "No details available."
+            self.tool_funcs["display_markdown"](forced_markdown, forced_title)
+
+        if speak:
+            self.say(reply)
+        return reply

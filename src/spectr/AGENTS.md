@@ -19,10 +19,19 @@ The project is packaged via `pyproject.toml` and source code lives inside the `s
 
 ## Contribution notes
 
+### Python code
 - Follow PEP8 conventions; run `black` on modified files before committing.
 - Add any new dependencies to both `pyproject.toml` and `requirements.txt`.
 - Place additional tests under `tests/` and run `pytest` before committing.
 - UI additions belong in `src/spectr/views`; new strategies go in `src/spectr/strategies`.
+
+### Web UI code
+- The web UI is located in `src/spectr/webui/`
+- After making any changes to the web UI, always verify it compiles successfully:
+  ```bash
+  cd src/spectr/webui && npm run build
+  ```
+- Add new dependencies with `npm install --save` and commit both `package.json` and `package-lock.json`
 
 ## Running tests
 

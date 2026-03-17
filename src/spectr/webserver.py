@@ -1,10 +1,12 @@
 import requests
-from flask import Flask, jsonify, send_from_directory, request
+from flask import Flask, jsonify, send_from_directory, request, Response
 import os
 import sys
 import pandas as pd
 import logging
 from datetime import datetime
+import tempfile
+import threading
 
 log = logging.getLogger(__name__)
 
@@ -99,6 +101,30 @@ def remove_from_watchlist(ticker):
         log.error(f"Failed to remove ticker: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
+
+@app.route("/api/profile/<symbol>", methods=["GET"])
+def get_profile(symbol):
+    global data_api
+    
+    profile = {}
+    if data_api and hasattr(data_api, 'fetch_company_profile'):
+        try:
+            profile = data_api.fetch_company_profile(symbol.upper())
+        except Exception as e:
+            log.error(f"Failed to fetch profile for {symbol}: {e}")
+    
+    logo_url = (
+        profile.get('image') or
+        profile.get('logo') or
+        profile.get('companyLogo') or
+        ''
+    )
+    
+    return jsonify({
+        'symbol': symbol.upper(),
+        'logo': logo_url,
+        **{k: v for k, v in profile.items() if k not in ['image', 'logo', 'companyLogo']}
+    })
 
 @app.route("/api/search-tickers", methods=["GET"])
 def search_tickers():
@@ -618,6 +644,172 @@ def submit_order():
             "success": False,
             "error": str(e)
         }), 500
+
+
+voice_agent = None
+voice_markdown_payload = None
+voice_markdown_version = 0
+voice_markdown_lock = threading.Lock()
+
+
+def _store_voice_markdown(markdown: str, title: str | None = None):
+    global voice_markdown_payload, voice_markdown_version
+
+    payload = {
+        "title": title,
+        "markdown": markdown or "",
+        "updated_at": datetime.utcnow().isoformat() + "Z",
+    }
+    with voice_markdown_lock:
+        voice_markdown_version += 1
+        payload["version"] = voice_markdown_version
+        voice_markdown_payload = payload
+    return {"status": "shown", "version": payload["version"]}
+
+
+def _get_voice_markdown_since(version: int):
+    with voice_markdown_lock:
+        if voice_markdown_payload and voice_markdown_version > version:
+            return dict(voice_markdown_payload)
+    return None
+
+
+def _get_voice_agent():
+    global voice_agent
+
+    if not voice_agent:
+        from .agent import VoiceAgent
+        voice_agent = VoiceAgent(
+            broker_api=broker_api,
+            data_api=data_api,
+            show_markdown=_store_voice_markdown,
+        )
+    return voice_agent
+
+
+@app.route("/api/voice-agent", methods=["POST"])
+def handle_voice_agent():
+    try:
+        data = request.get_json()
+        if data is None:
+            return jsonify({"success": False, "error": "Invalid JSON data"}), 400
+        
+        transcript = data.get('transcript', '')
+        
+        if not transcript.strip():
+            return jsonify({"success": False, "error": "No transcript provided"}), 400
+        
+        with voice_markdown_lock:
+            start_markdown_version = voice_markdown_version
+
+        voice_agent = _get_voice_agent()
+        result = voice_agent.ask_with_text(transcript, speak=False)
+        markdown_payload = _get_voice_markdown_since(start_markdown_version)
+        
+        return jsonify({
+            "success": True,
+            "response": result,
+            "markdown": markdown_payload,
+        })
+    except Exception as e:
+        log.error(f"Failed to handle voice agent: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/voice-agent/audio", methods=["POST"])
+def handle_voice_agent_audio():
+    tmp_path = None
+
+    try:
+        audio_file = request.files.get("audio")
+        if audio_file is None:
+            return jsonify({"success": False, "error": "Missing audio upload"}), 400
+
+        suffix = os.path.splitext(audio_file.filename or "")[1] or ".webm"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            audio_file.save(tmp.name)
+            tmp_path = tmp.name
+
+        with voice_markdown_lock:
+            start_markdown_version = voice_markdown_version
+
+        voice_agent = _get_voice_agent()
+        with open(tmp_path, "rb") as f:
+            transcription = voice_agent.client.audio.transcriptions.create(
+                model="gpt-4o-mini-transcribe",
+                file=f,
+            )
+
+        transcript = (getattr(transcription, "text", "") or "").strip()
+        if not transcript:
+            return jsonify({"success": False, "error": "No speech detected in audio"}), 400
+
+        result = voice_agent.ask_with_text(transcript, speak=False)
+        markdown_payload = _get_voice_markdown_since(start_markdown_version)
+        return jsonify({
+            "success": True,
+            "transcript": transcript,
+            "response": result,
+            "markdown": markdown_payload,
+        })
+    except Exception as e:
+        log.error(f"Failed to handle voice agent audio: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+
+
+@app.route("/api/voice-agent/tts", methods=["POST"])
+def handle_voice_agent_tts():
+    try:
+        data = request.get_json(silent=True) or {}
+        text = (data.get("text") or "").strip()
+        if not text:
+            return jsonify({"success": False, "error": "No text provided"}), 400
+
+        voice_agent = _get_voice_agent()
+        audio_bytes = voice_agent.synthesize_speech(text)
+        if not audio_bytes:
+            return jsonify({"success": False, "error": "No audio generated"}), 500
+
+        return Response(
+            audio_bytes,
+            mimetype="audio/mpeg",
+            headers={
+                "Cache-Control": "no-store",
+            },
+        )
+    except Exception as e:
+        log.error(f"Failed to synthesize voice-agent speech: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/voice-agent/markdown", methods=["GET"])
+def get_voice_agent_markdown():
+    with voice_markdown_lock:
+        payload = dict(voice_markdown_payload) if voice_markdown_payload else None
+    return jsonify({
+        "success": True,
+        "markdown": payload,
+    })
+
+
+@app.route("/api/voice-agent/speaking", methods=["GET"])
+def check_voice_agent_speaking():
+    try:
+        voice_agent = _get_voice_agent()
+        is_speaking = voice_agent.is_speaking() if voice_agent else False
+        return jsonify({
+            "success": True,
+            "speaking": is_speaking,
+        })
+    except Exception as e:
+        log.error(f"Failed to check voice agent speaking status: {e}")
+        return jsonify({"success": False, "speaking": False})
 
 
 if __name__ == "__main__":

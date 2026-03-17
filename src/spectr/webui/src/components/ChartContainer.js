@@ -191,26 +191,6 @@ function ChartContainer({ ticker }) {
               >
             SELL
               </button>
-              <button
-                onClick={() => setShowSettings(true)}
-                style={profileButtonStyle}
-                title="Open Settings"
-                onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
-                onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.98)'; }}
-                onMouseUp={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
-              >
-                <svg
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path d="M12 12C14.2091 12 16 10.2091 16 8C16 5.79086 14.2091 4 12 4C9.79086 4 8 5.79086 8 8C8 10.2091 9.79086 12 12 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M20 21C20 17.134 16.765 14 12 14C7.235 14 4 17.134 4 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
             </div>
           </header>
           <TradingViewWidget data={chartData} ticker={ticker} />
@@ -301,26 +281,6 @@ function ChartContainer({ ticker }) {
             >
           SELL
             </button>
-            <button
-              onClick={() => setShowSettings(true)}
-              style={profileButtonStyle}
-              title="Open Settings"
-              onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
-              onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.98)'; }}
-              onMouseUp={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
-            >
-              <svg
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path d="M12 12C14.2091 12 16 10.2091 16 8C16 5.79086 14.2091 4 12 4C9.79086 4 8 5.79086 8 8C8 10.2091 9.79086 12 12 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M20 21C20 17.134 16.765 14 12 14C7.235 14 4 17.134 4 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
           </div>
         </header>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -361,21 +321,6 @@ const orderButtonStyle = {
   color: '#ffffff',
   transition: 'opacity 0.2s, transform 0.1s',
 };
-
-const profileButtonStyle = {
-  padding: '8px',
-  borderRadius: '6px',
-  border: 'none',
-  cursor: 'pointer',
-  backgroundColor: '#238636',
-  color: '#ffffff',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  transition: 'opacity 0.2s, transform 0.1s',
-};
-
-
 
 const containerStyle = {
   flex: 1,
