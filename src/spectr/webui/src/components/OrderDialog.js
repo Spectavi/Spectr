@@ -10,10 +10,11 @@ const OrderSide = {
   SELL: 'SELL'
 };
 
-function OrderDialog({ ticker, side, onClose }) {
+function OrderDialog({ ticker, side, defaultTradeAmount = null, onClose }) {
   const [symbol, setSymbol] = useState(ticker);
   const [price, setPrice] = useState(0);
   const [qty, setQty] = useState('');
+  const [qtyTouched, setQtyTouched] = useState(false);
   const [limitPrice, setLimitPrice] = useState('');
   const [orderType, setOrderType] = useState(OrderType.MARKET);
   const [posQty, setPosQty] = useState(null);
@@ -22,7 +23,19 @@ function OrderDialog({ ticker, side, onClose }) {
 
   useEffect(() => {
     setSymbol(ticker);
+    setQtyTouched(false);
   }, [ticker]);
+
+  useEffect(() => {
+    if (side !== OrderSide.BUY) return;
+    if (defaultTradeAmount === null || defaultTradeAmount === undefined) return;
+    if (qtyTouched) return;
+    if (!price || price <= 0) return;
+
+    const amount = parseFloat(defaultTradeAmount);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    setQty((amount / price).toFixed(5));
+  }, [defaultTradeAmount, side, qtyTouched, price]);
 
   useEffect(() => {
     fetchData();
@@ -141,6 +154,14 @@ function OrderDialog({ ticker, side, onClose }) {
         </div>
 
         <div style={infoContainerStyle}>
+          {defaultTradeAmount !== null && defaultTradeAmount !== undefined && (
+            <p style={infoTextStyle}>
+              Trade amount preset:{' '}
+              <span style={{ color: '#58a6ff' }}>
+                {formatCurrency(parseFloat(defaultTradeAmount) || 0)}
+              </span>
+            </p>
+          )}
           <p style={infoTextStyle}>
             Price: <span style={{ color: '#58a6ff' }}>{formatCurrency(price)}</span>{' '}
             <span style={{ color: '#8b949e', fontSize: '12px' }}>
@@ -181,7 +202,10 @@ function OrderDialog({ ticker, side, onClose }) {
             step="any"
             placeholder="0"
             value={qty}
-            onChange={(e) => setQty(e.target.value)}
+            onChange={(e) => {
+              setQtyTouched(true);
+              setQty(e.target.value);
+            }}
             style={inputStyle}
           />
         </div>

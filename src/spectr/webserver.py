@@ -7,6 +7,8 @@ import logging
 from datetime import datetime
 import tempfile
 import threading
+import pathlib
+import importlib
 
 log = logging.getLogger(__name__)
 
@@ -23,6 +25,21 @@ cached_tickers = []
 cached_strategies = []
 current_strategy = None
 strategy_active = False
+strategy_auto_trade_enabled = False
+strategy_trade_amount = 0.0
+_last_strategy_signal_key = None
+
+try:
+    from . import cache
+
+    cached_strategy = cache.load_selected_strategy()
+    if cached_strategy:
+        current_strategy = cached_strategy
+    cached_trade_amount = cache.load_trade_amount()
+    if cached_trade_amount is not None:
+        strategy_trade_amount = float(cached_trade_amount)
+except Exception:
+    pass
 
 
 def init_data_api(data_provider: str):
@@ -388,7 +405,7 @@ def get_account_info():
 
 @app.route("/api/strategies", methods=["GET"])
 def get_strategies():
-    global cached_strategies, current_strategy, strategy_active
+    global cached_strategies, current_strategy, strategy_active, strategy_auto_trade_enabled, strategy_trade_amount
     
     if not cached_strategies:
         try:
@@ -400,13 +417,15 @@ def get_strategies():
     return jsonify({
         "strategies": cached_strategies,
         "current": current_strategy or "",
-        "active": strategy_active
+        "active": strategy_active,
+        "autoTradeEnabled": strategy_auto_trade_enabled,
+        "tradeAmount": strategy_trade_amount,
     })
 
 
 @app.route("/api/strategies/<strategy_name>", methods=["POST"])
 def select_strategy(strategy_name):
-    global current_strategy, strategy_active
+    global current_strategy, strategy_active, _last_strategy_signal_key
     
     try:
         data = request.get_json() or {}
@@ -419,6 +438,13 @@ def select_strategy(strategy_name):
         load_strategy(strategy_name)
         
         current_strategy = strategy_name
+        _last_strategy_signal_key = None
+        try:
+            from . import cache
+
+            cache.save_selected_strategy(strategy_name)
+        except Exception:
+            pass
         
         return jsonify({
             "success": True,
@@ -462,7 +488,7 @@ def toggle_strategy():
 
 @app.route("/api/strategies/auto-trade", methods=["POST"])
 def toggle_auto_trade():
-    global strategy_active
+    global strategy_active, strategy_auto_trade_enabled
     
     try:
         data = request.get_json()
@@ -473,6 +499,7 @@ def toggle_auto_trade():
             }), 400
         
         new_state = bool(data.get('enabled', False))
+        strategy_auto_trade_enabled = new_state
         
         if new_state and not strategy_active:
             strategy_active = True
@@ -488,6 +515,222 @@ def toggle_auto_trade():
             "success": False,
             "error": str(e)
         }), 500
+
+
+@app.route("/api/strategies/config", methods=["POST"])
+def update_strategy_config():
+    global strategy_trade_amount, strategy_auto_trade_enabled, strategy_active
+
+    try:
+        data = request.get_json() or {}
+        trade_amount = data.get("tradeAmount")
+        auto_trade_enabled = data.get("autoTradeEnabled")
+
+        if trade_amount is not None:
+            try:
+                strategy_trade_amount = max(0.0, float(trade_amount))
+            except (TypeError, ValueError):
+                return jsonify({"success": False, "error": "Invalid tradeAmount"}), 400
+            try:
+                from . import cache
+
+                cache.save_trade_amount(strategy_trade_amount)
+            except Exception:
+                pass
+
+        if auto_trade_enabled is not None:
+            strategy_auto_trade_enabled = bool(auto_trade_enabled)
+            if strategy_auto_trade_enabled:
+                strategy_active = True
+
+        return jsonify(
+            {
+                "success": True,
+                "tradeAmount": strategy_trade_amount,
+                "autoTradeEnabled": strategy_auto_trade_enabled,
+                "active": strategy_active,
+            }
+        )
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+def _resolve_strategy_file_path(strategy_name: str) -> pathlib.Path:
+    strategies_dir = pathlib.Path(__file__).resolve().parent / "strategies"
+    for path in strategies_dir.glob("*.py"):
+        if path.stem in {"__init__", "trading_strategy", "metrics"}:
+            continue
+        try:
+            contents = path.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        if f"class {strategy_name}" in contents:
+            return path
+    raise FileNotFoundError(f"Unable to locate source file for strategy {strategy_name}")
+
+
+@app.route("/api/strategies/<strategy_name>/code", methods=["GET"])
+def get_strategy_code(strategy_name):
+    try:
+        from .strategies import load_strategy
+
+        load_strategy(strategy_name)
+        path = _resolve_strategy_file_path(strategy_name)
+        code = path.read_text(encoding="utf-8")
+        return jsonify({"success": True, "code": code, "strategy": strategy_name})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@app.route("/api/strategies/<strategy_name>/code", methods=["POST"])
+def save_strategy_code(strategy_name):
+    try:
+        data = request.get_json() or {}
+        code = data.get("code")
+        if not isinstance(code, str):
+            return jsonify({"success": False, "error": "Missing code"}), 400
+
+        from .strategies import load_strategy
+
+        load_strategy(strategy_name)
+        path = _resolve_strategy_file_path(strategy_name)
+        path.write_text(code, encoding="utf-8")
+
+        module_name = f"spectr.strategies.{path.stem}"
+        if module_name in sys.modules:
+            importlib.reload(sys.modules[module_name])
+        else:
+            importlib.import_module(module_name)
+
+        return jsonify({"success": True, "message": "Strategy saved", "strategy": strategy_name})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@app.route("/api/strategies/format-code", methods=["POST"])
+def format_strategy_code():
+    try:
+        data = request.get_json() or {}
+        code = data.get("code")
+        if not isinstance(code, str):
+            return jsonify({"success": False, "error": "Missing code"}), 400
+
+        try:
+            import black
+        except Exception as e:
+            return jsonify({"success": False, "error": f"Black formatter unavailable: {e}"}), 500
+
+        formatted = black.format_str(code, mode=black.FileMode())
+        return jsonify({"success": True, "code": formatted})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@app.route("/api/strategies/evaluate/<symbol>", methods=["POST"])
+def evaluate_strategy_signal(symbol):
+    global _last_strategy_signal_key
+    global strategy_active, current_strategy, strategy_auto_trade_enabled, strategy_trade_amount
+    global data_api, broker_api
+
+    if not strategy_active or not current_strategy:
+        return jsonify(
+            {
+                "success": True,
+                "signal": None,
+                "isNew": False,
+                "active": strategy_active,
+                "current": current_strategy or "",
+                "autoTradeEnabled": strategy_auto_trade_enabled,
+                "tradeAmount": strategy_trade_amount,
+            }
+        )
+
+    if not data_api:
+        return jsonify({"success": False, "error": "Data API not initialized"}), 500
+
+    try:
+        from .strategies import load_strategy, metrics
+        from .fetch.broker_interface import OrderSide
+        from . import broker_tools
+
+        symbol = symbol.upper().strip()
+        strategy_cls = load_strategy(current_strategy)
+
+        today = datetime.now().date()
+        from_date = today.strftime("%Y-%m-%d")
+        to_date = today.strftime("%Y-%m-%d")
+        df = data_api.fetch_chart_data(symbol, from_date=from_date, to_date=to_date)
+        if df.empty:
+            return jsonify({"success": True, "signal": None, "isNew": False})
+
+        df = df.copy()
+        idx = pd.to_datetime(df.index)
+        if getattr(idx, "tz", None) is not None:
+            idx = idx.tz_localize(None)
+        df.index = idx
+
+        specs = strategy_cls.get_indicators()
+        if specs:
+            df = metrics.analyze_indicators(df, specs)
+
+        position = None
+        if broker_api and hasattr(broker_api, "get_position"):
+            try:
+                position = broker_api.get_position(symbol)
+            except Exception:
+                position = None
+
+        signal = strategy_cls.detect_signals(df, symbol, position=position, orders=[])
+        if not signal:
+            return jsonify({"success": True, "signal": None, "isNew": False})
+
+        signal_side = (signal.get("signal") or "").lower()
+        signal_ts = df.index[-1].isoformat() if len(df.index) else ""
+        signal_key = f"{current_strategy}:{symbol}:{signal_side}:{signal_ts}"
+        is_new = signal_key != _last_strategy_signal_key
+        if is_new:
+            _last_strategy_signal_key = signal_key
+
+        execution = None
+        if is_new and strategy_auto_trade_enabled and strategy_trade_amount > 0 and signal_side in {"buy", "sell"}:
+            if not broker_api and data_api:
+                broker_api = data_api
+            if broker_api:
+                side = OrderSide.BUY if signal_side == "buy" else OrderSide.SELL
+                try:
+                    price = float(signal.get("price") or 0.0)
+                except (TypeError, ValueError):
+                    price = 0.0
+
+                order = broker_tools.submit_order(
+                    broker_api,
+                    symbol,
+                    side,
+                    price,
+                    strategy_trade_amount,
+                    True,
+                    success_sound_path=None,
+                )
+                execution = {
+                    "submitted": bool(order),
+                    "orderId": getattr(order, "id", None) if order else None,
+                    "side": side.name,
+                }
+
+        return jsonify(
+            {
+                "success": True,
+                "signal": signal,
+                "isNew": is_new,
+                "active": strategy_active,
+                "current": current_strategy or "",
+                "autoTradeEnabled": strategy_auto_trade_enabled,
+                "tradeAmount": strategy_trade_amount,
+                "execution": execution,
+            }
+        )
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 def _save_cached_tickers():

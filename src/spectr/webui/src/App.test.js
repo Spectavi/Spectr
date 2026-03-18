@@ -1,5 +1,4 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import App from './App';
 
 jest.mock('./components/TradingViewWidget.js', () => {
@@ -23,6 +22,20 @@ jest.mock('./components/PortfolioDialog.js', () => {
   };
 });
 
+jest.mock('./components/Sidebar.js', () => {
+  return function MockSidebar({ tickers, onSelect }) {
+    return (
+      <div data-testid="mock-sidebar">
+        {tickers.map((ticker) => (
+          <button key={ticker} onClick={() => onSelect(ticker)}>
+            {ticker}
+          </button>
+        ))}
+      </div>
+    );
+  };
+});
+
 describe('App Navigation', () => {
   const mockTickers = ['AAPL', 'GOOGL', 'MSFT', 'TSLA'];
   
@@ -37,14 +50,37 @@ describe('App Navigation', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     window.fetch = jest.fn().mockImplementation((url) => {
-      if (url.includes('/api/tickers')) {
+      const requestUrl = String(url);
+
+      if (requestUrl.includes('/api/tickers')) {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve(mockTickers)
         });
       }
-      
-      const ticker = url.split('/').pop();
+
+      if (requestUrl.includes('/api/strategies/evaluate/')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ success: true, signal: null, isNew: false })
+        });
+      }
+
+      if (requestUrl.includes('/api/strategies')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            success: true,
+            strategies: ['CustomStrategy'],
+            current: '',
+            active: false,
+            autoTradeEnabled: false,
+            tradeAmount: 0
+          })
+        });
+      }
+
+      const ticker = requestUrl.split('/').pop();
       return Promise.resolve({
         ok: true,
         json: () => Promise.resolve(mockChartResponse(ticker))
@@ -63,20 +99,11 @@ describe('App Navigation', () => {
   });
 
   test('navigates to different ticker and chart loads successfully', async () => {
-    const responses = [
-      Promise.resolve({ ok: true, json: () => Promise.resolve(mockTickers) }),
-      Promise.resolve({ ok: true, json: () => Promise.resolve(mockChartResponse('AAPL')) }),
-      Promise.resolve({ ok: true, json: () => Promise.resolve(mockChartResponse('GOOGL')) })
-    ];
-
-    for (const response of responses) {
-      window.fetch.mockResolvedValueOnce(response);
-    }
-
     render(<App />);
 
     await waitFor(() => expect(screen.getByText('TradingView Chart')).toBeInTheDocument(), { timeout: 5000 });
 
+    await waitFor(() => expect(screen.getByText('GOOGL')).toBeInTheDocument(), { timeout: 5000 });
     const goojlTicker = screen.getByText('GOOGL');
     fireEvent.click(goojlTicker);
 
@@ -86,20 +113,10 @@ describe('App Navigation', () => {
   });
 
   test('navigates through multiple tickers successfully', async () => {
-    const responses = [
-      Promise.resolve({ ok: true, json: () => Promise.resolve(mockTickers) }),
-      ...mockTickers.map(ticker => 
-        Promise.resolve({ ok: true, json: () => Promise.resolve(mockChartResponse(ticker)) })
-      )
-    ];
-
-    for (const response of responses) {
-      window.fetch.mockResolvedValueOnce(response);
-    }
-
     render(<App />);
 
     await waitFor(() => expect(screen.getByText('TradingView Chart')).toBeInTheDocument(), { timeout: 5000 });
+    await waitFor(() => expect(screen.getByText('GOOGL')).toBeInTheDocument(), { timeout: 5000 });
 
     for (let i = 1; i < mockTickers.length; i++) {
       const ticker = mockTickers[i];
@@ -114,12 +131,41 @@ describe('App Navigation', () => {
   });
 
   test('handles chart loading error gracefully', async () => {
-    window.fetch
-      .mockResolvedValueOnce(Promise.resolve({ ok: true, json: () => Promise.resolve(mockTickers) }))
-      .mockResolvedValueOnce(Promise.resolve({ ok: false, status: 404 }));
+    window.fetch.mockImplementation((url) => {
+      const requestUrl = String(url);
+
+      if (requestUrl.includes('/api/tickers')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(['ERR1'])
+        });
+      }
+      if (requestUrl.includes('/api/strategies')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            success: true,
+            strategies: ['CustomStrategy'],
+            current: '',
+            active: false,
+            autoTradeEnabled: false,
+            tradeAmount: 0
+          })
+        });
+      }
+      if (requestUrl.includes('/api/chart/')) {
+        return Promise.resolve({ ok: false, status: 404, statusText: 'Not Found' });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ success: true, signal: null, isNew: false })
+      });
+    });
 
     render(<App />);
 
+    await waitFor(() => expect(screen.getByText('ERR1')).toBeInTheDocument(), { timeout: 5000 });
+    fireEvent.click(screen.getByText('ERR1'));
     await waitFor(() => expect(screen.getByText(/Error:/)).toBeInTheDocument());
   });
 });
