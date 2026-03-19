@@ -33,6 +33,7 @@ function TradingViewWidget({ data, ticker }) {
         toolbar_bg: '#f1f3f6',
         enable_publishing: false,
         allow_symbol_change: true,
+        disable_telemetry: true,
         container_id: chartConfig.containerId,
         datafeed: {
           getBars: function(symbolInfo, resolution, from, to, callback) {

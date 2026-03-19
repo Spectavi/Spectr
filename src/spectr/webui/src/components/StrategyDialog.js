@@ -178,7 +178,7 @@ const overlayStyle = {
 };
 
 const dialogStyle = {
-  width: 'min(1200px, 100%)',
+  width: 'min(850px, 100%)',
   maxHeight: '90vh',
   overflow: 'auto',
   backgroundColor: '#0d1117',
