@@ -62,7 +62,7 @@ function StrategyDialog({
           <button onClick={onClose} style={closeButtonStyle} aria-label="Close strategy dialog">x</button>
         </div>
 
-	        <div style={topRowStyle}>
+<div style={topRowStyle}>
 	          <div style={controlBlockStyle}>
 	            <label style={labelStyle}>Strategy</label>
 	            <select
@@ -78,56 +78,9 @@ function StrategyDialog({
               ))}
             </select>
           </div>
-
-          <div style={controlBlockStyle}>
-            <label style={labelStyle}>Status</label>
-	            <button
-	              onClick={onToggleStrategy}
-	              style={{
-	                ...actionButtonStyle,
-	                width: '100px',
-	                backgroundColor: strategyActive ? '#238636' : '#da3633',
-	              }}
-	            >
-              {strategyActive ? 'Deactivate' : 'Activate'}
-            </button>
-          </div>
         </div>
 
-	        <div style={bottomRowStyle}>
-	          <div style={controlBlockStyle}>
-	            <label style={labelStyle}>Trade Amount (USD)</label>
-	            <input
-              type="number"
-              min="0"
-              step="0.01"
-	              value={tradeAmount}
-	              onChange={(e) => onTradeAmountChange(e.target.value)}
-	              style={{ ...inputStyle, width: '150px' }}
-	              placeholder="0.00"
-	            />
-	          </div>
 
-	          <div style={{ ...controlBlockStyle, width: '100px' }}>
-	            <label style={{ ...labelStyle, whiteSpace: 'nowrap' }}>Auto-Trade</label>
-	            <button
-              onClick={onToggleAutoTrade}
-              aria-pressed={autoTradeEnabled}
-              title={autoTradeEnabled ? 'Disable auto-trade' : 'Enable auto-trade'}
-              style={{
-                ...toggleSwitchStyle,
-                backgroundColor: autoTradeEnabled ? '#238636' : '#30363d',
-              }}
-            >
-              <span
-                style={{
-                  ...toggleKnobStyle,
-                  transform: autoTradeEnabled ? 'translateX(24px)' : 'translateX(0)',
-                }}
-              />
-            </button>
-          </div>
-        </div>
 
         <div style={editorHeaderStyle}>
           <h3 style={{ margin: 0, fontSize: '16px' }}>Python Strategy Editor</h3>

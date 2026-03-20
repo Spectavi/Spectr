@@ -32,7 +32,9 @@ function ChartContainer({ ticker }) {
         const res = await fetch('/api/strategies');
         const data = await res.json();
         setStrategies(data.strategies || []);
-        setSelectedStrategy(data.current || '');
+        if (data.current) {
+          setSelectedStrategy(data.current);
+        }
         setStrategyActive(data.active || false);
         setStrategyAutoTradeEnabled(Boolean(data.autoTradeEnabled));
         setStrategyTradeAmount(
@@ -244,7 +246,7 @@ function ChartContainer({ ticker }) {
 
   useEffect(() => {
     loadStrategyCode(selectedStrategy);
-  }, [selectedStrategy, loadStrategyCode]);
+  }, [selectedStrategy]);
 
   useEffect(() => {
     if (!ticker || !strategyActive || !selectedStrategy) return;
@@ -298,7 +300,7 @@ function ChartContainer({ ticker }) {
   }, [ticker, selectedStrategy, strategyActive, strategyTradeAmount, playVoiceAlert]);
 
   const strategyControls = (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
       <select
         value={selectedStrategy}
         onChange={(e) => handleStrategySelect(e.target.value)}
@@ -337,21 +339,65 @@ function ChartContainer({ ticker }) {
         onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.98)'; }}
         onMouseUp={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
       >
-        {strategyActive ? 'Deactivate' : 'Activate'}
+{strategyActive ? 'Deactivate' : 'Activate'}
       </button>
-      <button
-        onClick={() => setShowStrategyDialog(true)}
-        style={gearButtonStyle}
-        title="Open strategy dialog"
-        aria-label="Open strategy dialog"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path
-            d="M19.14 12.94a7.8 7.8 0 0 0 .05-.94 7.8 7.8 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.2 7.2 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.49-.42h-3.84a.5.5 0 0 0-.49.42l-.36 2.54c-.58.23-1.13.54-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.7 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.8 7.8 0 0 0-.05.94c0 .32.02.63.05.94L2.82 14.52a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.5.4 1.05.71 1.63.94l.36 2.54a.5.5 0 0 0 .49.42h3.84a.5.5 0 0 0 .49-.42l.36-2.54c.58-.23 1.13-.54 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5Z"
-            fill="currentColor"
+      
+    </div>
+  );
+
+  const headerTradeControls = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <label style={{ fontSize: '12px', color: '#8b949e' }}>Trade Amount</label>
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          value={strategyTradeAmount}
+          onChange={(e) => handleTradeAmountChange(e.target.value)}
+          style={{
+            width: '75px',
+            padding: '6px 8px',
+            borderRadius: '4px',
+            border: '1px solid #30363d',
+            backgroundColor: '#161b22',
+            color: '#c9d1d9',
+            fontSize: '13px',
+          }}
+          placeholder="0.00"
+        />
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <label style={{ fontSize: '12px', color: '#8b949e' }}>Auto-Trade</label>
+        <button
+          onClick={handleToggleAutoTrade}
+          aria-pressed={strategyAutoTradeEnabled}
+          title={strategyAutoTradeEnabled ? 'Disable auto-trade' : 'Enable auto-trade'}
+          style={{
+            width: '48px',
+            height: '26px',
+            borderRadius: '999px',
+            border: '1px solid #30363d',
+            cursor: 'pointer',
+            padding: '2px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            backgroundColor: strategyAutoTradeEnabled ? '#238636' : '#30363d',
+            transition: 'background-color 0.2s ease',
+          }}
+        >
+          <span
+            style={{
+              width: '20px',
+              height: '20px',
+              borderRadius: '50%',
+              backgroundColor: '#ffffff',
+              transform: strategyAutoTradeEnabled ? 'translateX(22px)' : 'translateX(0)',
+              transition: 'transform 0.2s ease',
+            }}
           />
-        </svg>
-      </button>
+        </button>
+      </div>
     </div>
   );
 
@@ -371,7 +417,10 @@ function ChartContainer({ ticker }) {
         <>
           <header style={headerStyle}>
             <h2 style={{ margin: 0 }}>{chartData.symbol} - 1 Minute</h2>
-            {strategyControls}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              {strategyControls}
+              {headerTradeControls}
+            </div>
             <div style={buttonContainerStyle}>
               <button
                 onClick={() => {
@@ -453,7 +502,10 @@ function ChartContainer({ ticker }) {
       <>
         <header style={headerStyle}>
           <h2 style={{ margin: 0 }}>{ticker} - 1 Minute</h2>
-          {strategyControls}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            {strategyControls}
+            {headerTradeControls}
+          </div>
           <div style={buttonContainerStyle}>
             <button
               onClick={() => {
@@ -574,19 +626,6 @@ const orderButtonStyle = {
   fontSize: '14px',
   color: '#ffffff',
   transition: 'opacity 0.2s, transform 0.1s',
-};
-
-const gearButtonStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  width: '36px',
-  height: '36px',
-  borderRadius: '6px',
-  border: '1px solid #30363d',
-  backgroundColor: '#161b22',
-  color: '#c9d1d9',
-  cursor: 'pointer',
 };
 
 const containerStyle = {

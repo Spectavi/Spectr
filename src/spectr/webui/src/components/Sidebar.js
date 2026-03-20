@@ -2,11 +2,16 @@ import React, { useState, useEffect, useRef } from 'react';
 import WatchlistDialog from './WatchlistDialog';
 import SettingsDialog from './SettingsDialog';
 import VoiceMarkdownDialog from './VoiceMarkdownDialog';
+import StrategyDialog from './StrategyDialog';
 
 function Sidebar({ tickers, selectedTicker, onSelect }) {
   const [collapsed, setCollapsed] = useState(false);
   const [showWatchlistDialog, setShowWatchlistDialog] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showStrategyDialog, setShowStrategyDialog] = useState(false);
+  const [strategies, setStrategies] = useState([]);
+  const [strategyCode, setStrategyCode] = useState('');
+  const [selectedStrategy, setSelectedStrategy] = useState('');
   const [isVoiceActive, setIsVoiceActive] = useState(false);
   const [voiceProcessing, setVoiceProcessing] = useState(false);
   const [voiceSpeaking, setVoiceSpeaking] = useState(false);
@@ -188,6 +193,29 @@ function Sidebar({ tickers, selectedTicker, onSelect }) {
       });
     }
   }, [localTickers]);
+
+  useEffect(() => {
+    const loadStrategies = async () => {
+      try {
+        const res = await fetch('/api/strategies');
+        const data = await res.json();
+        setStrategies(data.strategies || []);
+        if (data.current) {
+          setSelectedStrategy(data.current);
+          const codeRes = await fetch(`/api/strategies/${data.current}/code`);
+          const codeData = await codeRes.json();
+          if (codeData.success && codeData.code) {
+            setStrategyCode(codeData.code);
+          }
+        } else if (data.strategies && data.strategies.length > 0) {
+          setSelectedStrategy(data.strategies[0]);
+        }
+      } catch (err) {
+        console.error('Failed to load strategies:', err);
+      }
+    };
+    loadStrategies();
+  }, []);
 
   const submitVoicePrompt = (text) => {
     if (!text) {
@@ -545,6 +573,7 @@ function Sidebar({ tickers, selectedTicker, onSelect }) {
 {!collapsed && (
             <div style={sidebarContentStyle}>
               <ProfileSection onClick={() => setShowSettings(true)} />
+              <StrategiesSection onClick={() => setShowStrategyDialog(true)} />
               <VoiceAgentSection
                 isActive={isVoiceActive}
                 voiceProcessing={voiceProcessing}
@@ -591,15 +620,16 @@ function Sidebar({ tickers, selectedTicker, onSelect }) {
             <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <div style={{ padding: '8px 0', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <ProfileIconOnly onClick={() => setShowSettings(true)} />
-<VoiceAgentIconOnly
-                   isActive={isVoiceActive}
-                   voiceProcessing={voiceProcessing}
-                   voiceSpeaking={voiceSpeaking}
-                   voiceError={voiceError}
-                   onClick={toggleVoiceAgent}
-                 />
-                <SettingsIconOnly onClick={() => setShowWatchlistDialog(true)} />
-              </div>
+                <StrategiesIconOnly onClick={() => setShowStrategyDialog(true)} />
+ <VoiceAgentIconOnly
+                    isActive={isVoiceActive}
+                    voiceProcessing={voiceProcessing}
+                    voiceSpeaking={voiceSpeaking}
+                    voiceError={voiceError}
+                    onClick={toggleVoiceAgent}
+                  />
+                 <SettingsIconOnly onClick={() => setShowWatchlistDialog(true)} />
+               </div>
               <ul style={tickerListStyle}>
                 {tickers.map((ticker) => (
                   <li
@@ -648,6 +678,64 @@ function Sidebar({ tickers, selectedTicker, onSelect }) {
 
       {showSettings && (
         <SettingsDialog onClose={() => setShowSettings(false)} />
+      )}
+
+      {showStrategyDialog && (
+        <StrategyDialog
+          open={showStrategyDialog}
+          onClose={() => setShowStrategyDialog(false)}
+          strategies={strategies}
+          selectedStrategy={selectedStrategy}
+          strategyActive={false}
+          autoTradeEnabled={false}
+          tradeAmount=""
+          strategyCode={strategyCode}
+          codeLoading={false}
+          codeError=""
+          onStrategySelect={(name) => {
+            setSelectedStrategy(name);
+            Promise.all([
+              fetch(`/api/strategies/${name}`, { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ deactivatePrevious: true })
+              }).then(res => res.json()),
+              fetch(`/api/strategies/${name}/code`).then(res => res.json())
+            ])
+              .then(([selectData, codeData]) => {
+                if (codeData && codeData.code) {
+                  setStrategyCode(codeData.code);
+                }
+              })
+              .catch(err => console.error('Failed to load strategy:', err));
+          }}
+          onToggleStrategy={() => {}}
+          onToggleAutoTrade={() => {}}
+          onTradeAmountChange={() => {}}
+          onCodeChange={(code) => setStrategyCode(code)}
+          onFormatCode={() => {
+            fetch('/api/strategies/format-code', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ code: strategyCode }),
+            })
+              .then(res => res.json())
+              .then(data => {
+                if (data.code) {
+                  setStrategyCode(data.code);
+                }
+              })
+              .catch(err => console.error('Failed to format code:', err));
+          }}
+          onSaveCode={() => {
+            fetch(`/api/strategies/${selectedStrategy}/code`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ code: strategyCode }),
+            })
+              .catch(err => console.error('Failed to save code:', err));
+          }}
+        />
       )}
 
       {showVoiceMarkdown && (
@@ -712,6 +800,41 @@ const profileIconOnlyStyle = {
   borderRadius: '6px',
   transition: 'background-color 0.2s, color 0.2s',
 };
+
+const strategiesIconOnlyStyle = {
+  padding: '10px',
+  background: 'none',
+  border: 'none',
+  cursor: 'pointer',
+  color: '#8b949e',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  borderRadius: '6px',
+  transition: 'background-color 0.2s, color 0.2s',
+};
+
+function StrategiesIconOnly({ onClick }) {
+  return (
+    <div
+      onClick={onClick}
+      style={strategiesIconOnlyStyle}
+      title="Open Strategy Settings"
+      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#238636'; e.currentTarget.style.color = '#ffffff'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#8b949e'; }}
+    >
+      <svg
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path d="M19.14 12.94a7.8 7.8 0 0 0 .05-.94 7.8 7.8 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.2 7.2 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.49-.42h-3.84a.5.5 0 0 0-.49.42l-.36 2.54c-.58.23-1.13.54-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.7 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.8 7.8 0 0 0-.05.94c0 .32.02.63.05.94L2.82 14.52a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.5.4 1.05.71 1.63.94l.36 2.54a.5.5 0 0 0 .49.42h3.84a.5.5 0 0 0-.49-.42l.36-2.54c.58-.23 1.13-.54 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </div>
+  );
+}
 
 const settingsIconOnlyStyle = {
   padding: '10px',
@@ -784,7 +907,32 @@ const profileSectionStyle = {
   transition: 'background-color 0.2s, color 0.2s',
 };
 
+const strategiesSectionStyle = {
+  ...profileSectionStyle,
+};
 
+function StrategiesSection({ onClick }) {
+  return (
+    <div
+      onClick={onClick}
+      style={strategiesSectionStyle}
+      title="Open Strategy Settings"
+      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#238636'; e.currentTarget.style.color = '#ffffff'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#c9d1d9'; }}
+    >
+      <span style={{ fontWeight: '500', fontSize: '14px' }}>Strategies</span>
+      <svg
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path d="M19.14 12.94a7.8 7.8 0 0 0 .05-.94 7.8 7.8 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.2 7.2 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.49-.42h-3.84a.5.5 0 0 0-.49.42l-.36 2.54c-.58.23-1.13.54-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.7 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.8 7.8 0 0 0-.05.94c0 .32.02.63.05.94L2.82 14.52a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.5.4 1.05.71 1.63.94l.36 2.54a.5.5 0 0 0 .49.42h3.84a.5.5 0 0 0-.49-.42l.36-2.54c.58-.23 1.13-.54 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </div>
+  );
+}
 
 function ProfileSection({ onClick }) {
   return (
