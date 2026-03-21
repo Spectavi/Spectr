@@ -546,6 +546,7 @@ StrategyScreen {
 }
 
 #strategy-select {
+    width: 50%;
     padding: 1 1;
 }
 
@@ -632,7 +633,7 @@ SettingsDialog {
 
 #settings-dialog {
     width: 90%;
-    height: 102;
+    height: 80%;
     background: #1a1a1a;
     border: solid green;
     padding: 0 1;

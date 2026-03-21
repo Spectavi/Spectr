@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import WatchlistDialog from './WatchlistDialog';
 import SettingsDialog from './SettingsDialog';
 import VoiceMarkdownDialog from './VoiceMarkdownDialog';
 import StrategyDialog from './StrategyDialog';
 
 function Sidebar({ tickers, selectedTicker, onSelect }) {
   const [collapsed, setCollapsed] = useState(false);
-  const [showWatchlistDialog, setShowWatchlistDialog] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showStrategyDialog, setShowStrategyDialog] = useState(false);
   const [strategies, setStrategies] = useState([]);
@@ -22,7 +20,6 @@ function Sidebar({ tickers, selectedTicker, onSelect }) {
   const [voiceMarkdown, setVoiceMarkdown] = useState({ title: '', markdown: '' });
   
   const [tickerDetails, setTickerDetails] = useState({});
-  const [localTickers, setLocalTickers] = useState(tickers);
   
   const recognitionRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -143,16 +140,16 @@ function Sidebar({ tickers, selectedTicker, onSelect }) {
   };
 
   useEffect(() => {
-    setLocalTickers(tickers);
+    setTickerDetails({});
   }, [tickers]);
 
   useEffect(() => {
     const handleTickersUpdated = () => {
-      fetch('/api/watchlist')
+      fetch('/api/tickers')
         .then(res => res.json())
         .then(data => {
-          if (data && data.tickers) {
-            setLocalTickers(data.tickers);
+          if (data && data.length > 0) {
+            setTickerDetails({});
           }
         })
         .catch(err => console.error('Failed to refresh tickers:', err));
@@ -166,8 +163,8 @@ function Sidebar({ tickers, selectedTicker, onSelect }) {
   }, []);
 
   useEffect(() => {
-    if (localTickers.length > 0) {
-      const promises = localTickers.map((ticker) =>
+    if (tickers.length > 0) {
+      const promises = tickers.map((ticker) =>
         fetch(`/api/profile/${ticker}`)
           .then(res => res.json())
           .then(data => {
@@ -192,7 +189,7 @@ function Sidebar({ tickers, selectedTicker, onSelect }) {
         setTickerDetails(details);
       });
     }
-  }, [localTickers]);
+  }, [tickers]);
 
   useEffect(() => {
     const loadStrategies = async () => {
@@ -499,55 +496,6 @@ function Sidebar({ tickers, selectedTicker, onSelect }) {
     }
   };
 
-  const handleAddTicker = (ticker) => {
-    fetch('/api/watchlist', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ ticker }),
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && data.tickers) {
-          window.dispatchEvent(new CustomEvent('tickersUpdated'));
-        }
-      })
-      .catch(err => console.error('Failed to add ticker:', err));
-  };
-
-  const handleRemoveTicker = (ticker) => {
-    fetch(`/api/watchlist/${ticker}`, {
-      method: 'DELETE',
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && data.tickers) {
-          setLocalTickers(data.tickers);
-          window.dispatchEvent(new CustomEvent('tickersUpdated'));
-        }
-      })
-      .catch(err => console.error('Failed to remove ticker:', err));
-  };
-
-  const handleReorderTicker = (newOrder) => {
-    fetch('/api/watchlist/reorder', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ tickers: newOrder }),
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && data.tickers) {
-          setLocalTickers(data.tickers);
-          window.dispatchEvent(new CustomEvent('tickersUpdated'));
-        }
-      })
-      .catch(err => console.error('Failed to reorder tickers:', err));
-  };
-
   if (tickers.length === 0) {
     return (
       <div style={sidebarStyle}>
@@ -581,100 +529,9 @@ function Sidebar({ tickers, selectedTicker, onSelect }) {
                 voiceError={voiceError}
                 onClick={toggleVoiceAgent}
               />
-  <WatchlistSection onClick={() => setShowWatchlistDialog(true)} />
-              <ul style={tickerListStyle}>
-              {tickers.map((ticker) => (
-<li
-                   key={ticker}
-                   style={{
-                     ...tickerItemStyle,
-                     backgroundColor:
-                       selectedTicker === ticker ? '#238636' : 'transparent',
-                   }}
-                   onClick={() => onSelect(ticker)}
-                 >
-                   <div style={{ display: 'flex', alignItems: 'center', paddingLeft: '4px' }}>
-                     <div style={{ width: '32px', height: '32px', flexShrink: 0 }}>
-                       {tickerDetails[ticker] && (
-                         <img
-                           src={tickerDetails[ticker]}
-                           alt={`${ticker} logo`}
-                           style={{
-                             width: '100%',
-                             height: '100%',
-                             borderRadius: '4px',
-                             objectFit: 'contain',
-                           }}
-                         />
-                       )}
-                     </div>
-                     <span style={{ verticalAlign: 'middle', marginLeft: '10px' }}>{ticker}</span>
-                   </div>
-                 </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-{collapsed && (
-            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <div style={{ padding: '8px 0', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <ProfileIconOnly onClick={() => setShowSettings(true)} />
-                <StrategiesIconOnly onClick={() => setShowStrategyDialog(true)} />
- <VoiceAgentIconOnly
-                    isActive={isVoiceActive}
-                    voiceProcessing={voiceProcessing}
-                    voiceSpeaking={voiceSpeaking}
-                    voiceError={voiceError}
-                    onClick={toggleVoiceAgent}
-                  />
-                 <SettingsIconOnly onClick={() => setShowWatchlistDialog(true)} />
-               </div>
-              <ul style={tickerListStyle}>
-                {tickers.map((ticker) => (
-                  <li
-                    key={ticker}
-                    onClick={() => onSelect(ticker)}
-                    style={{
-                      ...tickerItemStyle,
-                      backgroundColor:
-                        selectedTicker === ticker ? '#238636' : 'transparent',
-                      padding: '10px 0',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                    }}
-                  >
-                    {tickerDetails[ticker] && (
-                      <div style={{ width: '40px', height: '40px', flexShrink: 0 }}>
-                        <img
-                          src={tickerDetails[ticker]}
-                          alt={`${ticker} logo`}
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            borderRadius: '4px',
-                            objectFit: 'contain',
-                          }}
-                        />
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
             </div>
           )}
       </div>
-
-      {showWatchlistDialog && (
-        <WatchlistDialog
-          onClose={() => setShowWatchlistDialog(false)}
-          tickers={localTickers}
-          onAddTicker={handleAddTicker}
-          onRemoveTicker={handleRemoveTicker}
-          onReorderTicker={handleReorderTicker}
-        />
-      )}
 
       {showSettings && (
         <SettingsDialog onClose={() => setShowSettings(false)} />
@@ -877,7 +734,7 @@ function SettingsIconOnly({ onClick }) {
     <div
       onClick={onClick}
       style={settingsIconOnlyStyle}
-      title="Manage Watchlist"
+      title="Open Settings"
       onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#238636'; e.currentTarget.style.color = '#ffffff'; }}
       onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#8b949e'; }}
     >
@@ -953,30 +810,6 @@ function ProfileSection({ onClick }) {
       >
         <path d="M12 12C14.2091 12 16 10.2091 16 8C16 5.79086 14.2091 4 12 4C9.79086 4 8 5.79086 8 8C8 10.2091 9.79086 12 12 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
         <path d="M20 21C20 17.134 16.765 14 12 14C7.235 14 4 17.134 4 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-    </div>
-  );
-}
-
-function WatchlistSection({ onClick }) {
-  return (
-    <div
-      onClick={onClick}
-      style={profileSectionStyle}
-      title="Manage Watchlist"
-      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#238636'; e.currentTarget.style.color = '#ffffff'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#c9d1d9'; }}
-    >
-      <span style={{ fontWeight: '500', fontSize: '14px' }}>Watchlist</span>
-      <svg
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M19.4 15A1.65 1.65 0 0 0 19.73 16.82L19.79 16.88A2 2 0 1 1 16.96 19.71L16.9 19.65A1.65 1.65 0 0 0 15.08 19.32A1.65 1.65 0 0 0 14.08 20.83V21A2 2 0 1 1 10.08 21V20.91A1.65 1.65 0 0 0 9.08 19.4A1.65 1.65 0 0 0 7.26 19.73L7.2 19.79A2 2 0 1 1 4.37 16.96L4.43 16.9A1.65 1.65 0 0 0 4.76 15.08A1.65 1.65 0 0 0 3.25 14.08H3A2 2 0 1 1 3 10.08H3.09A1.65 1.65 0 0 0 4.6 9.08A1.65 1.65 0 0 0 4.27 7.26L4.21 7.2A2 2 0 1 1 7.04 4.37L7.1 4.43A1.65 1.65 0 0 0 8.92 4.76H9.01A1.65 1.65 0 0 0 10.01 3.25V3A2 2 0 1 1 14.01 3V3.09A1.65 1.65 0 0 0 15.01 4.6A1.65 1.65 0 0 0 16.83 4.27L16.89 4.21A2 2 0 1 1 19.72 7.04L19.66 7.1A1.65 1.65 0 0 0 19.33 8.92V9.01A1.65 1.65 0 0 0 20.84 10.01H21A2 2 0 1 1 21 14.01H20.91A1.65 1.65 0 0 0 19.4 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
       </svg>
     </div>
   );

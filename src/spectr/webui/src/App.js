@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
-import ChartContainer from './components/ChartContainer';
+import TickerChartWidget from './components/TickerChartWidget';
 
 function App() {
   const [tickers, setTickers] = useState([]);
@@ -42,6 +42,10 @@ function App() {
     setSelectedTicker(ticker);
   }, []);
 
+  const handleTickerChange = useCallback((ticker) => {
+    setSelectedTicker(ticker);
+  }, []);
+
   return (
     <div style={{ display: 'flex', height: '100vh' }}>
       <Sidebar
@@ -49,7 +53,7 @@ function App() {
         selectedTicker={selectedTicker}
         onSelect={handleSelect}
       />
-      <ChartContainer ticker={selectedTicker} />
+      <TickerChartWidget ticker={selectedTicker} onTickerChange={handleTickerChange} />
     </div>
   );
 }

@@ -3,12 +3,14 @@ import TradingViewWidget from './TradingViewWidget';
 import OrderDialog from './OrderDialog';
 import SettingsDialog from './SettingsDialog';
 import StrategyDialog from './StrategyDialog';
+import WatchlistDialog from './WatchlistDialog';
+import TickerChartHeader from './TickerChartHeader';
 import { OrderSide } from './OrderDialog';
 
 const chartCache = new Map();
 const CACHE_DURATION = 5 * 60 * 1000;
 
-function ChartContainer({ ticker }) {
+function TickerChartWidget({ ticker, onTickerChange }) {
   const [strategies, setStrategies] = useState([]);
   const [selectedStrategy, setSelectedStrategy] = useState('');
   const [strategyActive, setStrategyActive] = useState(false);
@@ -22,6 +24,10 @@ function ChartContainer({ ticker }) {
   const [orderDialogTradeAmount, setOrderDialogTradeAmount] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showStrategyDialog, setShowStrategyDialog] = useState(false);
+  const [showWatchlistDialog, setShowWatchlistDialog] = useState(false);
+  const [tickers, setTickers] = useState([]);
+  const [tickerDetails, setTickerDetails] = useState({});
+  const [selectedTicker, setSelectedTicker] = useState(ticker);
   const [strategyCode, setStrategyCode] = useState('');
   const [strategyCodeLoading, setStrategyCodeLoading] = useState(false);
   const [strategyCodeError, setStrategyCodeError] = useState('');
@@ -46,6 +52,33 @@ function ChartContainer({ ticker }) {
     };
     fetchStrategies();
   }, []);
+
+  useEffect(() => {
+    const fetchTickers = async () => {
+      try {
+        const res = await fetch('/api/tickers');
+        const data = await res.json();
+        if (data.length > 0) setTickers(data);
+      } catch (err) { console.error('Failed to load tickers:', err); }
+    };
+    fetchTickers();
+  }, []);
+
+  useEffect(() => {
+    if (tickers.length > 0) {
+      const promises = tickers.map((ticker) =>
+        fetch(`/api/profile/${ticker}`)
+          .then(res => res.json())
+          .then(data => { if (data && data.logo) return { ticker, logo: data.logo }; return null; })
+          .catch(err => { console.error(`Failed to fetch profile for ${ticker}:`, err); return null; })
+      );
+      Promise.all(promises).then(results => {
+        const details = {};
+        results.forEach(result => { if (result) details[result.ticker] = result.logo; });
+        setTickerDetails(details);
+      });
+    }
+  }, [tickers]);
 
   useEffect(() => {
     if (!ticker) return;
@@ -84,8 +117,17 @@ function ChartContainer({ ticker }) {
   }, [ticker]);
 
   useEffect(() => {
-    setOrderDialogTicker(ticker);
+    setOrderDialogTicker(selectedTicker);
+  }, [selectedTicker]);
+
+  useEffect(() => {
+    if (selectedTicker !== ticker) setSelectedTicker(ticker);
   }, [ticker]);
+
+  const handleTickerChange = useCallback((newTicker) => {
+    if (newTicker !== ticker && onTickerChange) { onTickerChange(newTicker); }
+    setSelectedTicker(newTicker);
+  }, [ticker, onTickerChange]);
 
   const handleStrategySelect = useCallback((strategyName) => {
     if (!strategyName) return;
@@ -415,49 +457,21 @@ function ChartContainer({ ticker }) {
     if (chartData) {
       return (
         <>
-          <header style={headerStyle}>
-            <h2 style={{ margin: 0 }}>{chartData.symbol} - 1 Minute</h2>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-              {strategyControls}
-              {headerTradeControls}
-            </div>
-            <div style={buttonContainerStyle}>
-              <button
-                onClick={() => {
-                  setOrderDialogTicker(ticker);
-                  setOrderDialogTradeAmount(null);
-                  setOrderDialogSide(OrderSide.BUY);
-                }}
-                style={{
-                  ...orderButtonStyle,
-                  backgroundColor: '#238636',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
-                onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.98)'; }}
-                onMouseUp={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
-              >
-                BUY
-              </button>
-              <button
-                onClick={() => {
-                  setOrderDialogTicker(ticker);
-                  setOrderDialogTradeAmount(null);
-                  setOrderDialogSide(OrderSide.SELL);
-                }}
-                style={{
-                  ...orderButtonStyle,
-                  backgroundColor: '#da3633',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
-                onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.98)'; }}
-                onMouseUp={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
-              >
-            SELL
-              </button>
-            </div>
-          </header>
+          <TickerChartHeader
+            selectedTicker={selectedTicker}
+            tickers={tickers}
+            tickerDetails={tickerDetails}
+            onTickerChange={handleTickerChange}
+            showWatchlistDialog={showWatchlistDialog}
+            onToggleWatchlistDialog={() => setShowWatchlistDialog(true)}
+            strategyControls={strategyControls}
+            headerTradeControls={headerTradeControls}
+            buttonContainerStyle={buttonContainerStyle}
+            orderButtonStyle={orderButtonStyle}
+            setOrderDialogSide={setOrderDialogSide}
+            setOrderDialogTicker={setOrderDialogTicker}
+            setOrderDialogTradeAmount={setOrderDialogTradeAmount}
+          />
           <TradingViewWidget data={chartData} ticker={ticker} />
           {orderDialogSide && (
             <OrderDialog
@@ -498,52 +512,24 @@ function ChartContainer({ ticker }) {
       );
     }
 
-    return (
-      <>
-        <header style={headerStyle}>
-          <h2 style={{ margin: 0 }}>{ticker} - 1 Minute</h2>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            {strategyControls}
-            {headerTradeControls}
-          </div>
-          <div style={buttonContainerStyle}>
-            <button
-              onClick={() => {
-                setOrderDialogTicker(ticker);
-                setOrderDialogTradeAmount(null);
-                setOrderDialogSide(OrderSide.BUY);
-              }}
-              style={{
-                ...orderButtonStyle,
-                backgroundColor: '#238636',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
-              onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.98)'; }}
-              onMouseUp={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
-            >
-              BUY
-            </button>
-            <button
-              onClick={() => {
-                setOrderDialogTicker(ticker);
-                setOrderDialogTradeAmount(null);
-                setOrderDialogSide(OrderSide.SELL);
-              }}
-              style={{
-                ...orderButtonStyle,
-                backgroundColor: '#da3633',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
-              onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.98)'; }}
-              onMouseUp={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
-            >
-          SELL
-            </button>
-          </div>
-        </header>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+return (
+        <>
+          <TickerChartHeader
+            selectedTicker={selectedTicker}
+            tickers={tickers}
+            tickerDetails={tickerDetails}
+            onTickerChange={handleTickerChange}
+            showWatchlistDialog={showWatchlistDialog}
+            onToggleWatchlistDialog={() => setShowWatchlistDialog(true)}
+            strategyControls={strategyControls}
+            headerTradeControls={headerTradeControls}
+            buttonContainerStyle={buttonContainerStyle}
+            orderButtonStyle={orderButtonStyle}
+            setOrderDialogSide={setOrderDialogSide}
+            setOrderDialogTicker={setOrderDialogTicker}
+            setOrderDialogTradeAmount={setOrderDialogTradeAmount}
+          />
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '24px', color: '#58a6ff', marginBottom: '10px' }}>
               Loading chart data...
@@ -599,18 +585,56 @@ function ChartContainer({ ticker }) {
     handleSaveCode,
   ]);
 
-  return <div style={containerStyle}>{renderContent}</div>;
+  return (
+    <>
+      {showWatchlistDialog && (
+        <WatchlistDialog
+          onClose={() => setShowWatchlistDialog(false)}
+          tickers={tickers}
+          onAddTicker={(ticker) => {
+            fetch('/api/watchlist', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ticker }),
+            }).then(res => res.json()).then(data => {
+              if (data.success && data.tickers) {
+                setTickers(data.tickers);
+                window.dispatchEvent(new CustomEvent('tickersUpdated'));
+              }
+            }).catch(err => console.error('Failed to add ticker:', err));
+          }}
+          onRemoveTicker={(ticker) => {
+            fetch(`/api/watchlist/${ticker}`, { method: 'DELETE' })
+              .then(res => res.json())
+              .then(data => {
+                if (data.success && data.tickers) {
+                  setTickers(data.tickers);
+                  window.dispatchEvent(new CustomEvent('tickersUpdated'));
+                }
+              })
+              .catch(err => console.error('Failed to remove ticker:', err));
+          }}
+          onReorderTicker={(newOrder) => {
+            fetch('/api/watchlist/reorder', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tickers: newOrder }),
+            })
+              .then(res => res.json())
+              .then(data => {
+                if (data.success && data.tickers) {
+                  setTickers(data.tickers);
+                  window.dispatchEvent(new CustomEvent('tickersUpdated'));
+                }
+              })
+              .catch(err => console.error('Failed to reorder tickers:', err));
+          }}
+        />
+      )}
+      <div style={containerStyle}>{renderContent}</div>
+    </>
+  );
 }
-
-const headerStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  flexWrap: 'wrap',
-  gap: '10px',
-  padding: '10px 20px',
-  borderBottom: '1px solid #30363d',
-};
 
 const buttonContainerStyle = {
   display: 'flex',
@@ -635,4 +659,4 @@ const containerStyle = {
   flexDirection: 'column',
 };
 
-export default ChartContainer;
+export default TickerChartWidget;
