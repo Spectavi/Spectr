@@ -25,11 +25,11 @@ class TradingOperationsHandler:
     ) -> None:
         if self._is_splash_active():
             return
-        if self.app.trading_service.has_pending_order(symbol):
-            log.warning(f"Pending order for {symbol}; dialog not opened")
+        if self.app.trading_service.has_pending_order_with_side(symbol, side):
+            log.warning(f"Pending {side.name} order for {symbol}; dialog not opened")
             if hasattr(self.app, "overlay") and self.app.overlay:
                 self.app.overlay.flash_message(
-                    f"Pending order for {symbol}",
+                    f"Pending {side.name} order for {symbol}",
                     style="bold yellow",
                     duration=5.0,
                 )
@@ -38,7 +38,7 @@ class TradingOperationsHandler:
         from .views.order_dialog import OrderDialog
 
         order_type, limit_price = broker_tools.prepare_order_details(
-            symbol, side, self.app.broker_api
+            symbol, side, self.app.broker_api, self.app.afterhours_enabled
         )
         self.app.push_screen(
             OrderDialog(
@@ -59,11 +59,11 @@ class TradingOperationsHandler:
             f"Placing {msg.side} {msg.qty} {msg.symbol} @ ${msg.price:.2f} "
             f"(total ${msg.total:,.2f})"
         )
-        if self.app.trading_service.has_pending_order(msg.symbol):
-            log.warning(f"Pending order for {msg.symbol}; not submitting")
+        if self.app.trading_service.has_pending_order_with_side(msg.symbol, msg.side):
+            log.warning(f"Pending {msg.side.name} order for {msg.symbol}; not submitting")
             if hasattr(self.app, "overlay") and self.app.overlay:
                 self.app.overlay.flash_message(
-                    f"Pending order for {msg.symbol}",
+                    f"Pending {msg.side.name} order for {msg.symbol}",
                     style="bold yellow",
                     duration=5.0,
                 )

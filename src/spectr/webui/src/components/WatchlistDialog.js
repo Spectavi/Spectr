@@ -63,12 +63,12 @@ function WatchlistDialog({ onClose, tickers, onAddTicker, onRemoveTicker, onReor
     })
   );
 
-  function SortableItem({ ticker }) {
+  function SortableItem({ ticker, rowIndex }) {
     const { attributes, listeners, setNodeRef, transform } = useSortable({ id: ticker });
 
     const style = {
       transform: transform ? `translateY(${transform.y}px)` : undefined,
-      ...watchlistItemStyle,
+      ...watchlistItemStyle(rowIndex),
     };
 
     return (
@@ -233,13 +233,14 @@ function WatchlistDialog({ onClose, tickers, onAddTicker, onRemoveTicker, onReor
     marginBottom: '20px',
   };
 
-  const watchlistItemStyle = {
-    padding: '10px 14px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderBottom: '1px solid #30363d',
-  };
+const watchlistItemStyle = (index) => ({
+  padding: '10px 14px',
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  borderBottom: '1px solid #30363d',
+  backgroundColor: index % 2 === 0 ? '#0d1117' : '#161b22',
+});
 
   const deleteButtonStyle = {
     backgroundColor: '#da3633',
@@ -291,23 +292,23 @@ function WatchlistDialog({ onClose, tickers, onAddTicker, onRemoveTicker, onReor
             onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
             style={inputStyle}
           />
-          {showSuggestions && suggestions.length > 0 && (
-            <div style={resultsContainerStyle}>
-              {suggestions.map((result, index) => (
-<div
-                   key={result.symbol || index}
-                   onMouseDown={() => handleSuggestionClick(result.symbol)}
-                   onMouseEnter={() => setSelectedSuggestion(index)}
-                   style={{
-                     padding: '10px 14px',
-                     cursor: 'pointer',
-                     borderBottom: '1px solid #30363d',
-                     backgroundColor: selectedSuggestion === index ? '#238636' : 'transparent',
-                     display: 'flex',
-                     justifyContent: 'space-between',
-                     alignItems: 'center',
-                   }}
-                 >
+{showSuggestions && suggestions.length > 0 && (
+             <div style={resultsContainerStyle}>
+               {suggestions.map((result, index) => (
+ <div
+                    key={result.symbol || index}
+                    onMouseDown={() => handleSuggestionClick(result.symbol)}
+                    onMouseEnter={() => setSelectedSuggestion(index)}
+                    style={{
+                      padding: '10px 14px',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid #30363d',
+                      backgroundColor: index % 2 === 0 ? '#0d1117' : '#161b22',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
                    <div style={{ display: 'flex', alignItems: 'center', flex: 1, paddingLeft: '4px' }}>
                      {result.logo && (
                        <div style={{ width: '32px', height: '32px', flexShrink: 0, marginRight: '10px' }}>
@@ -343,15 +344,15 @@ function WatchlistDialog({ onClose, tickers, onAddTicker, onRemoveTicker, onReor
             items={items}
             strategy={verticalListSortingStrategy}
           >
-            <div style={watchlistContainerStyle}>
-              {items.length > 0 ? (
-                items.map((ticker) => (
-                  <SortableItem key={ticker} ticker={ticker} />
-                ))
-              ) : (
-                <p style={noResultsStyle}>No tickers in watchlist</p>
-              )}
-            </div>
+<div style={watchlistContainerStyle}>
+               {items.length > 0 ? (
+                 items.map((ticker, index) => (
+                   <SortableItem key={ticker} ticker={ticker} rowIndex={index} />
+                 ))
+               ) : (
+                 <p style={noResultsStyle}>No tickers in watchlist</p>
+               )}
+             </div>
           </SortableContext>
         </DndContext>
       </div>

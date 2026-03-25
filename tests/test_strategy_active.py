@@ -17,7 +17,7 @@ def test_poll_one_symbol_inactive(monkeypatch):
         get_position=lambda symbol: None,
         get_pending_orders=lambda symbol: None,
     )
-    monkeypatch.setattr(appmod, "BROKER_API", dummy_broker)
+    monkeypatch.setattr(app, "broker_api", dummy_broker)
 
     calls = []
 

@@ -441,6 +441,64 @@ def load_selected_strategy(path: pathlib.Path = COMBINED_CACHE_FILE) -> str | No
     return data.get("selected_strategy")
 
 
+def save_strategy_configs(
+    configs: dict[str, dict], path: pathlib.Path = COMBINED_CACHE_FILE
+) -> None:
+    """Persist per-ticker strategy configuration."""
+    out: dict[str, dict] = {}
+    for symbol, raw_cfg in (configs or {}).items():
+        if not isinstance(symbol, str) or not isinstance(raw_cfg, dict):
+            continue
+        key = symbol.upper().strip()
+        if not key:
+            continue
+        try:
+            trade_amount = max(
+                0.0, float(raw_cfg.get("tradeAmount", 0.0) or 0.0)
+            )
+        except Exception:
+            trade_amount = 0.0
+        out[key] = {
+            "current": str(raw_cfg.get("current") or ""),
+            "active": bool(raw_cfg.get("active", False)),
+            "autoTradeEnabled": bool(raw_cfg.get("autoTradeEnabled", False)),
+            "tradeAmount": trade_amount,
+        }
+
+    data = _load_combined(path)
+    data["strategy_configs"] = out
+    _save_combined(data, path)
+
+
+def load_strategy_configs(
+    path: pathlib.Path = COMBINED_CACHE_FILE,
+) -> dict[str, dict]:
+    """Load per-ticker strategy configuration map."""
+    data = _merge_legacy_caches(path)
+    raw = data.get("strategy_configs")
+    if not isinstance(raw, dict):
+        return {}
+
+    out: dict[str, dict] = {}
+    for symbol, raw_cfg in raw.items():
+        if not isinstance(symbol, str) or not isinstance(raw_cfg, dict):
+            continue
+        key = symbol.upper().strip()
+        if not key:
+            continue
+        try:
+            trade_amount = max(0.0, float(raw_cfg.get("tradeAmount", 0.0) or 0.0))
+        except Exception:
+            trade_amount = 0.0
+        out[key] = {
+            "current": str(raw_cfg.get("current") or ""),
+            "active": bool(raw_cfg.get("active", False)),
+            "autoTradeEnabled": bool(raw_cfg.get("autoTradeEnabled", False)),
+            "tradeAmount": trade_amount,
+        }
+    return out
+
+
 def save_selected_scanner(name: str, path: pathlib.Path = COMBINED_CACHE_FILE) -> None:
     """Persist the currently selected scanner name."""
     data = _load_combined(path)
@@ -482,6 +540,26 @@ def load_trade_amount(path: pathlib.Path = COMBINED_CACHE_FILE) -> float | None:
     value = data.get("trade_amount")
     if value is None:
         return None
+
+
+def save_afterhours_enabled(enabled: bool, path: pathlib.Path = COMBINED_CACHE_FILE) -> None:
+    """Persist the after-hours trading setting."""
+    data = _load_combined(path)
+    data["afterhours_enabled"] = bool(enabled)
+    _save_combined(data, path)
+
+
+def load_afterhours_enabled(path: pathlib.Path = COMBINED_CACHE_FILE) -> bool | None:
+    """Load the cached after-hours trading setting if available."""
+    data = _merge_legacy_caches(path)
+    value = data.get("afterhours_enabled")
+    if value is None:
+        return None
+    try:
+        return bool(value)
+    except Exception:
+        return None
+
     try:
         return float(value)
     except Exception:

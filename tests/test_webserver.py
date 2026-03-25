@@ -628,3 +628,122 @@ def test_get_profile_with_exception():
         assert data['logo'] == ''
     finally:
         webserver.data_api = original_api
+
+
+def test_strategy_config_is_scoped_per_ticker():
+    pytest.importorskip("flask")
+    from spectr import webserver
+
+    original_tickers = list(webserver.cached_tickers)
+    original_configs = dict(webserver.strategy_configs)
+    try:
+        webserver.cached_tickers = ["AAPL", "MSFT"]
+        webserver.strategy_configs = {
+            "AAPL": {
+                "current": "CustomStrategy",
+                "active": True,
+                "autoTradeEnabled": False,
+                "tradeAmount": 50.0,
+            },
+            "MSFT": {
+                "current": "DualThrust",
+                "active": False,
+                "autoTradeEnabled": True,
+                "tradeAmount": 125.0,
+            },
+        }
+
+        client = webserver.app.test_client()
+        aapl = client.get("/api/strategies?ticker=AAPL")
+        msft = client.get("/api/strategies?ticker=MSFT")
+
+        assert aapl.status_code == 200
+        assert msft.status_code == 200
+        assert aapl.json["current"] == "CustomStrategy"
+        assert aapl.json["tradeAmount"] == 50.0
+        assert msft.json["current"] == "DualThrust"
+        assert msft.json["tradeAmount"] == 125.0
+    finally:
+        webserver.cached_tickers = original_tickers
+        webserver.strategy_configs = original_configs
+
+
+def test_select_strategy_updates_only_target_ticker():
+    pytest.importorskip("flask")
+    from spectr import webserver
+
+    original_tickers = list(webserver.cached_tickers)
+    original_configs = dict(webserver.strategy_configs)
+    try:
+        webserver.cached_tickers = ["AAPL", "MSFT"]
+        webserver.strategy_configs = {
+            "AAPL": {
+                "current": "CustomStrategy",
+                "active": False,
+                "autoTradeEnabled": False,
+                "tradeAmount": 10.0,
+            },
+            "MSFT": {
+                "current": "DualThrust",
+                "active": True,
+                "autoTradeEnabled": False,
+                "tradeAmount": 20.0,
+            },
+        }
+
+        client = webserver.app.test_client()
+        with patch("spectr.strategies.load_strategy"):
+            response = client.post(
+                "/api/strategies/AwesomeOscillator",
+                json={"ticker": "AAPL", "deactivatePrevious": True},
+            )
+        assert response.status_code == 200
+        assert response.json["ticker"] == "AAPL"
+
+        assert webserver.strategy_configs["AAPL"]["current"] == "AwesomeOscillator"
+        assert webserver.strategy_configs["MSFT"]["current"] == "DualThrust"
+    finally:
+        webserver.cached_tickers = original_tickers
+        webserver.strategy_configs = original_configs
+
+
+def test_update_strategy_config_applies_to_selected_ticker_only():
+    pytest.importorskip("flask")
+    from spectr import webserver
+
+    original_tickers = list(webserver.cached_tickers)
+    original_configs = dict(webserver.strategy_configs)
+    try:
+        webserver.cached_tickers = ["AAPL", "MSFT"]
+        webserver.strategy_configs = {
+            "AAPL": {
+                "current": "CustomStrategy",
+                "active": False,
+                "autoTradeEnabled": False,
+                "tradeAmount": 0.0,
+            },
+            "MSFT": {
+                "current": "DualThrust",
+                "active": True,
+                "autoTradeEnabled": True,
+                "tradeAmount": 300.0,
+            },
+        }
+
+        client = webserver.app.test_client()
+        response = client.post(
+            "/api/strategies/config",
+            json={"ticker": "AAPL", "tradeAmount": 42.5, "autoTradeEnabled": True},
+        )
+        assert response.status_code == 200
+        assert response.json["ticker"] == "AAPL"
+        assert response.json["tradeAmount"] == 42.5
+        assert response.json["autoTradeEnabled"] is True
+
+        assert webserver.strategy_configs["AAPL"]["tradeAmount"] == 42.5
+        assert webserver.strategy_configs["AAPL"]["autoTradeEnabled"] is True
+        assert webserver.strategy_configs["AAPL"]["active"] is True
+        assert webserver.strategy_configs["MSFT"]["tradeAmount"] == 300.0
+    finally:
+        webserver.cached_tickers = original_tickers
+        webserver.strategy_configs = original_configs

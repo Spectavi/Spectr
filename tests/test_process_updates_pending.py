@@ -15,7 +15,12 @@ def test_process_updates_skips_and_continues(monkeypatch):
     q.put(None)  # sentinel for exit
     calls = []
 
+    class MockBroker:
+        def has_pending_order_with_side(self, symbol, side):
+            return True
+
     app = SimpleNamespace(
+        broker_api=MockBroker(),
         _update_queue=q,
         signal_detected=[("AAA", 10.0, "sell", "r")],
         ticker_symbols=["AAA"],
@@ -28,11 +33,6 @@ def test_process_updates_skips_and_continues(monkeypatch):
         strategy_signals=[],
     )
 
-    monkeypatch.setattr(
-        appmod,
-        "BROKER_API",
-        SimpleNamespace(has_pending_order=lambda s: True),
-    )
     monkeypatch.setattr(
         appmod.broker_tools, "submit_order", lambda *a, **k: calls.append(True)
     )

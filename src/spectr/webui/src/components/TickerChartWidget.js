@@ -33,15 +33,16 @@ function TickerChartWidget({ ticker, onTickerChange }) {
   const [strategyCodeError, setStrategyCodeError] = useState('');
 
   useEffect(() => {
+    const strategyTicker = (selectedTicker || ticker || '').toUpperCase();
+    const query = strategyTicker ? `?ticker=${encodeURIComponent(strategyTicker)}` : '';
+
     const fetchStrategies = async () => {
       try {
-        const res = await fetch('/api/strategies');
+        const res = await fetch(`/api/strategies${query}`);
         const data = await res.json();
         setStrategies(data.strategies || []);
-        if (data.current) {
-          setSelectedStrategy(data.current);
-        }
-        setStrategyActive(data.active || false);
+        setSelectedStrategy(data.current || '');
+        setStrategyActive(Boolean(data.active));
         setStrategyAutoTradeEnabled(Boolean(data.autoTradeEnabled));
         setStrategyTradeAmount(
           data.tradeAmount !== undefined && data.tradeAmount !== null ? String(data.tradeAmount) : ''
@@ -51,7 +52,7 @@ function TickerChartWidget({ ticker, onTickerChange }) {
       }
     };
     fetchStrategies();
-  }, []);
+  }, [selectedTicker, ticker]);
 
   useEffect(() => {
     const fetchTickers = async () => {
@@ -131,11 +132,13 @@ function TickerChartWidget({ ticker, onTickerChange }) {
 
   const handleStrategySelect = useCallback((strategyName) => {
     if (!strategyName) return;
+    const strategyTicker = (selectedTicker || ticker || '').toUpperCase();
+    if (!strategyTicker) return;
 
     fetch(`/api/strategies/${strategyName}`, { 
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ deactivatePrevious: true })
+      body: JSON.stringify({ deactivatePrevious: true, ticker: strategyTicker })
     })
       .then(res => {
         if (!res.ok) throw new Error(`Failed to select strategy: ${res.statusText}`);
@@ -151,15 +154,17 @@ function TickerChartWidget({ ticker, onTickerChange }) {
       .catch(err => {
         console.error('Failed to select strategy:', err);
       });
-  }, []);
+  }, [selectedTicker, ticker]);
 
   const handleToggleStrategy = () => {
+    const strategyTicker = (selectedTicker || ticker || '').toUpperCase();
+    if (!strategyTicker) return;
     const newActiveState = !strategyActive;
     setStrategyActive(newActiveState);
     fetch(`/api/strategies/toggle`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ active: newActiveState })
+      body: JSON.stringify({ ticker: strategyTicker, active: newActiveState })
     })
       .then(res => res.json())
       .catch(err => console.error('Failed to toggle strategy:', err));
@@ -187,12 +192,14 @@ function TickerChartWidget({ ticker, onTickerChange }) {
   }, []);
 
   const handleTradeAmountChange = useCallback((value) => {
+    const strategyTicker = (selectedTicker || ticker || '').toUpperCase();
+    if (!strategyTicker) return;
     setStrategyTradeAmount(value);
 
     fetch('/api/strategies/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tradeAmount: value === '' ? 0 : value }),
+      body: JSON.stringify({ ticker: strategyTicker, tradeAmount: value === '' ? 0 : value }),
     })
       .then(res => res.json())
       .then(data => {
@@ -201,9 +208,11 @@ function TickerChartWidget({ ticker, onTickerChange }) {
         }
       })
       .catch(err => console.error('Failed to save trade amount:', err));
-  }, []);
+  }, [selectedTicker, ticker]);
 
   const handleToggleAutoTrade = useCallback(() => {
+    const strategyTicker = (selectedTicker || ticker || '').toUpperCase();
+    if (!strategyTicker) return;
     const nextState = !strategyAutoTradeEnabled;
     setStrategyAutoTradeEnabled(nextState);
 
@@ -211,6 +220,7 @@ function TickerChartWidget({ ticker, onTickerChange }) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        ticker: strategyTicker,
         autoTradeEnabled: nextState,
         tradeAmount: strategyTradeAmount === '' ? 0 : strategyTradeAmount,
       }),
@@ -225,7 +235,7 @@ function TickerChartWidget({ ticker, onTickerChange }) {
         }
       })
       .catch(err => console.error('Failed to toggle auto-trade:', err));
-  }, [strategyAutoTradeEnabled, strategyTradeAmount]);
+  }, [strategyAutoTradeEnabled, strategyTradeAmount, selectedTicker, ticker]);
 
   const loadStrategyCode = useCallback(async (strategyName) => {
     if (!strategyName) {
@@ -326,10 +336,16 @@ function TickerChartWidget({ ticker, onTickerChange }) {
           return;
         }
 
-        if (signal === 'buy') {
-          setOrderDialogTicker(signalSymbol);
-          setOrderDialogTradeAmount(strategyTradeAmount === '' ? null : parseFloat(strategyTradeAmount));
-          setOrderDialogSide(OrderSide.BUY);
+        if (!autoTradingNow) {
+          if (signal === 'buy') {
+            setOrderDialogTicker(signalSymbol);
+            setOrderDialogTradeAmount(strategyTradeAmount === '' ? null : parseFloat(strategyTradeAmount));
+            setOrderDialogSide(OrderSide.BUY);
+          } else if (signal === 'sell') {
+            setOrderDialogTicker(signalSymbol);
+            setOrderDialogTradeAmount('SELL_ALL');
+            setOrderDialogSide(OrderSide.SELL);
+          }
         }
 
         playVoiceAlert(`${signalLabel} signal for ${signalSymbol}${reason}`);

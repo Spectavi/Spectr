@@ -18,7 +18,9 @@ def test_handle_signal_auto_attaches_reason(monkeypatch):
         auto_trading_enabled=True,
         afterhours_enabled=True,
         trade_amount=0.0,
-        voice_agent=SimpleNamespace(say=lambda *a, **k: None),
+        voice_agent=SimpleNamespace(say=lambda *a, **k: None,
+broker_api=SimpleNamespace(has_pending_order_with_side=lambda s, side: True),
+    ),
         signal_detected=[],
         call_from_thread=lambda func, *a, **k: func(*a, **k),
         strategy_signals=[],
@@ -26,7 +28,7 @@ def test_handle_signal_auto_attaches_reason(monkeypatch):
     )
 
     monkeypatch.setattr(
-        appmod, "BROKER_API", SimpleNamespace(has_pending_order=lambda s: False)
+        app, "broker_api", SimpleNamespace(has_pending_order=lambda s: False)
     )
     monkeypatch.setattr(appmod.broker_tools, "submit_order", lambda *a, **k: order)
     attach_calls = []

@@ -38,7 +38,7 @@ def test_holdings_table_bid_and_ask_value(monkeypatch):
         def fetch_quote(self, symbol: str):
             return {"ask": 11.0, "bid": 9.0}
 
-    monkeypatch.setattr(appmod, "BROKER_API", DummyBroker())
+    monkeypatch.setattr(app, "broker_api", DummyBroker())
 
     pos = SimpleNamespace(symbol="AAA", qty=2, market_value=20.0, avg_entry_price=10.0)
 

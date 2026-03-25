@@ -38,6 +38,14 @@ class TradingService:
             log.warning(f"Failed to check pending order for {symbol}: {e}")
             return False
 
+    def has_pending_order_with_side(self, symbol: str, side) -> bool:
+        """Check if there's a pending order with the given side for the symbol."""
+        try:
+            return self.broker_api.has_pending_order_with_side(symbol, side)
+        except Exception as e:
+            log.warning(f"Failed to check pending order with side for {symbol}: {e}")
+            return False
+
     def submit_buy_order(
         self,
         symbol: str,

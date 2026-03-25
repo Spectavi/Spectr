@@ -27,15 +27,21 @@ function OrderDialog({ ticker, side, defaultTradeAmount = null, onClose }) {
   }, [ticker]);
 
   useEffect(() => {
-    if (side !== OrderSide.BUY) return;
-    if (defaultTradeAmount === null || defaultTradeAmount === undefined) return;
-    if (qtyTouched) return;
-    if (!price || price <= 0) return;
+    if (side === OrderSide.BUY) {
+      if (defaultTradeAmount === null || defaultTradeAmount === undefined || defaultTradeAmount === 'SELL_ALL') return;
+      if (qtyTouched) return;
+      if (!price || price <= 0) return;
 
-    const amount = parseFloat(defaultTradeAmount);
-    if (!Number.isFinite(amount) || amount <= 0) return;
-    setQty((amount / price).toFixed(5));
-  }, [defaultTradeAmount, side, qtyTouched, price]);
+      const amount = parseFloat(defaultTradeAmount);
+      if (!Number.isFinite(amount) || amount <= 0) return;
+      setQty((amount / price).toFixed(5));
+    } else if (side === OrderSide.SELL && defaultTradeAmount === 'SELL_ALL') {
+      if (qtyTouched) return;
+      if (posQty !== null && posQty > 0) {
+        setQty(posQty.toFixed(5));
+      }
+    }
+  }, [defaultTradeAmount, side, qtyTouched, price, posQty]);
 
   useEffect(() => {
     fetchData();

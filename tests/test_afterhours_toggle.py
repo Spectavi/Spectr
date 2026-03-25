@@ -26,7 +26,9 @@ def test_handle_signal_afterhours_disabled(monkeypatch):
         auto_trading_enabled=True,
         afterhours_enabled=False,
         trade_amount=0.0,
-        voice_agent=SimpleNamespace(say=lambda *a, **k: None),
+        voice_agent=SimpleNamespace(say=lambda *a, **k: None,
+broker_api=SimpleNamespace(has_pending_order_with_side=lambda s, side: False),
+    ),
         signal_detected=[],
         call_from_thread=lambda func, *a, **k: func(*a, **k),
         strategy_signals=[],
@@ -34,7 +36,7 @@ def test_handle_signal_afterhours_disabled(monkeypatch):
     )
 
     monkeypatch.setattr(
-        appmod, "BROKER_API", SimpleNamespace(has_pending_order=lambda s: False)
+        app, "broker_api", SimpleNamespace(has_pending_order=lambda s: False)
     )
     monkeypatch.setattr(
         appmod.broker_tools, "submit_order", lambda *a, **k: calls.append(True)
@@ -70,7 +72,7 @@ def test_handle_signal_afterhours_enabled(monkeypatch):
     )
 
     monkeypatch.setattr(
-        appmod, "BROKER_API", SimpleNamespace(has_pending_order=lambda s: False)
+        app, "broker_api", SimpleNamespace(has_pending_order=lambda s: False)
     )
     monkeypatch.setattr(
         appmod.broker_tools, "submit_order", lambda *a, **k: calls.append(True)

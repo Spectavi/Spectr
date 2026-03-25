@@ -111,8 +111,8 @@ class SignalHandler:
     def _can_submit_order(self, symbol: str, side: OrderSide) -> bool:
         """Check if order can be submitted."""
         try:
-            if hasattr(self.broker_api, "has_pending_order") and self.broker_api.has_pending_order(symbol):
-                log.warning(f"Pending order for {symbol}; ignoring signal!")
+            if hasattr(self.broker_api, "has_pending_order_with_side") and self.broker_api.has_pending_order_with_side(symbol, side):
+                log.warning(f"Pending {side.name.lower()} order for {symbol}; ignoring signal!")
                 return False
         except Exception as e:
             log.warning(f"Failed to check pending order for {symbol}: {e}")

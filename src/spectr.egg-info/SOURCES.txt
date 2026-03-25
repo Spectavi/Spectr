@@ -135,6 +135,7 @@ tests/test_spectavi_trailing_stop.py
 tests/test_status_bar.py
 tests/test_strategies.py
 tests/test_strategy_active.py
+tests/test_strategy_config_cache.py
 tests/test_strategy_source_code.py
 tests/test_stylesheet_parses.py
 tests/test_symbol_view.py

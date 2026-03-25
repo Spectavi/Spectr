@@ -11,6 +11,7 @@ const [isLiveAccount, setIsLiveAccount] = useState(false);
   const [accountInfoLoading, setAccountInfoLoading] = useState(true);
   const [hasPaperCredentials, setHasPaperCredentials] = useState(true);
   const [brokerName, setBrokerName] = useState('Alpaca');
+  const [afterHoursEnabled, setAfterHoursEnabled] = useState(false);
 
   useEffect(() => {
     fetchPortfolioData(isLiveAccount);
@@ -23,6 +24,7 @@ const [isLiveAccount, setIsLiveAccount] = useState(false);
         setHasPaperCredentials(data.hasPaperCredentials);
         setIsLiveAccount(!data.defaultToPaper);
         setBrokerName(data.broker || 'Alpaca');
+        setAfterHoursEnabled(data.afterhours_enabled || false);
         setAccountInfoLoading(false);
       })
       .catch(err => {
@@ -52,6 +54,15 @@ const [isLiveAccount, setIsLiveAccount] = useState(false);
       });
   };
 
+  const handleAfterHoursToggle = (enabled) => {
+    setAfterHoursEnabled(enabled);
+    fetch('/api/settings/afterhours', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ afterhours_enabled: enabled })
+    }).catch(err => console.error('Failed to update after-hours setting:', err));
+  };
+
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -65,6 +76,20 @@ const [isLiveAccount, setIsLiveAccount] = useState(false);
   const transactionHistoryContainerStyle = {
     ...(embedded ? embeddedTableContainerStyle : tableContainerStyle),
     ...(shouldScrollTransactionHistory ? scrollableTransactionHistoryStyle : {}),
+  };
+
+  const handleCancelOrder = async (order) => {
+    try {
+      await fetch('/api/orders/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order_id: order.id })
+      });
+      fetchPortfolioData(isLiveAccount);
+    } catch (err) {
+      console.error('Failed to cancel order:', err);
+      alert('Failed to cancel order');
+    }
   };
 
   if (loading || accountInfoLoading) {
@@ -129,6 +154,30 @@ const [isLiveAccount, setIsLiveAccount] = useState(false);
           </div>
         </div>
 
+        <div style={{ marginBottom: '15px', padding: '10px', backgroundColor: '#0d1117', borderRadius: '6px' }}>
+          <p style={{ margin: '0 0 8px 0', color: '#c9d1d9', fontSize: '13px' }}>Trading</p>
+          <div style={toggleContainerStyle}>
+            <button
+              onClick={() => handleAfterHoursToggle(false)}
+              style={{
+                ...toggleButtonStyle,
+                active: !afterHoursEnabled,
+              }}
+            >
+              Market Hours Only
+            </button>
+            <button
+              onClick={() => handleAfterHoursToggle(true)}
+              style={{
+                ...toggleButtonStyle,
+                active: afterHoursEnabled,
+              }}
+            >
+              After-Hours Trades
+            </button>
+          </div>
+        </div>
+
         <div style={balancesContainerStyle}>
           <div style={balanceBoxStyle}>
             <span>Cash:</span>
@@ -149,19 +198,19 @@ const [isLiveAccount, setIsLiveAccount] = useState(false);
           <table style={tableStyle}>
             <thead>
               <tr>
-                <th>Symbol</th>
-                <th>Qty</th>
-                <th>Value</th>
-                <th>Avg Cost</th>
+                <th style={tableHeaderStyle}>Symbol</th>
+                <th style={tableHeaderStyle}>Qty</th>
+                <th style={tableHeaderStyle}>Value</th>
+                <th style={tableHeaderStyle}>Avg Cost</th>
               </tr>
             </thead>
             <tbody>
               {positions.map((pos, idx) => (
-                <tr key={idx}>
-                  <td>{pos.symbol}</td>
-                  <td>{pos.qty}</td>
-                  <td>{formatCurrency(pos.market_value)}</td>
-                  <td>{formatCurrency(pos.avg_entry_price)}</td>
+                <tr key={idx} style={tableRowStyle(idx)}>
+                  <td style={tableCellStyle}>{pos.symbol}</td>
+                  <td style={tableCellStyle}>{pos.qty}</td>
+                  <td style={tableCellStyle}>{formatCurrency(pos.market_value)}</td>
+                  <td style={tableCellStyle}>{formatCurrency(pos.avg_entry_price)}</td>
                 </tr>
               ))}
             </tbody>
@@ -176,25 +225,38 @@ const [isLiveAccount, setIsLiveAccount] = useState(false);
             <table style={tableStyle}>
               <thead>
                 <tr>
-                  <th>Date/Time</th>
-                  <th>Symbol</th>
-                  <th>Side</th>
-                  <th>Qty</th>
-                  <th>Value</th>
-                  <th>Type</th>
-                  <th>Status</th>
+                  <th style={{...tableHeaderStyle, width: '12%'}}>Date/Time</th>
+                  <th style={{...tableHeaderStyle, width: '8%'}}>Symbol</th>
+                  <th style={{...tableHeaderStyle, width: '6%'}}>Side</th>
+                  <th style={{...tableHeaderStyle, width: '5%'}}>Qty</th>
+                  <th style={{...tableHeaderStyle, width: '9%'}}>Value</th>
+                  <th style={{...tableHeaderStyle, width: '10%'}}>Type</th>
+                  <th style={{...tableHeaderStyle, width: '12%'}}>Status</th>
+                  <th style={{...tableHeaderStyle, width: '8%'}}>Cancel?</th>
                 </tr>
               </thead>
               <tbody>
                 {orders.map((order, idx) => (
-                  <tr key={idx}>
-                    <td>{order.datetime}</td>
-                    <td>{order.symbol}</td>
-                    <td>{order.side}</td>
-                    <td>{order.qty}</td>
-                    <td>{formatCurrency(order.value)}</td>
-                    <td>{order.order_type}</td>
-                    <td>{order.status}</td>
+                  <tr key={idx} style={tableRowStyle(idx)}>
+                    <td style={tableCellStyle}>{order.datetime}</td>
+                    <td style={tableCellStyle}>{order.symbol}</td>
+                    <td style={tableCellStyle}>{order.side}</td>
+                    <td style={tableCellStyle}>{order.qty}</td>
+                    <td style={tableCellStyle}>{formatCurrency(order.value)}</td>
+                    <td style={tableCellStyle}>{order.order_type}</td>
+                    <td style={tableCellStyle}>{order.status}</td>
+                    <td style={tableCellStyle}>
+                      {['filled', 'canceled', 'expired'].includes(order.status.toLowerCase()) ? (
+                        ''
+                      ) : (
+                        <button
+                          onClick={() => handleCancelOrder(order)}
+                          style={cancelButtonStyle}
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -303,7 +365,34 @@ const tableStyle = {
   borderCollapse: 'collapse',
   marginTop: '10px',
   marginBottom: '20px',
-  minWidth: '600px',  // Ensure table doesn't shrink
+  minWidth: '650px',
+};
+
+const tableHeaderStyle = {
+  backgroundColor: '#0d1117',
+  fontWeight: '600',
+  color: '#e6edf3',
+  borderBottom: '2px solid #30363d',
+};
+
+const tableRowStyle = (index) => ({
+  backgroundColor: index % 2 === 0 ? '#0d1117' : '#161b22',
+});
+
+const tableCellStyle = {
+  padding: '10px 12px',
+  borderBottom: '1px solid #30363d',
+  fontSize: '14px',
+};
+
+const cancelButtonStyle = {
+  backgroundColor: '#da3633',
+  color: '#ffffff',
+  border: 'none',
+  padding: '4px 8px',
+  borderRadius: '4px',
+  cursor: 'pointer',
+  fontSize: '12px',
 };
 
 const closeButtonStyle = {

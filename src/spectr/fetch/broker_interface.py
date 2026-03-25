@@ -45,6 +45,11 @@ class BrokerInterface(ABC):
         pass
 
     @abstractmethod
+    def has_pending_order_with_side(self, symbol: str, side: OrderSide) -> bool:
+        """Check if there's a pending order with the given side for a symbol."""
+        pass
+
+    @abstractmethod
     def get_closed_orders(self) -> pd.DataFrame:
         """Gets all closed orders."""
         pass

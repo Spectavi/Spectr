@@ -15,7 +15,8 @@ log = logging.getLogger(__name__)
 
 
 def prepare_order_details(
-    symbol: str, side: OrderSide, broker: BrokerInterface
+    symbol: str, side: OrderSide, broker: BrokerInterface,
+    afterhours_enabled: bool = False
 ) -> tuple[OrderType, float | None]:
     """Return the order type and limit price for *symbol* based on market hours."""
     order_type = OrderType.MARKET
@@ -32,6 +33,8 @@ def prepare_order_details(
 
     # Crypto is 24hrs so no need for limit orders.
     extended_hours = not is_market_open_now() and not is_crypto_symbol(symbol)
+    # If after-hours trading is enabled, use limit orders during extended hours
+    # (when it's not market hours)
     if extended_hours:
         quote = {}
         try:

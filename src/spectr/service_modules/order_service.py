@@ -1,3 +1,5 @@
+import pandas as pd
+
 """Order service for handling trading operations."""
 
 import logging
@@ -47,18 +49,24 @@ class OrderService:
             The submitted order or None if failed
         """
         try:
-            if hasattr(self.broker_api, "has_pending_order") and self.broker_api.has_pending_order(
-                symbol
+            from ..fetch.broker_interface import OrderSide
+            
+            side_enum = (
+                OrderSide.BUY if side == "buy" else OrderSide.SELL if side == "sell" else None
+            )
+            
+            if hasattr(self.broker_api, "has_pending_order_with_side") and self.broker_api.has_pending_order_with_side(
+                symbol, side_enum
             ):
-                log.warning(f"Pending order for {symbol}; ignoring signal!")
+                log.warning(f"Pending {side} order for {symbol}; ignoring signal!")
                 if voice_agent:
                     try:
                         voice_agent.say(
-                            f"Ignoring {side.capitalize()} signal for {symbol}, pending order already exists."
+                            f"Ignoring {side.capitalize()} signal for {symbol}, pending {side} order already exists."
                         )
                     except Exception as e:
                         log.warning(f"Error saying voice message: {e}")
-                return None
+                    return None
 
             order = self._submit_order_internal(
                 symbol,
@@ -133,6 +141,29 @@ class OrderService:
             return False
         except Exception as e:
             log.warning(f"Failed to check pending order for {symbol}: {e}")
+            return False
+
+    def has_pending_order_with_side(self, symbol: str, side) -> bool:
+        """Check if there's a pending order with the given side for a symbol.
+
+        Args:
+            symbol: Trading symbol
+            side: OrderSide enum value
+
+        Returns:
+            True if a pending order exists with the given side, False otherwise
+        """
+        try:
+            if hasattr(self.broker_api, "has_pending_order_with_side"):
+                return self.broker_api.has_pending_order_with_side(symbol, side)
+            elif hasattr(self.broker_api, "has_pending_order"):
+                orders = self.broker_api.get_pending_orders(symbol)
+                if isinstance(orders, pd.DataFrame) and not orders.empty:
+                    if "side" in orders.columns:
+                        return (orders["side"].str.lower() == str(side).lower()).any()
+            return False
+        except Exception as e:
+            log.warning(f"Failed to check pending order with side for {symbol}: {e}")
             return False
 
     def get_position(self, symbol: str) -> Optional[Any]:

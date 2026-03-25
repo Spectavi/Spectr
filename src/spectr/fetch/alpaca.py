@@ -140,6 +140,49 @@ class AlpacaInterface(BrokerInterface):
             return False
 
     # ------------------------------------------------------------------ #
+    def has_pending_order_with_side(self, symbol: str, side: OrderSide) -> bool:
+        """True if there is a pending order with the given side for ``symbol``."""
+        try:
+            tc = self.get_api()
+            req = GetOrdersRequest(
+                status=QueryOrderStatus.OPEN, symbols=[symbol.upper()]
+            )
+            orders = tc.get_orders(req)
+
+            side_str = "buy" if side == OrderSide.BUY else "sell"
+
+            for o in orders:
+                order_side = getattr(o, "side", "")
+                if hasattr(order_side, "value"):
+                    order_side = order_side.value
+                order_side = str(order_side).lower()
+
+                status = getattr(o, "status", "")
+                if hasattr(status, "value"):
+                    status = status.value
+                status = str(status).lower()
+
+                if (
+                    order_side == side_str
+                    and status in {
+                        "pending",
+                        "accepted",
+                        "accepted_for_bidding",
+                        "pending_replace",
+                        "pending_new",
+                        "pending_review",
+                        "pending_cancel",
+                        "partially_filled",
+                        "new",
+                    }
+                ):
+                    return True
+            return False
+        except Exception as exc:
+            log.error(f"has_pending_order_with_side error: {exc}")
+            return False
+
+    # ------------------------------------------------------------------ #
     #  Returns any pending orders open on the acocunt.
     # ------------------------------------------------------------------ #
     def get_pending_orders(

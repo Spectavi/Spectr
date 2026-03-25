@@ -194,7 +194,9 @@ function Sidebar({ tickers, selectedTicker, onSelect }) {
   useEffect(() => {
     const loadStrategies = async () => {
       try {
-        const res = await fetch('/api/strategies');
+        const ticker = (selectedTicker || '').toUpperCase();
+        const query = ticker ? `?ticker=${encodeURIComponent(ticker)}` : '';
+        const res = await fetch(`/api/strategies${query}`);
         const data = await res.json();
         setStrategies(data.strategies || []);
         if (data.current) {
@@ -212,7 +214,7 @@ function Sidebar({ tickers, selectedTicker, onSelect }) {
       }
     };
     loadStrategies();
-  }, []);
+  }, [selectedTicker]);
 
   const submitVoicePrompt = (text) => {
     if (!text) {
@@ -531,6 +533,20 @@ function Sidebar({ tickers, selectedTicker, onSelect }) {
               />
             </div>
           )}
+
+{collapsed && (
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <ProfileIconOnly onClick={() => setShowSettings(true)} />
+              <StrategiesIconOnly onClick={() => setShowStrategyDialog(true)} />
+              <VoiceAgentIconOnly
+                isActive={isVoiceActive}
+                voiceProcessing={voiceProcessing}
+                voiceSpeaking={voiceSpeaking}
+                voiceError={voiceError}
+                onClick={toggleVoiceAgent}
+              />
+            </div>
+          )}
       </div>
 
       {showSettings && (
@@ -555,7 +571,10 @@ function Sidebar({ tickers, selectedTicker, onSelect }) {
               fetch(`/api/strategies/${name}`, { 
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ deactivatePrevious: true })
+                body: JSON.stringify({
+                  deactivatePrevious: true,
+                  ticker: (selectedTicker || '').toUpperCase(),
+                })
               }).then(res => res.json()),
               fetch(`/api/strategies/${name}/code`).then(res => res.json())
             ])
@@ -940,18 +959,5 @@ function VoiceAgentIconOnly({ isActive, voiceProcessing, voiceSpeaking, voiceErr
       </div>
   );
 }
-
-const tickerListStyle = {
-  listStyle: 'none',
-  padding: '0',
-  margin: '0',
-};
-
-const tickerItemStyle = {
-  padding: '8px',
-  cursor: 'pointer',
-  textAlign: 'center',
-  transition: 'background-color 0.2s',
-};
 
 export default Sidebar;

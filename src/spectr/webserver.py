@@ -23,23 +23,110 @@ data_api = None
 broker_api = None
 cached_tickers = []
 cached_strategies = []
-current_strategy = None
-strategy_active = False
-strategy_auto_trade_enabled = False
-strategy_trade_amount = 0.0
-_last_strategy_signal_key = None
+strategy_configs = {}
+_last_strategy_signal_keys = {}
+_default_strategy_name = ""
+_default_trade_amount = 0.0
 
 try:
     from . import cache
 
     cached_strategy = cache.load_selected_strategy()
     if cached_strategy:
-        current_strategy = cached_strategy
+        _default_strategy_name = str(cached_strategy)
     cached_trade_amount = cache.load_trade_amount()
     if cached_trade_amount is not None:
-        strategy_trade_amount = float(cached_trade_amount)
+        _default_trade_amount = max(0.0, float(cached_trade_amount))
+    
+    afterhours_enabled = cache.load_afterhours_enabled()
+    if afterhours_enabled is None:
+        afterhours_enabled = False
+    loaded_configs = cache.load_strategy_configs()
+    if isinstance(loaded_configs, dict):
+        strategy_configs = loaded_configs
 except Exception:
     pass
+
+
+def _normalize_ticker(ticker: str | None) -> str:
+    return str(ticker or "").upper().strip()
+
+
+def _base_strategy_config() -> dict:
+    return {
+        "current": _default_strategy_name,
+        "active": False,
+        "autoTradeEnabled": False,
+        "tradeAmount": _default_trade_amount,
+    }
+
+
+def _normalize_strategy_config(raw_cfg: dict | None) -> dict:
+    cfg = _base_strategy_config()
+    if not isinstance(raw_cfg, dict):
+        return cfg
+    cfg["current"] = str(raw_cfg.get("current") or cfg["current"] or "")
+    cfg["active"] = bool(raw_cfg.get("active", cfg["active"]))
+    cfg["autoTradeEnabled"] = bool(
+        raw_cfg.get("autoTradeEnabled", cfg["autoTradeEnabled"])
+    )
+    try:
+        cfg["tradeAmount"] = max(
+            0.0, float(raw_cfg.get("tradeAmount", cfg["tradeAmount"]) or 0.0)
+        )
+    except Exception:
+        cfg["tradeAmount"] = 0.0
+    return cfg
+
+
+def _save_strategy_configs() -> None:
+    try:
+        from . import cache
+
+        cache.save_strategy_configs(strategy_configs)
+    except Exception:
+        pass
+
+
+def _get_strategy_config(ticker: str | None, *, create: bool = True) -> dict:
+    symbol = _normalize_ticker(ticker)
+    if not symbol:
+        return _base_strategy_config()
+    cfg = strategy_configs.get(symbol)
+    if cfg is None:
+        if not create:
+            return _base_strategy_config()
+        cfg = _base_strategy_config()
+        strategy_configs[symbol] = cfg
+    else:
+        cfg = _normalize_strategy_config(cfg)
+        strategy_configs[symbol] = cfg
+    return cfg
+
+
+def _resolve_ticker_context(payload: dict | None = None) -> str:
+    data = payload or {}
+    ticker = _normalize_ticker(
+        data.get("ticker")
+        or data.get("symbol")
+        or request.args.get("ticker")
+        or request.args.get("symbol")
+    )
+    if ticker:
+        return ticker
+    if cached_tickers:
+        return _normalize_ticker(cached_tickers[0])
+    return ""
+
+
+def _sync_strategy_configs_with_watchlist() -> None:
+    watchlist_set = {_normalize_ticker(t) for t in cached_tickers if _normalize_ticker(t)}
+    stale = [symbol for symbol in strategy_configs if symbol not in watchlist_set]
+    for symbol in stale:
+        strategy_configs.pop(symbol, None)
+        _last_strategy_signal_keys.pop(symbol, None)
+    for symbol in watchlist_set:
+        _get_strategy_config(symbol, create=True)
 
 
 def init_data_api(data_provider: str):
@@ -95,6 +182,8 @@ def add_to_watchlist():
             return jsonify({"success": True, "message": f"{ticker} already in watchlist"})
         
         cached_tickers.append(ticker)
+        _get_strategy_config(ticker, create=True)
+        _save_strategy_configs()
         _save_cached_tickers()
         
         return jsonify({"success": True, "message": f"Added {ticker} to watchlist", "tickers": cached_tickers})
@@ -111,6 +200,9 @@ def remove_from_watchlist(ticker):
         
         if ticker in cached_tickers:
             cached_tickers.remove(ticker)
+            strategy_configs.pop(ticker, None)
+            _last_strategy_signal_keys.pop(ticker, None)
+            _save_strategy_configs()
             _save_cached_tickers()
         
         return jsonify({"success": True, "message": f"Removed {ticker} from watchlist", "tickers": cached_tickers})
@@ -242,6 +334,7 @@ def get_portfolio():
                         value = 0.0
                     
                     order_dict = {
+                        "id": str(row.get("id", "")),
                         "datetime": dt_str,
                         "symbol": str(row.get("symbol", "")),
                         "side": getattr(row.get("side"), 'value', str(row.get("side", ""))) if hasattr(row.get("side", None), 'value') and row.get("side") is not None else str(row.get("side", "")),
@@ -278,6 +371,7 @@ def get_portfolio():
                     value = 0.0
                 
                 order_dict = {
+                    "id": str(getattr(order, "id", "")),
                     "datetime": dt_str,
                     "symbol": getattr(order, "symbol", ""),
                     "side": getattr(getattr(order, "side", None), 'value', str(getattr(order, "side", ""))) if hasattr(getattr(order, "side", None), 'value') and getattr(order, "side", None) is not None else str(getattr(order, "side", "")),
@@ -395,17 +489,67 @@ def get_account_info():
     
     default_to_paper = True
     
+    global afterhours_enabled
+    
     return jsonify({
         "broker": broker_name,
         "hasPaperCredentials": has_paper_credentials,
         "hasLiveCredentials": has_live_credentials,
         "defaultToPaper": default_to_paper,
+        "afterhours_enabled": afterhours_enabled,
     })
+
+
+@app.route("/api/settings/afterhours", methods=["POST"])
+def update_afterhours():
+    global afterhours_enabled
+    try:
+        data = request.get_json()
+        if data is None:
+            return jsonify({
+                "success": False,
+                "error": "Invalid JSON data"
+            }), 400
+        
+        enabled = data.get('afterhours_enabled')
+        if enabled is None:
+            return jsonify({
+                "success": False,
+                "error": "Missing afterhours_enabled field"
+            }), 400
+        
+        from . import cache
+        cache.save_afterhours_enabled(enabled)
+        afterhours_enabled = bool(enabled)
+        
+        # Also update the main app's afterhours setting if it exists
+        try:
+            from .spectr import SpectrApp
+            # Try to get the running app instance if available
+            import gc
+            for obj in gc.get_objects():
+                if isinstance(obj, SpectrApp):
+                    obj.afterhours_enabled = bool(enabled)
+                    break
+        except Exception:
+            pass
+        
+        return jsonify({
+            "success": True,
+            "afterhours_enabled": afterhours_enabled
+        })
+    except Exception as e:
+        log = logging.getLogger(__name__)
+        log.error(f"Failed to update after-hours setting: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
 
 
 @app.route("/api/strategies", methods=["GET"])
 def get_strategies():
-    global cached_strategies, current_strategy, strategy_active, strategy_auto_trade_enabled, strategy_trade_amount
+    global cached_strategies
     
     if not cached_strategies:
         try:
@@ -413,44 +557,51 @@ def get_strategies():
             cached_strategies = list(list_strategies().keys())
         except Exception:
             cached_strategies = []
+
+    ticker = _resolve_ticker_context()
+    cfg = _get_strategy_config(ticker, create=bool(ticker))
     
     return jsonify({
         "strategies": cached_strategies,
-        "current": current_strategy or "",
-        "active": strategy_active,
-        "autoTradeEnabled": strategy_auto_trade_enabled,
-        "tradeAmount": strategy_trade_amount,
+        "ticker": ticker,
+        "current": cfg.get("current", ""),
+        "active": bool(cfg.get("active", False)),
+        "autoTradeEnabled": bool(cfg.get("autoTradeEnabled", False)),
+        "tradeAmount": float(cfg.get("tradeAmount", 0.0)),
+        "configs": {
+            symbol: _normalize_strategy_config(raw_cfg)
+            for symbol, raw_cfg in strategy_configs.items()
+        },
     })
 
 
 @app.route("/api/strategies/<strategy_name>", methods=["POST"])
 def select_strategy(strategy_name):
-    global current_strategy, strategy_active, _last_strategy_signal_key
-    
     try:
         data = request.get_json() or {}
+        ticker = _resolve_ticker_context(data)
+        if not ticker:
+            return jsonify({"success": False, "error": "Missing ticker"}), 400
         deactivate_previous = bool(data.get('deactivatePrevious', False))
-        
-        if deactivate_previous and strategy_active:
-            strategy_active = False
-        
+
         from .strategies import load_strategy
         load_strategy(strategy_name)
-        
-        current_strategy = strategy_name
-        _last_strategy_signal_key = None
-        try:
-            from . import cache
 
-            cache.save_selected_strategy(strategy_name)
-        except Exception:
-            pass
+        cfg = _get_strategy_config(ticker, create=True)
+        if deactivate_previous and cfg.get("active", False):
+            cfg["active"] = False
+        cfg["current"] = strategy_name
+        _last_strategy_signal_keys[ticker] = None
+        _save_strategy_configs()
         
         return jsonify({
             "success": True,
-            "message": f"Strategy '{strategy_name}' selected",
+            "message": f"Strategy '{strategy_name}' selected for {ticker}",
+            "ticker": ticker,
             "current": strategy_name,
-            "active": strategy_active
+            "active": bool(cfg.get("active", False)),
+            "autoTradeEnabled": bool(cfg.get("autoTradeEnabled", False)),
+            "tradeAmount": float(cfg.get("tradeAmount", 0.0)),
         })
     except Exception as e:
         return jsonify({
@@ -461,8 +612,6 @@ def select_strategy(strategy_name):
 
 @app.route("/api/strategies/toggle", methods=["POST"])
 def toggle_strategy():
-    global strategy_active
-    
     try:
         data = request.get_json()
         if data is None:
@@ -470,14 +619,24 @@ def toggle_strategy():
                 "success": False,
                 "error": "Invalid JSON data"
             }), 400
-        
-        new_state = bool(data.get('active', not strategy_active))
-        strategy_active = new_state
+
+        ticker = _resolve_ticker_context(data)
+        if not ticker:
+            return jsonify({"success": False, "error": "Missing ticker"}), 400
+
+        cfg = _get_strategy_config(ticker, create=True)
+        new_state = bool(data.get('active', not cfg.get("active", False)))
+        cfg["active"] = new_state
+        _save_strategy_configs()
         
         return jsonify({
             "success": True,
-            "message": f"Strategy {'activated' if strategy_active else 'deactivated'}",
-            "active": strategy_active
+            "message": f"Strategy {'activated' if new_state else 'deactivated'} for {ticker}",
+            "ticker": ticker,
+            "active": bool(cfg.get("active", False)),
+            "current": cfg.get("current", ""),
+            "autoTradeEnabled": bool(cfg.get("autoTradeEnabled", False)),
+            "tradeAmount": float(cfg.get("tradeAmount", 0.0)),
         })
     except Exception as e:
         return jsonify({
@@ -488,8 +647,6 @@ def toggle_strategy():
 
 @app.route("/api/strategies/auto-trade", methods=["POST"])
 def toggle_auto_trade():
-    global strategy_active, strategy_auto_trade_enabled
-    
     try:
         data = request.get_json()
         if data is None:
@@ -497,18 +654,26 @@ def toggle_auto_trade():
                 "success": False,
                 "error": "Invalid JSON data"
             }), 400
-        
+
+        ticker = _resolve_ticker_context(data)
+        if not ticker:
+            return jsonify({"success": False, "error": "Missing ticker"}), 400
+
+        cfg = _get_strategy_config(ticker, create=True)
         new_state = bool(data.get('enabled', False))
-        strategy_auto_trade_enabled = new_state
-        
-        if new_state and not strategy_active:
-            strategy_active = True
+        cfg["autoTradeEnabled"] = new_state
+        if new_state and not cfg.get("active", False):
+            cfg["active"] = True
+        _save_strategy_configs()
         
         return jsonify({
             "success": True,
-            "message": f"Auto-trade {'enabled' if new_state else 'disabled'}",
+            "message": f"Auto-trade {'enabled' if new_state else 'disabled'} for {ticker}",
+            "ticker": ticker,
             "autoTradeEnabled": new_state,
-            "active": strategy_active
+            "active": bool(cfg.get("active", False)),
+            "current": cfg.get("current", ""),
+            "tradeAmount": float(cfg.get("tradeAmount", 0.0)),
         })
     except Exception as e:
         return jsonify({
@@ -519,36 +684,40 @@ def toggle_auto_trade():
 
 @app.route("/api/strategies/config", methods=["POST"])
 def update_strategy_config():
-    global strategy_trade_amount, strategy_auto_trade_enabled, strategy_active
-
     try:
         data = request.get_json() or {}
+        ticker = _resolve_ticker_context(data)
+        if not ticker:
+            return jsonify({"success": False, "error": "Missing ticker"}), 400
+
+        cfg = _get_strategy_config(ticker, create=True)
         trade_amount = data.get("tradeAmount")
         auto_trade_enabled = data.get("autoTradeEnabled")
+        active = data.get("active")
 
         if trade_amount is not None:
             try:
-                strategy_trade_amount = max(0.0, float(trade_amount))
+                cfg["tradeAmount"] = max(0.0, float(trade_amount))
             except (TypeError, ValueError):
                 return jsonify({"success": False, "error": "Invalid tradeAmount"}), 400
-            try:
-                from . import cache
-
-                cache.save_trade_amount(strategy_trade_amount)
-            except Exception:
-                pass
 
         if auto_trade_enabled is not None:
-            strategy_auto_trade_enabled = bool(auto_trade_enabled)
-            if strategy_auto_trade_enabled:
-                strategy_active = True
+            cfg["autoTradeEnabled"] = bool(auto_trade_enabled)
+            if cfg["autoTradeEnabled"]:
+                cfg["active"] = True
+        if active is not None:
+            cfg["active"] = bool(active)
+
+        _save_strategy_configs()
 
         return jsonify(
             {
                 "success": True,
-                "tradeAmount": strategy_trade_amount,
-                "autoTradeEnabled": strategy_auto_trade_enabled,
-                "active": strategy_active,
+                "ticker": ticker,
+                "current": cfg.get("current", ""),
+                "tradeAmount": float(cfg.get("tradeAmount", 0.0)),
+                "autoTradeEnabled": bool(cfg.get("autoTradeEnabled", False)),
+                "active": bool(cfg.get("active", False)),
             }
         )
     except Exception as e:
@@ -628,9 +797,14 @@ def format_strategy_code():
 
 @app.route("/api/strategies/evaluate/<symbol>", methods=["POST"])
 def evaluate_strategy_signal(symbol):
-    global _last_strategy_signal_key
-    global strategy_active, current_strategy, strategy_auto_trade_enabled, strategy_trade_amount
     global data_api, broker_api
+
+    symbol = _normalize_ticker(symbol)
+    cfg = _get_strategy_config(symbol, create=False)
+    strategy_active = bool(cfg.get("active", False))
+    current_strategy = str(cfg.get("current") or "")
+    strategy_auto_trade_enabled = bool(cfg.get("autoTradeEnabled", False))
+    strategy_trade_amount = float(cfg.get("tradeAmount", 0.0) or 0.0)
 
     if not strategy_active or not current_strategy:
         return jsonify(
@@ -638,8 +812,9 @@ def evaluate_strategy_signal(symbol):
                 "success": True,
                 "signal": None,
                 "isNew": False,
+                "ticker": symbol,
                 "active": strategy_active,
-                "current": current_strategy or "",
+                "current": current_strategy,
                 "autoTradeEnabled": strategy_auto_trade_enabled,
                 "tradeAmount": strategy_trade_amount,
             }
@@ -653,7 +828,6 @@ def evaluate_strategy_signal(symbol):
         from .fetch.broker_interface import OrderSide
         from . import broker_tools
 
-        symbol = symbol.upper().strip()
         strategy_cls = load_strategy(current_strategy)
 
         today = datetime.now().date()
@@ -687,9 +861,10 @@ def evaluate_strategy_signal(symbol):
         signal_side = (signal.get("signal") or "").lower()
         signal_ts = df.index[-1].isoformat() if len(df.index) else ""
         signal_key = f"{current_strategy}:{symbol}:{signal_side}:{signal_ts}"
-        is_new = signal_key != _last_strategy_signal_key
+        last_signal_key = _last_strategy_signal_keys.get(symbol)
+        is_new = signal_key != last_signal_key
         if is_new:
-            _last_strategy_signal_key = signal_key
+            _last_strategy_signal_keys[symbol] = signal_key
 
         execution = None
         if is_new and strategy_auto_trade_enabled and strategy_trade_amount > 0 and signal_side in {"buy", "sell"}:
@@ -722,8 +897,9 @@ def evaluate_strategy_signal(symbol):
                 "success": True,
                 "signal": signal,
                 "isNew": is_new,
+                "ticker": symbol,
                 "active": strategy_active,
-                "current": current_strategy or "",
+                "current": current_strategy,
                 "autoTradeEnabled": strategy_auto_trade_enabled,
                 "tradeAmount": strategy_trade_amount,
                 "execution": execution,
@@ -734,6 +910,8 @@ def evaluate_strategy_signal(symbol):
 
 
 def _save_cached_tickers():
+    _sync_strategy_configs_with_watchlist()
+    _save_strategy_configs()
     project_root = os.path.join(_script_dir, "..", "..")
     cached_tickers_path = os.path.join(project_root, ".cached_tickers")
     
@@ -793,9 +971,62 @@ def start_server(port: int = 8020):
         with open(cached_tickers_path, "r") as f:
             global cached_tickers
             cached_tickers = [line.strip() for line in f.readlines() if line.strip()]
+    _sync_strategy_configs_with_watchlist()
+    _save_strategy_configs()
 
     print(f"Starting web server on http://localhost:{port}")
     app.run(host="0.0.0.0", port=port, debug=False)
+
+
+@app.route("/api/orders/cancel", methods=["POST"])
+def cancel_order():
+    global broker_api
+    
+    try:
+        data = request.get_json()
+        if data is None:
+            return jsonify({
+                "success": False,
+                "error": "Invalid JSON data"
+            }), 400
+        
+        order_id = data.get('order_id')
+        if not order_id:
+            return jsonify({
+                "success": False,
+                "error": "Missing order_id"
+            }), 400
+        
+        if not broker_api:
+            from .fetch.alpaca import AlpacaInterface
+            broker_api = AlpacaInterface(real_trades=False)
+        
+        if not broker_api:
+            return jsonify({
+                "success": False,
+                "error": "Broker API not initialized"
+            }), 500
+        
+        success = broker_api.cancel_order(order_id)
+        
+        if success:
+            return jsonify({
+                "success": True,
+                "message": f"Order {order_id} cancelled successfully"
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": f"Failed to cancel order {order_id}"
+            }), 500
+            
+    except Exception as e:
+        log = logging.getLogger(__name__)
+        log.error(f"Failed to cancel order: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
 
 
 @app.route("/api/orders", methods=["POST"])
@@ -848,8 +1079,14 @@ def submit_order():
                 "error": "Trading is not configured. Please set up a broker in the onboarding dialog."
             }), 400
         
-        broker_side = side.name.lower()
-        broker_type = order_type
+        from . import broker_tools
+        
+        # Use broker_tools to determine appropriate order type based on market hours
+        # and after-hours settings. This will return MARKET or LIMIT with a limit price.
+        global afterhours_enabled
+        order_type, limit_price = broker_tools.prepare_order_details(
+            symbol, side, broker_api, afterhours_enabled
+        )
         
         if order_type == OrderType.MARKET:
             order = broker_api.submit_order(
@@ -860,10 +1097,11 @@ def submit_order():
                 market_price=None
             )
         else:
+            # For LIMIT orders, we need a limit price
             if limit_price is None:
                 return jsonify({
                     "success": False,
-                    "error": "limit_price is required for LIMIT orders"
+                    "error": f"Cannot place {symbol} order - no quote available for extended hours trading"
                 }), 400
             order = broker_api.submit_order(
                 symbol=symbol,

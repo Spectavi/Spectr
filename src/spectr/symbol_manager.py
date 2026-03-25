@@ -189,8 +189,8 @@ class SymbolManager:
                 else OrderSide.SELL if signal == "sell" else None
             )
             if side:
-                if self.app.broker_api.has_pending_order(symbol):
-                    log.warning(f"Pending order for {symbol}; ignoring signal!")
+                if self.app.broker_api.has_pending_order_with_side(symbol, side):
+                    log.warning(f"Pending {side.name.lower()} order for {symbol}; ignoring signal!")
                     return
                 order = broker_tools.submit_order(
                     self.app.broker_api,

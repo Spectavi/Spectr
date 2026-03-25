@@ -179,6 +179,36 @@ class RobinhoodInterface(BrokerInterface, DataInterface):
                 return True
         return False
 
+    def has_pending_order_with_side(self, symbol: str, side: OrderSide) -> bool:
+        """Check if there's a pending order with the given side for a symbol."""
+        try:
+            orders = r.orders.get_all_open_stock_orders()
+            side_str = "buy" if side == OrderSide.BUY else "sell"
+            
+            for order in orders:
+                if not order["instrument"].lower().endswith(symbol.lower()):
+                    continue
+                    
+                order_side = str(order.get("side", "")).lower()
+                order_state = str(order.get("state", "")).lower()
+                
+                if (
+                    order_side == side_str
+                    and order_state
+                    in {
+                        "unfilled",
+                        "queued",
+                        "open",
+                        "pending",
+                        "partially_filled",
+                    }
+                ):
+                    return True
+            return False
+        except Exception as exc:
+            log.error(f"Failed to check pending order with side: {exc}")
+            return False
+
     def get_pending_orders(self, symbol: str) -> pd.DataFrame:
         try:
             orders = r.orders.get_all_open_stock_orders()

@@ -828,7 +828,7 @@ class SpectrApp(App):
                         )
                         if should_prompt and _sig and side:
                             log.debug(f"Signal detected, opening dialog: {msg}")
-                            if self.trading_service.has_pending_order(_sym):
+                            if self.trading_service.has_pending_order_with_side(_sym, side):
                                 log.warning(
                                     f"Pending order for {_sym}; ignoring signal!"
                                 )
@@ -851,8 +851,8 @@ class SpectrApp(App):
                             f"AUTO-TRADE: Submitting order for {_sym} at {_price} with side {_sig}"
                         )
                         # Skip auto-ordering if there's already an open order
-                        if self.trading_service.has_pending_order(_sym):
-                            log.warning(f"Pending order for {_sym}; ignoring signal!")
+                        if self.trading_service.has_pending_order_with_side(_sym, side):
+                            log.warning(f"Pending {side.name.lower()} order for {_sym}; ignoring signal!")
                             self.signal_detected.remove(signal)
                             if self.voice_agent:
                                 self.voice_agent.say(
